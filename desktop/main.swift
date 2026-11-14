@@ -72,6 +72,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var typingAlert: NSAlert?
     private var requestedTypingPermission = false
     private var ready = false
+    private var suppressWorkbenchReopen = false
     private var eyeFollow = true
     private var gazeTimer: Timer?
     private var petGaze: (x: Int, y: Int)?
@@ -142,6 +143,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Focusing the pet's reminder input must not pull the workbench forward.
+        guard !suppressWorkbenchReopen else { return true }
         openWorkbench()
         return true
     }
@@ -471,6 +474,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
     }
 
+    private func activateForPetUI() {
+        let workbenchWasKey = workbenchWindow?.isKeyWindow ?? false
+        suppressWorkbenchReopen = true
+        NSApp.activate(ignoringOtherApps: true)
+        if !workbenchWasKey, let window = workbenchWindow, window.isVisible {
+            window.orderBack(nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.suppressWorkbenchReopen = false
+        }
+    }
+
     private func beginInlineAdd() {
         guard !reminderList.items.isEmpty else {
             reminderInput.text = ""
@@ -479,7 +494,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
         showReminders()
         reminderList.isAdding = true
-        NSApp.activate(ignoringOtherApps: true)
+        activateForPetUI()
         reminderWindow?.makeKeyAndOrderFront(nil)
     }
 
@@ -548,7 +563,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         input.setContentSize(size)
         input.contentView = host
         reminderInputWindow = input
-        NSApp.activate(ignoringOtherApps: true)
+        activateForPetUI()
         input.makeKeyAndOrderFront(nil)
         layoutReminder()
     }
