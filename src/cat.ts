@@ -1,10 +1,10 @@
 import { nameLength, options, readConfig, type Config } from './model';
 
 export const catOptions = {
-  ear: { CE01: '三角立耳' },
-  muzzle: { CN01: '小圆嘴' },
+  ear: { CE01: '三角立耳', CE02: '折耳', CE03: '圆耳', CE04: '垂耳' },
+  muzzle: { CN01: '小圆嘴', CN02: '吐舌', CN03: '张嘴喵', CN04: '扁嘴' },
   tail: { CT01: '细长尾' },
-  eye: options.eye,
+  eye: { ...options.eye, Y05: '大圆眼', Y06: '半闭眼', Y07: '星星眼' },
   eyeColor: options.eyeColor,
   pattern: { P00: '无面部花纹', P02: '眉斑与浅颊', P01: '额线', P06: '眉斑 + 额线' },
   palette: { CC01: '橘白', CC02: '纯黑', CC03: '三花' },

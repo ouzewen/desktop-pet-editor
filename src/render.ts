@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { blackCatCoat, catWalkFrames, type CatConfig, type PetConfig } from './cat';
+import { blackCatCoat, catOptions, catWalkFrames, type CatConfig, type PetConfig } from './cat';
 import { irisColors, palettes, type Config } from './model';
 
 export const SIZE = 160;
@@ -78,16 +78,25 @@ export const assetsReady = Promise.all([
 });
 
 const catWalkBodies = Array.from({ length: catWalkFrames }, (_, index) => `walk_body_${index}`);
+const catViews = ['sit', 'walk'] as const;
+const extraCatEars = Object.keys(catOptions.ear).filter(id => id !== 'CE01');
+const extraCatMuzzles = Object.keys(catOptions.muzzle).filter(id => id !== 'CN01');
+const catEyes = Object.keys(catOptions.eye);
 const catFurLayers = [
+  ...catViews.flatMap(view => [
+    `${view}_head_alt`,
+    ...extraCatEars.map(id => `${view}_ear_${id}`),
+    ...extraCatMuzzles.map(id => `${view}_muzzle_${id}`),
+  ]),
   'sit_body', 'sit_head', 'sit_ears', 'sit_tail', 'sit_muzzle',
   'type_body', 'type_tail', 'type_paw_l0', 'type_paw_l1', 'type_paw_r0', 'type_paw_r1',
   ...catWalkBodies, 'walk_head', 'walk_ears', 'walk_tail', 'walk_muzzle',
 ];
 const catCalicoLayers = new Set([
   'sit_body', 'sit_head', 'sit_tail', 'type_body', 'type_tail',
+  ...catViews.map(view => `${view}_head_alt`),
   ...catWalkBodies, 'walk_head', 'walk_tail',
 ]);
-const catViews = ['sit', 'walk'] as const;
 const catFurSlots = ['g', 's', 'l', 'w', 'd'] as const;
 const catMarkings = ['P01', 'P02'] as const;
 let catAssets: Promise<void> | undefined;
@@ -100,8 +109,8 @@ export function prepareCatAssets() {
     ]),
     'cat/type_keyboard', 'cat/type_screen',
     ...catViews.flatMap(view => [
-      ...art.eye.map(eye => `cat/${view}_eye_${eye}`),
-      ...visibleIris.map(eye => `cat/masks/${view}_eye_${eye}_iris`),
+      ...catEyes.map(eye => `cat/${view}_eye_${eye}`),
+      ...catEyes.filter(eye => eye !== 'Y02').map(eye => `cat/masks/${view}_eye_${eye}_iris`),
       ...catMarkings.map(mark => `cat/${view}_face_${mark}`),
     ]),
   ].map(loadLayer)).then(entries => {
@@ -264,7 +273,12 @@ function catFur(layer: string, palette: CatConfig['palette']) {
   return result.canvas;
 }
 
-function catEye(view: typeof catViews[number], eye: CatConfig['eye'], color: CatConfig['eyeColor'], palette: CatConfig['palette']) {
+function catEye(
+  view: typeof catViews[number],
+  eye: CatConfig['eye'],
+  color: CatConfig['eyeColor'],
+  palette: CatConfig['palette'],
+) {
   const name = `${view}_eye_${eye}`;
   const source = imageFor(`cat/${name}`);
   const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
@@ -286,7 +300,9 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
   const typing = action === 'typing';
   const view = walking ? 'walk' : 'sit';
   const breathing = action === 'sit' && frame >= 17 && frame < 30 ? -1 : 0;
-  const nod = walking ? frame % 2 : typing ? [1, 0, 1, 2][frame]! : 0;
+  const headY = walking ? frame % 2 : typing ? 1 : 0;
+  // The sitting face is centered at x=83, the typing chest at x=80.
+  const headX = typing ? -3 : 0;
   const drawFur = (layer: string, y = 0) => ctx.drawImage(catFur(layer, config.palette), 0, y);
   ctx.translate(0, breathing);
   // The root stays tucked under the rump while the visible tail moves.
@@ -294,22 +310,30 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
     : action === 'sit' ? [0, -1, -2, -2, -1, 0][Math.floor((frame - 30) / 2)] ?? 0 : 0;
   drawFur(typing ? 'type_tail' : `${view}_tail`, tailShift);
   drawFur(walking ? catWalkBodies[frame]! : typing ? 'type_body' : 'sit_body');
-  drawFur(`${view}_ears`, nod);
-  drawFur(`${view}_head`, nod);
+  ctx.save();
+  ctx.translate(headX, 0);
+  const upright = config.ear === 'CE01';
+  if (upright) drawFur(`${view}_ears`, headY);
+  drawFur(upright ? `${view}_head` : `${view}_head_alt`, headY);
   if (config.pattern === 'P02' || config.pattern === 'P06') {
-    ctx.drawImage(imageFor(`cat/${view}_face_P02`), 0, nod);
+    ctx.drawImage(imageFor(`cat/${view}_face_P02`), 0, headY);
   }
   if (config.pattern === 'P01' || config.pattern === 'P06') {
-    ctx.drawImage(imageFor(`cat/${view}_face_P01`), 0, nod);
+    ctx.drawImage(imageFor(`cat/${view}_face_P01`), 0, headY);
   }
   const blink = action === 'sit' && frame >= 25 && frame <= 26;
-  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette), 0, nod + (typing ? 1 : 0));
-  drawFur(`${view}_muzzle`, nod);
+  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette), 0, headY + (typing ? 1 : 0));
+  drawFur(config.muzzle === 'CN01' ? `${view}_muzzle` : `${view}_muzzle_${config.muzzle}`, headY);
+  if (!upright) drawFur(`${view}_ear_${config.ear}`, headY);
+  ctx.restore();
   if (typing) {
+    // Center the laptop and paws under the face without shifting the torso or tail.
+    ctx.translate(3, 0);
     ctx.drawImage(imageFor('cat/type_keyboard'), 0, 0);
-    const [left, right] = [[0, 1], [0, 0], [1, 0], [0, 0]][frame]!;
-    drawFur(`type_paw_l${left}`);
-    drawFur(`type_paw_r${right}`);
+    const taps = [[0, 1, 0, 0], [0, 0, 0, -1], [1, 0, 0, 0], [0, 0, -1, 0]] as const;
+    const [left, right, leftY, rightY] = taps[frame]!;
+    drawFur(`type_paw_l${left}`, leftY);
+    drawFur(`type_paw_r${right}`, rightY);
     ctx.drawImage(imageFor('cat/type_screen'), 0, 0);
   }
 }

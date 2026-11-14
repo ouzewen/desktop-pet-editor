@@ -18,6 +18,23 @@ struct AppearanceCatalog: Decodable {
     let presets: [AppearancePreset]
 }
 
+enum TypingSyncStatus {
+    case checking, needsPermission, unavailable, active
+
+    var text: String {
+        switch self {
+        case .checking: return "正在检查打字同步"
+        case .needsPermission: return "请授权输入监控以同步打字"
+        case .unavailable: return "打字同步未连接，正在重试"
+        case .active: return "全局打字同步已开启"
+        }
+    }
+
+    var buttonTitle: String {
+        self == .needsPermission ? "开启打字同步" : "检查打字同步"
+    }
+}
+
 final class WorkbenchState: ObservableObject {
     @Published var catalog: AppearanceCatalog?
     @Published var appearance: [String: String] = [:]
@@ -27,7 +44,7 @@ final class WorkbenchState: ObservableObject {
     @Published var visible = true
     @Published var message = ""
     @Published var applying = false
-    @Published var typingStatus = "打字同步未开启"
+    @Published var typingStatus = TypingSyncStatus.checking
     var choosePreset: (String) -> Void = { _ in }
     var refresh: () -> Void = {}
     var apply: () -> Void = {}
@@ -301,6 +318,11 @@ struct WorkbenchView: View {
         GridItem(.flexible(), spacing: 8, alignment: .top),
     ]
 
+    /// 当前阶段只开放猫形象，犬预设仍保留在 JS catalog 中以便后续恢复。
+    private var visiblePresets: [AppearancePreset] {
+        (state.catalog?.presets ?? []).filter { $0.frame == "CAT" }
+    }
+
     var body: some View {
         ZStack {
             background
@@ -471,10 +493,10 @@ struct WorkbenchView: View {
 
     private var breedCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("品种", detail: "犬与猫的预设形象")
+            sectionHeader("品种", detail: "猫咪预设（犬暂时隐藏）")
             LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
-                if let catalog = state.catalog {
-                    ForEach(catalog.presets, id: \.id) { preset in
+                if state.catalog != nil {
+                    ForEach(visiblePresets, id: \.id) { preset in
                         BreedChip(
                             preset: preset,
                             selected: preset.id == state.preset,
@@ -586,16 +608,23 @@ struct WorkbenchView: View {
     private var footer: some View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
-                StatusPill(text: statusText, color: statusColor)
+                StatusPill(text: state.typingStatus.text, color: state.typingStatus == .active ? .green : .orange)
                 Spacer(minLength: 8)
                 Button {
                     state.enableTyping()
                 } label: {
-                    Label("打字同步", systemImage: "keyboard")
+                    Label(state.typingStatus.buttonTitle, systemImage: "keyboard")
                 }
-                .help(state.typingStatus)
+                .help(state.typingStatus.text)
 
                 applyButton
+            }
+
+            if !state.message.isEmpty {
+                Text(state.message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Divider()
@@ -654,18 +683,6 @@ struct WorkbenchView: View {
         .controlSize(.large)
         .keyboardShortcut(.defaultAction)
         .disabled(state.catalog == nil || state.applying)
-    }
-
-    private var statusText: String {
-        state.message.isEmpty ? state.typingStatus : state.message
-    }
-
-    private var statusColor: Color {
-        if !state.message.isEmpty {
-            let failed = state.message.contains("无法") || state.message.contains("失败")
-            return failed ? .red : .green
-        }
-        return state.typingStatus.contains("已开启") ? .green : .orange
     }
 
     private func appearanceBinding(_ key: String) -> Binding<String> {

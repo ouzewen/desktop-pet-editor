@@ -69,10 +69,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var keyboardTap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var localMonitor: Any?
+    private var typingRetry: Timer?
+    private var typingAlert: NSAlert?
+    private var requestedTypingPermission = false
     private var ready = false
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installApplicationMenu()
+        panel.isExcludedFromWindowsMenu = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -103,11 +108,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             if let self, !self.hasActiveKeyboardTap { self.recordKey(event) }
             return event
         }
-        if !isTest { refreshTypingListener() }
+        if !isTest { setupTypingSync() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         if !isTest { refreshTypingListener() }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -144,7 +153,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let window = NSWindow(contentViewController: host)
         window.title = "桌宠工作台"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 940, height: 740))
+        window.setContentSize(NSSize(width: 940, height: 690))
         window.contentMinSize = NSSize(width: 840, height: 640)
         window.center()
         window.isReleasedWhenClosed = false
@@ -154,7 +163,28 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     @objc private func openWorkbench() {
         createWorkbench()
         NSApp.activate(ignoringOtherApps: true)
+        if workbenchWindow?.isMiniaturized == true { workbenchWindow?.deminiaturize(nil) }
         workbenchWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func installApplicationMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "桌宠")
+        let open = appMenu.addItem(withTitle: "打开工作台", action: #selector(openWorkbench), keyEquivalent: "0")
+        open.target = self
+        appMenu.addItem(.separator())
+        let quitItem = appMenu.addItem(withTitle: "退出桌宠", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quitItem.target = NSApp
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+
+        let fileItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "文件")
+        fileMenu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileItem.submenu = fileMenu
+        menu.addItem(fileItem)
+        NSApp.mainMenu = menu
     }
 
     private func loadAppearance() {
@@ -165,7 +195,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             try {
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    config = {...window.pet.normalize(parsed), breed: parsed.breed};
+                    const normalized = window.pet.normalize(parsed);
+                    // 当前只保留猫形象：旧的犬配置回落到默认猫预设。
+                    if (normalized.frame === fallback.frame) {
+                        config = {...normalized, breed: parsed.breed};
+                    }
                 }
             } catch {}
             await window.pet.check();
@@ -239,10 +273,26 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                         fputs("Cat renderer failed: \(result)\n", stderr)
                         exit(1)
                     }
-                    print("PASS: native workbench, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions")
+                    self.checkWorkbenchReopen()
+                    print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions")
                     NSApp.terminate(nil)
                 }
             }
+        }
+    }
+
+    private func checkWorkbenchReopen() {
+        guard let window = workbenchWindow, NSApp.activationPolicy() == .regular else {
+            fputs("Desktop pet does not have a regular application window\n", stderr)
+            exit(1)
+        }
+        window.makeKeyAndOrderFront(nil)
+        window.performClose(nil)
+        guard !window.isVisible, !applicationShouldTerminateAfterLastWindowClosed(NSApp),
+              applicationShouldHandleReopen(NSApp, hasVisibleWindows: false),
+              window.isVisible else {
+            fputs("Desktop workbench could not reopen after closing\n", stderr)
+            exit(1)
         }
     }
 
@@ -351,6 +401,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        typingRetry?.invalidate()
         stopListening()
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
     }
@@ -372,9 +423,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     @discardableResult
     private func startListening() -> Bool {
+        if hasActiveKeyboardTap { return true }
         if let keyboardTap, CFMachPortIsValid(keyboardTap) {
             CGEvent.tapEnable(tap: keyboardTap, enable: true)
-            return CGEvent.tapIsEnabled(tap: keyboardTap)
+            if hasActiveKeyboardTap { return true }
         }
         stopListening()
         let mask: CGEventMask = 1 << CGEventType.keyDown.rawValue
@@ -409,14 +461,55 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         keyboardTap = nil
     }
 
-    @discardableResult
-    private func refreshTypingListener() -> Bool {
+    private func setupTypingSync() {
+        refreshTypingListener()
+        let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+            self?.refreshTypingListener()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        typingRetry = timer
+
+        if workbenchState.typingStatus == .needsPermission {
+            DispatchQueue.main.async { [weak self] in self?.showTypingPermissionReminder() }
+        }
+    }
+
+    private func refreshTypingListener() {
         let allowed = CGPreflightListenEventAccess()
         if !allowed { stopListening() }
-        let enabled = allowed && startListening()
-        workbenchState.typingStatus = enabled ? "全局打字同步已开启"
-            : allowed ? "打字同步未连接" : "打字同步需要「输入监控」授权"
-        return enabled
+        let next: TypingSyncStatus = allowed ? (startListening() ? .active : .unavailable) : .needsPermission
+        if next != workbenchState.typingStatus { workbenchState.typingStatus = next }
+        if next == .active, let alert = typingAlert {
+            alert.window.sheetParent?.endSheet(alert.window)
+        }
+    }
+
+    private func showTypingPermissionReminder() {
+        guard workbenchState.typingStatus == .needsPermission,
+              typingAlert == nil, let window = workbenchWindow else { return }
+        let alert = NSAlert()
+        alert.messageText = "开启桌宠打字同步"
+        alert.informativeText = "桌宠默认同步打字。允许「输入监控」后，小猫就会跟着你的按键动起来。桌宠仅使用按键时机。"
+        alert.addButton(withTitle: "打开输入监控")
+        alert.addButton(withTitle: "稍后")
+        typingAlert = alert
+        alert.beginSheetModal(for: window) { [weak self] result in
+            guard let self else { return }
+            self.typingAlert = nil
+            if result == .alertFirstButtonReturn { self.requestTypingPermission() }
+        }
+    }
+
+    private func requestTypingPermission() {
+        if !requestedTypingPermission {
+            requestedTypingPermission = true
+            _ = CGRequestListenEventAccess()
+        }
+        refreshTypingListener()
+        if workbenchState.typingStatus == .needsPermission,
+           let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(settings)
+        }
     }
 
     private func makeMenu() -> NSMenu {
@@ -424,7 +517,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
             ("导入配置…", #selector(importConfig)),
-            ("开启全局打字同步…", #selector(enableTyping)),
+            ("打字同步设置…", #selector(enableTyping)),
             ("将桌宠移回屏幕", #selector(resetPosition)),
             ("退出桌宠", #selector(quit)),
         ] {
@@ -435,27 +528,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     @objc private func enableTyping() {
-        workbenchState.message = ""
-        if refreshTypingListener() { return }
-        if !CGPreflightListenEventAccess() {
-            _ = CGRequestListenEventAccess()
-            if refreshTypingListener() { return }
-        }
-
-        let alert = NSAlert()
-        if CGPreflightListenEventAccess() {
-            alert.messageText = "无法启动打字同步"
-            alert.informativeText = "macOS 已授权输入监控，但键盘监听未启动。请退出并重新打开桌宠。"
-            alert.runModal()
-        } else {
-            alert.messageText = "打字同步需要输入监控"
-            alert.informativeText = "请在「输入监控」中开启当前运行的桌宠，回到工作台点「打字同步…」检查状态。桌宠只使用按键时机来播放动画。"
-            alert.addButton(withTitle: "打开输入监控")
-            alert.addButton(withTitle: "稍后")
-            if alert.runModal() == .alertFirstButtonReturn,
-               let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
-                NSWorkspace.shared.open(settings)
-            }
+        refreshTypingListener()
+        switch workbenchState.typingStatus {
+        case .needsPermission:
+            requestTypingPermission()
+        case .active:
+            workbenchState.message = "已连接，可以到其他应用里打字测试。"
+        case .checking, .unavailable:
+            workbenchState.message = "输入监控已授权，正在重试键盘监听。"
         }
     }
 
@@ -473,6 +553,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             switch result {
             case .success(let value):
                 guard let config = value as? [String: Any] else { return }
+                guard config["frame"] as? String == "CAT" else {
+                    self.workbenchState.message = "暂时只支持猫的配置"
+                    return
+                }
                 self.workbenchState.preset = self.matchingPreset(config)
                 self.setDraft(config)
                 self.workbenchState.message = "已导入，可预览后应用"
@@ -493,5 +577,5 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 let app = NSApplication.shared
 let pet = DesktopPet()
 app.delegate = pet
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.regular)
 app.run()

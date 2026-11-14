@@ -1,4 +1,4 @@
-import { catOptions, catPresets } from './cat';
+import { catOptions, catPresets, readPetConfig } from './cat';
 import { Motion } from './motion';
 import { render, SIZE, type Action } from './render';
 
@@ -42,6 +42,41 @@ export function checkCatActions() {
       ] as Partial<typeof orange>[];
       for (const change of looks) {
         assert(!same(base, snapshot(action, frame, { ...orange, ...change })), `Ignored ${JSON.stringify(change)} in ${action}`);
+      }
+    }
+  }
+
+  for (const action of ['sit', 'left', 'right', 'typing'] as const) {
+    const frames = action === 'sit' ? 1 : 4;
+    for (let frame = 0; frame < frames; frame++) {
+      for (const part of ['ear', 'muzzle', 'eye'] as const) {
+        const poses = Object.keys(catOptions[part]).map(id =>
+          snapshot(action, frame, readPetConfig({ ...orange, [part]: id })),
+        );
+        assert(distinct(poses), `Duplicate ${part} variant in ${action}/${frame}`);
+      }
+      for (const eye of ['Y05', 'Y06', 'Y07'] as const) {
+        const combined = { ...catPresets.preset_cat_black, ear: 'CE04', muzzle: 'CN03', eye } as const;
+        const natural = snapshot(action, frame, combined);
+        assert(!same(natural, snapshot(action, frame, { ...combined, eyeColor: 'blue' })),
+          `Iris recolor missing for ${eye} in ${action}/${frame}`);
+      }
+    }
+  }
+
+  for (const preset of Object.values(catPresets)) {
+    for (const ear of Object.keys(catOptions.ear)) {
+      const config = readPetConfig({ ...preset, ear });
+      const first = snapshot('typing', 0, config);
+      for (let frame = 1; frame < 4; frame++) {
+        const next = snapshot('typing', frame, config);
+        for (let i = 0; i < next.length; i += 4) {
+          if (rgba(first, i) === rgba(next, i)) continue;
+          const x = (i / 4) % SIZE;
+          const y = Math.floor(i / 4 / SIZE);
+          assert(y >= 90 && y <= 105 && x >= 60 && x <= 100,
+            `Typing shifted pixels outside the front paws for ${ear}/${frame}`);
+        }
       }
     }
   }
