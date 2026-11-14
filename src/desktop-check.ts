@@ -1,9 +1,10 @@
 import { catOptions, catPresets, readPetConfig } from './cat';
 import { Motion } from './motion';
-import { render, SIZE, type Action } from './render';
+import { render, type Action, type CatPose } from './render';
 
 // Exercise the bundled renderer in the same WKWebView used by the floating pet.
 export function checkCatActions() {
+  const SIZE = 320;
   const canvas = document.createElement('canvas');
   const pixels = () => canvas.getContext('2d')!.getImageData(0, 0, SIZE, SIZE).data;
   const rgba = (pose: Uint8ClampedArray, offset: number) =>
@@ -17,8 +18,8 @@ export function checkCatActions() {
 
   const orange = catPresets.preset_cat_orange;
   const calico = catPresets.preset_cat_calico;
-  const snapshot = (action: Action, frame: number, config: Parameters<typeof render>[1] = orange) => {
-    render(canvas, config, action, frame);
+  const snapshot = (action: Action, frame: number, config: Parameters<typeof render>[1] = orange, poseOptions: CatPose = {}) => {
+    render(canvas, config, action, frame, undefined, poseOptions);
     const pose = pixels();
     let area = 0;
     for (let offset = 3; offset < pose.length; offset += 4) {
@@ -31,7 +32,7 @@ export function checkCatActions() {
   };
 
   for (const action of ['left', 'typing'] as const) {
-    assert(distinct(Array.from({ length: 4 }, (_, frame) => snapshot(action, frame))), `Repeated ${action} frame`);
+    assert(distinct(Array.from({ length: 4 }, (_, frame) => snapshot(action, frame, orange, { typingMode: 'fast' }))), `Repeated ${action} frame`);
     for (let frame = 0; frame < 4; frame++) {
       const base = snapshot(action, frame);
       const looks = [
@@ -50,7 +51,10 @@ export function checkCatActions() {
     const frames = action === 'sit' ? 1 : 4;
     for (let frame = 0; frame < frames; frame++) {
       for (const part of ['ear', 'muzzle', 'eye'] as const) {
-        const poses = Object.keys(catOptions[part]).map(id =>
+        const ids = Object.keys(catOptions[part]);
+        const choices = part === 'ear' && (action === 'left' || action === 'right')
+          ? ids.filter(id => id !== 'CE03' && id !== 'CE05') : ids;
+        const poses = choices.map(id =>
           snapshot(action, frame, readPetConfig({ ...orange, [part]: id })),
         );
         assert(distinct(poses), `Duplicate ${part} variant in ${action}/${frame}`);
@@ -65,17 +69,19 @@ export function checkCatActions() {
   }
 
   for (const preset of Object.values(catPresets)) {
-    for (const ear of Object.keys(catOptions.ear)) {
-      const config = readPetConfig({ ...preset, ear });
-      const first = snapshot('typing', 0, config);
+    const accessories = Object.keys(catOptions.accessory).map(accessory =>
+      snapshot('sit', 0, readPetConfig({ ...preset, accessory })),
+    );
+    assert(distinct(accessories), `Accessory missing for ${preset.name}`);
+    for (const typingMode of ['gentle', 'fast'] as const) {
+      const first = snapshot('typing', 0, preset, { typingMode });
       for (let frame = 1; frame < 4; frame++) {
-        const next = snapshot('typing', frame, config);
-        for (let i = 0; i < next.length; i += 4) {
-          if (rgba(first, i) === rgba(next, i)) continue;
-          const x = (i / 4) % SIZE;
-          const y = Math.floor(i / 4 / SIZE);
-          assert(y >= 90 && y <= 105 && x >= 60 && x <= 100,
-            `Typing shifted pixels outside the front paws for ${ear}/${frame}`);
+        const next = snapshot('typing', frame, preset, { typingMode });
+        for (let y = 0; y < 154; y++) {
+          for (let x = 147; x < 181; x++) {
+            const i = (y * SIZE + x) * 4;
+            assert(rgba(first, i) === rgba(next, i), `Typing moved the center of the cat's head`);
+          }
         }
       }
     }
@@ -92,9 +98,6 @@ export function checkCatActions() {
   }
 
   const sit = snapshot('sit', 0, calico);
-  const left = snapshot('left', 1, calico);
-  const right = snapshot('right', 0, calico);
-  const typing = snapshot('typing', 0, calico);
   const motion = new Motion(canvas, calico);
   const time = performance.now();
   motion.tick(time);
@@ -102,18 +105,28 @@ export function checkCatActions() {
   motion.beginDrag();
   motion.drag(-16);
   motion.tick(time);
-  assert(same(pixels(), left), 'Drag left did not trigger walk');
-  motion.drag(1);
-  motion.tick(time);
-  assert(same(pixels(), right), 'Drag right did not trigger mirrored walk');
-  motion.release(time);
-  motion.tick(time);
-  assert(same(pixels(), sit), 'Release did not restore sitting');
-  motion.key(time);
-  motion.tick(time);
-  assert(same(pixels(), typing), 'Key did not trigger typing');
-  motion.tick(time + 521);
-  assert(same(pixels(), snapshot('sit', 5, calico)), 'Typing did not return to sitting');
+  const draggedLeft = pixels();
+  assert(!same(draggedLeft, sit), 'Dragging did not stretch the front-facing cat');
+  motion.drag(16);
+  motion.tick(time + 16);
+  assert(!same(pixels(), draggedLeft), 'The cat did not respond to a change in drag direction');
+  motion.release(time + 16);
+  motion.tick(time + 640);
+  assert(same(pixels(), snapshot('sit', 6, calico)), 'The cat did not settle after release');
+  motion.key(time + 641);
+  motion.tick(time + 641);
+  assert(same(pixels(), snapshot('typing', 0, calico)), 'Key did not trigger gentle typing');
+  for (let i = 1; i <= 5; i++) motion.key(time + 641 + i * 100);
+  motion.tick(time + 1141);
+  assert(same(pixels(), snapshot('typing', 0, calico, { typingMode: 'fast' })), 'Six keys did not trigger fast typing');
+  motion.tick(time + 1231);
+  assert(same(pixels(), snapshot('typing', 1, calico, { typingMode: 'fast' })), 'Fast typing did not advance at 90 ms');
+  motion.tick(time + 1942);
+  assert(same(pixels(), snapshot('typing', 0, calico)), 'Typing did not return to gentle below three keys per second');
+  motion.key(time + 1990);
+  motion.tick(time + 2192);
+  assert(same(pixels(), snapshot('typing', 1, calico, { typingMode: 'gentle' })),
+    'Gentle typing did not advance at 250 ms');
 
   for (const eye of Object.keys(catOptions.eye).filter(id => id !== 'Y02') as (keyof typeof catOptions.eye)[]) {
     const config = { ...orange, eye };

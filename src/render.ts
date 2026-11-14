@@ -4,6 +4,9 @@ import { blackCatCoat, catOptions, catWalkFrames, type CatConfig, type PetConfig
 import { irisColors, palettes, type Config } from './model';
 
 export const SIZE = 160;
+const CAT_SIZE = 320;
+export type TypingMode = 'gentle' | 'fast';
+export type CatPose = { typingMode?: TypingMode; stretch?: number };
 export type Action = 'sit' | 'left' | 'right' | 'typing';
 export const actions: Readonly<Record<Action, number>> = { sit: 80, left: 6, right: 6, typing: 4 };
 
@@ -51,10 +54,11 @@ type FurSlot = typeof furSlots[number];
 const maskPath = (layer: string, slot: FurSlot) => `masks/${layer.split('/').at(-1)}_${slot}`;
 
 function loadLayer(layer: string) {
+  const size = layer.startsWith('cat/new_') ? CAT_SIZE : SIZE;
   const image = new Image();
   image.src = `${import.meta.env.BASE_URL}assets/${layer}.png`;
   return image.decode().then(() => {
-    if (image.naturalWidth !== SIZE || image.naturalHeight !== SIZE) throw Error(`图层尺寸错误 · ${layer}`);
+    if (image.naturalWidth !== size || image.naturalHeight !== size) throw Error(`图层尺寸错误 · ${layer}`);
     return [layer, image] as const;
   }).catch((error: unknown) => {
     console.error(`无法加载图层 · ${layer}`, error);
@@ -79,7 +83,7 @@ export const assetsReady = Promise.all([
 
 const catWalkBodies = Array.from({ length: catWalkFrames }, (_, index) => `walk_body_${index}`);
 const catViews = ['sit', 'walk'] as const;
-const extraCatEars = Object.keys(catOptions.ear).filter(id => id !== 'CE01');
+const extraCatEars = Object.keys(catOptions.ear).filter(id => id === 'CE02' || id === 'CE04');
 const extraCatMuzzles = Object.keys(catOptions.muzzle).filter(id => id !== 'CN01');
 const catEyes = Object.keys(catOptions.eye);
 const catFurLayers = [
@@ -99,9 +103,22 @@ const catCalicoLayers = new Set([
 ]);
 const catFurSlots = ['g', 's', 'l', 'w', 'd'] as const;
 const catMarkings = ['P01', 'P02'] as const;
+const newCatLayers = [
+  ...['CE02', 'CE03', 'CE04', 'CE05'].flatMap(id =>
+    ['', '_g', '_s', '_l'].map(slot => `new_ear_${id}${slot}`)),
+  ...['CN02', 'CN03', 'CN04'].map(id => `new_mouth_${id}`),
+  ...['Y05', 'Y06', 'Y07'].flatMap(id => [`new_eye_${id}`, `new_eye_${id}_iris`]),
+  ...['A01', 'A02', 'A03', 'A04', 'A05'].map(id => `new_accessory_${id}`),
+  ...['CC01', 'CC02', 'CC03', 'CC04'].map(id => `new_coat_${id}`),
+  ...Array.from({ length: 4 }, (_, frame) =>
+    [`new_fast_${frame}`, `new_fast_paw_${frame}`, ...['', '_g', '_s', '_l'].map(slot => `new_fast_arm_${frame}${slot}`)]).flat(),
+  'new_slow', 'new_slow_paw', 'new_typing_icon', 'new_mark_P01', 'new_mark_P02',
+  'new_point_CC03', 'new_point_CC04', 'new_whiskers', 'new_siamese_ear_base',
+];
 let catAssets: Promise<void> | undefined;
 export function prepareCatAssets() {
   return catAssets ??= Promise.all([
+    ...newCatLayers.map(layer => `cat/${layer}`),
     ...catFurLayers.flatMap(layer => [
       `cat/${layer}`,
       ...catFurSlots.map(slot => `cat/masks/${layer}_${slot}`),
@@ -127,9 +144,9 @@ function imageFor(layer: string) {
   return image;
 }
 
-function makeLayer() {
+function makeLayer(size = SIZE) {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = SIZE;
+  canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw Error('无法初始化图层画布');
   ctx.imageSmoothingEnabled = false;
@@ -144,11 +161,11 @@ const gazeFrameCache = new Map<string, HTMLCanvasElement>();
 const tinted = new Map<string, HTMLCanvasElement>();
 
 function paintMask(mask: CanvasRenderingContext2D, layer: string, color: string) {
-  mask.clearRect(0, 0, SIZE, SIZE);
+  mask.clearRect(0, 0, mask.canvas.width, mask.canvas.height);
   mask.drawImage(imageFor(layer), 0, 0);
   mask.globalCompositeOperation = 'source-in';
   mask.fillStyle = color;
-  mask.fillRect(0, 0, SIZE, SIZE);
+  mask.fillRect(0, 0, mask.canvas.width, mask.canvas.height);
   mask.globalCompositeOperation = 'source-over';
 }
 function furLayer(layer: string, palette: Config['palette'], slots: readonly FurSlot[] = furSlots) {
@@ -269,7 +286,13 @@ function catFur(layer: string, palette: CatConfig['palette']) {
     paintMask(mask.ctx, `cat/masks/${layer}_${slot}`, color);
     result.ctx.drawImage(mask.canvas, 0, 0);
   };
-  if (palette === 'CC02') {
+  if (palette === 'CC04') {
+    const point = /ear|tail|muzzle/.test(layer);
+    const colors = point
+      ? ['#704932', '#4C2D20', '#946B4F', '#956B4C', '#63412D']
+      : ['#F6E3CA', '#E9CDAE', '#FFF2DF', '#FFF9EF', '#9B7054'];
+    catFurSlots.forEach((slot, index) => apply(slot, colors[index]!));
+  } else if (palette === 'CC02') {
     catFurSlots.forEach((slot, index) => apply(slot, blackCatCoat[index]!));
   } else {
     result.ctx.drawImage(imageFor(`cat/masks/${layer}_calico`), 0, 0);
@@ -284,9 +307,10 @@ function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
   if (cached) return cached;
 
   const source = imageFor(`cat/${name}`);
-  const irisMask = `cat/masks/${name}_iris`;
+  const irisMask = catIrisPath(name);
+  const size = source.naturalWidth;
   // The bundled PNGs can be composited under WebKit's file-origin rules.
-  const pupil = makeLayer();
+  const pupil = makeLayer(size);
   if (irisColor) {
     paintMask(pupil.ctx, irisMask, irisColor);
   } else {
@@ -295,19 +319,23 @@ function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
     pupil.ctx.drawImage(source, 0, 0);
   }
 
-  const socket = makeLayer();
+  const socket = makeLayer(size);
   paintMask(socket.ctx, irisMask, '#442416');
-  const shifted = makeLayer();
-  shifted.ctx.drawImage(pupil.canvas, gaze.x, gaze.y);
+  const shifted = makeLayer(size);
+  shifted.ctx.drawImage(pupil.canvas, gaze.x * size / SIZE, gaze.y * size / SIZE);
   shifted.ctx.globalCompositeOperation = 'destination-in';
   shifted.ctx.drawImage(source, 0, 0);
 
-  const result = makeLayer();
+  const result = makeLayer(size);
   result.ctx.drawImage(source, 0, 0);
   result.ctx.drawImage(socket.canvas, 0, 0);
   result.ctx.drawImage(shifted.canvas, 0, 0);
   gazeFrameCache.set(key, result.canvas);
   return result.canvas;
+}
+
+function catIrisPath(name: string) {
+  return name.startsWith('new_') ? `cat/${name}_iris` : `cat/masks/${name}_iris`;
 }
 
 function catEye(
@@ -317,7 +345,7 @@ function catEye(
   palette: CatConfig['palette'],
   gaze: Gaze = noGaze,
 ) {
-  const name = `${view}_eye_${eye}`;
+  const name = view === 'sit' && ['Y05', 'Y06', 'Y07'].includes(eye) ? `new_eye_${eye}` : `${view}_eye_${eye}`;
   const source = imageFor(`cat/${name}`);
   const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
   if (eye !== 'Y02' && (gaze.x !== 0 || gaze.y !== 0)) return gazeEye(name, irisColor, gaze);
@@ -325,16 +353,35 @@ function catEye(
   const key = `cat/${name}/${irisColor}`;
   const existing = tinted.get(key);
   if (existing) return existing;
-  const result = makeLayer();
-  const mask = makeLayer();
-  paintMask(mask.ctx, `cat/masks/${name}_iris`, irisColor);
+  const result = makeLayer(source.naturalWidth);
+  const mask = makeLayer(source.naturalWidth);
+  paintMask(mask.ctx, catIrisPath(name), irisColor);
   result.ctx.drawImage(source, 0, 0);
   result.ctx.drawImage(mask.canvas, 0, 0);
   tinted.set(key, result.canvas);
   return result.canvas;
 }
 
-function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number, gaze: Gaze = noGaze) {
+function newCatFur(layer: string, palette: CatConfig['palette']) {
+  const path = `cat/new_${layer}`;
+  const source = imageFor(path);
+  if (palette === 'CC01' || palette === 'CC03') return source;
+  const key = `${path}/${palette}`;
+  const cached = tinted.get(key);
+  if (cached) return cached;
+  const result = makeLayer(CAT_SIZE);
+  const mask = makeLayer(CAT_SIZE);
+  const colors = palette === 'CC02' ? blackCatCoat : ['#704932', '#4C2D20', '#946B4F'];
+  result.ctx.drawImage(source, 0, 0);
+  furSlots.forEach((slot, i) => {
+    paintMask(mask.ctx, `${path}_${slot}`, colors[i]!);
+    result.ctx.drawImage(mask.canvas, 0, 0);
+  });
+  tinted.set(key, result.canvas);
+  return result.canvas;
+}
+
+function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number, gaze: Gaze, pose: CatPose) {
   const walking = action === 'left' || action === 'right';
   const typing = action === 'typing';
   const view = walking ? 'walk' : 'sit';
@@ -343,49 +390,85 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
   // The sitting face is centered at x=83, the typing chest at x=80.
   const headX = typing ? -3 : 0;
   const drawFur = (layer: string, y = 0) => ctx.drawImage(catFur(layer, config.palette), 0, y);
+  const drawNew = (layer: string, x = 0, y = 0) =>
+    ctx.drawImage(imageFor(`cat/new_${layer}`), x, y, SIZE, SIZE);
+  const stretch = pose.stretch ?? 0;
   ctx.translate(0, breathing);
-  // The root stays tucked under the rump while the visible tail moves.
+  if (stretch) {
+    ctx.translate(80, 139);
+    ctx.scale(1 + Math.abs(stretch) * 0.11, 1 - Math.abs(stretch) * 0.055);
+    ctx.translate(-80, -139);
+  }
   const tailShift = walking ? [0, -1, 0, 1][frame]!
     : action === 'sit' ? [0, -1, -2, -2, -1, 0][Math.floor((frame - 30) / 2)] ?? 0 : 0;
-  drawFur(typing ? 'type_tail' : `${view}_tail`, tailShift);
-  drawFur(walking ? catWalkBodies[frame]! : typing ? 'type_body' : 'sit_body');
-  ctx.save();
-  ctx.translate(headX, 0);
-  const upright = config.ear === 'CE01';
-  if (upright) drawFur(`${view}_ears`, headY);
-  drawFur(upright ? `${view}_head` : `${view}_head_alt`, headY);
-  if (config.pattern === 'P02' || config.pattern === 'P06') {
-    ctx.drawImage(imageFor(`cat/${view}_face_P02`), 0, headY);
+  if (walking || typing) {
+    drawFur(typing ? 'type_tail' : 'walk_tail', tailShift);
+    drawFur(walking ? catWalkBodies[frame]! : 'type_body');
+  } else {
+    drawNew(`coat_${config.palette}`);
   }
-  if (config.pattern === 'P01' || config.pattern === 'P06') {
-    ctx.drawImage(imageFor(`cat/${view}_face_P01`), 0, headY);
+
+  if (typing && pose.typingMode === 'fast') {
+    ctx.drawImage(newCatFur(`fast_arm_${frame}`, config.palette), 0, 0, SIZE, SIZE);
+  }
+  const accessory = config.accessory;
+  if (!walking && (accessory === 'A04' || accessory === 'A05')) drawNew(`accessory_${accessory}`);
+  ctx.save();
+  ctx.translate(headX + Math.round(stretch * 7), 0);
+  const upright = config.ear === 'CE01';
+  const sideEar = config.ear === 'CE03' ? 'CE01' : config.ear === 'CE05' ? 'CE02' : config.ear;
+  if (upright || (walking && sideEar === 'CE01')) drawFur(`${view}_ears`, headY);
+  const head = upright || (walking && sideEar === 'CE01') ? `${view}_head` : `${view}_head_alt`;
+  const headPalette = !walking && config.palette === 'CC03' ? 'CC01' : config.palette;
+  ctx.drawImage(catFur(head, headPalette), 0, headY);
+  if (!walking && upright && config.palette === 'CC04') drawNew('siamese_ear_base', 0, headY);
+  if (!walking && (config.palette === 'CC03' || config.palette === 'CC04')) {
+    drawNew(`point_${config.palette}`, 0, headY);
+  }
+  for (const mark of ['P01', 'P02'] as const) {
+    if (config.pattern !== mark && config.pattern !== 'P06') continue;
+    if (walking) ctx.drawImage(imageFor(`cat/${view}_face_${mark}`), 0, headY);
+    else drawNew(`mark_${mark}`, 0, headY);
   }
   const blink = action === 'sit' && frame >= 25 && frame <= 26;
   const look = typing ? noGaze : action === 'right' ? { x: -gaze.x, y: gaze.y } : gaze;
-  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette, blink ? noGaze : look), 0, headY + (typing ? 1 : 0));
-  drawFur(config.muzzle === 'CN01' ? `${view}_muzzle` : `${view}_muzzle_${config.muzzle}`, headY);
-  if (!upright) drawFur(`${view}_ear_${config.ear}`, headY);
+  const eyes = catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette, look);
+  ctx.drawImage(eyes, 0, headY + (typing ? 1 : 0), SIZE, SIZE);
+  if (walking || config.muzzle === 'CN01') {
+    drawFur(config.muzzle === 'CN01' ? `${view}_muzzle` : `${view}_muzzle_${config.muzzle}`, headY);
+  } else {
+    drawNew('whiskers', 0, headY);
+    drawNew(`mouth_${config.muzzle}`, 0, headY);
+  }
+  if (!upright) {
+    if (walking && sideEar !== 'CE01') drawFur(`walk_ear_${sideEar}`, headY);
+    if (!walking) ctx.drawImage(newCatFur(`ear_${config.ear}`, config.palette), 0, headY, SIZE, SIZE);
+  }
+  if (!walking && (accessory === 'A01' || accessory === 'A02' || accessory === 'A03')) {
+    drawNew(`accessory_${accessory}`, 0, headY);
+  }
   ctx.restore();
-  if (typing) {
-    // Center the laptop and paws under the face without shifting the torso or tail.
-    ctx.translate(3, 0);
-    ctx.drawImage(imageFor('cat/type_keyboard'), 0, 0);
-    const taps = [[0, 1, 0, 0], [0, 0, 0, -1], [1, 0, 0, 0], [0, 0, -1, 0]] as const;
-    const [left, right, leftY, rightY] = taps[frame]!;
-    drawFur(`type_paw_l${left}`, leftY);
-    drawFur(`type_paw_r${right}`, rightY);
-    ctx.drawImage(imageFor('cat/type_screen'), 0, 0);
+  if (typing || accessory === 'A06' && !walking) {
+    if (typing && pose.typingMode === 'fast') {
+      drawNew(`fast_${frame}`);
+      drawNew(`fast_paw_${frame}`);
+    } else {
+      drawNew(accessory === 'A06' ? 'typing_icon' : 'slow');
+      if (typing) drawNew('slow_paw', 0, frame % 2 ? -1 : 0);
+    }
   }
 }
 
-export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0, gaze: Gaze = noGaze) {
-  canvas.width = canvas.height = SIZE;
+export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0, gaze: Gaze = noGaze, catPose: CatPose = {}) {
+  const size = config.frame === 'CAT' ? CAT_SIZE : SIZE;
+  canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw Error('无法初始化 Canvas');
 
   const unavailable = config.frame === 'M1' ? availability(config) : [];
   ctx.resetTransform();
-  ctx.clearRect(0, 0, SIZE, SIZE);
+  ctx.clearRect(0, 0, size, size);
+  ctx.scale(size / SIZE, size / SIZE);
   ctx.imageSmoothingEnabled = false;
   canvas.title = unavailable.length ? `素材待补充 · ${unavailable.join(' / ')}` : '';
   canvas.setAttribute('aria-label', canvas.title || '宠物像素预览');
@@ -393,16 +476,17 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
   try {
     const pose = frame % frameCount(config, action);
     if (action === 'left' || action === 'right') {
-      const left = makeLayer();
-      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose, gaze);
+      const left = makeLayer(size);
+      left.ctx.scale(size / SIZE, size / SIZE);
+      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose, gaze, catPose);
       else drawRun(left.ctx, config, pose);
       if (action === 'right') {
         ctx.translate(SIZE, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(left.canvas, 0, 0);
+      ctx.drawImage(left.canvas, 0, 0, SIZE, SIZE);
     } else if (config.frame === 'CAT') {
-      drawCat(ctx, config, action, pose, gaze);
+      drawCat(ctx, config, action, pose, gaze, catPose);
     } else {
       drawFront(ctx, config, action === 'typing', pose);
     }
@@ -410,7 +494,7 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
     canvas.title = error instanceof Error ? error.message : String(error);
     canvas.setAttribute('aria-label', canvas.title);
     ctx.resetTransform();
-    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.clearRect(0, 0, size, size);
     // The export caller reports asset failures through its existing status UI.
     if (!canvas.isConnected) throw error;
   }

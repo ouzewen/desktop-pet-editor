@@ -685,12 +685,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if config["frame"] as? String == "CAT" {
             switch config["name"] as? String {
             case "三花猫": return "preset_cat_calico"
+            case "暹罗猫": return "preset_cat_siamese"
             case "黑猫": return "preset_cat_black"
             case "橘猫": return "preset_cat_orange"
             default:
                 switch config["palette"] as? String {
                 case "CC02": return "preset_cat_black"
                 case "CC03": return "preset_cat_calico"
+                case "CC04": return "preset_cat_siamese"
                 default: return "preset_cat_orange"
                 }
             }

@@ -51,10 +51,12 @@ void desktopReady.then(() => {
   function tick(now: number) {
     if (preview) {
       const isCatWalk = preview.config.frame === 'CAT' && (preview.action === 'left' || preview.action === 'right');
-      const interval = isCatWalk ? 165 : preview.action === 'typing' ? 145 : 90;
+      const interval = isCatWalk ? 165 : preview.action === 'typing' ? (preview.config.frame === 'CAT' ? 90 : 145) : 90;
       const frame = Math.floor((now - preview.started) / interval) % frameCount(preview.config, preview.action);
       if (frame !== previous || previousPreview !== preview || previousGaze !== gaze) {
-        render(canvas, preview.config, preview.action, frame, gaze);
+        const stretch = isCatWalk ? Math.sin(frame * Math.PI / 2) * (preview.action === 'left' ? -1 : 1) : 0;
+        render(canvas, preview.config, isCatWalk ? 'sit' : preview.action, isCatWalk ? 0 : frame, gaze,
+          { typingMode: 'fast', stretch });
         previous = frame;
         previousPreview = preview;
         previousGaze = gaze;

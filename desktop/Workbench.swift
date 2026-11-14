@@ -70,6 +70,7 @@ private enum WBTheme {
         case "preset_m1_13": return [Color(pixelHex: 0x2E2E31), Color(pixelHex: 0x996138), Color(pixelHex: 0xFFFFFF)]
         case "preset_cat_orange": return [Color(pixelHex: 0xE08A4A), Color(pixelHex: 0xFFF6E8)]
         case "preset_cat_black": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
+        case "preset_cat_siamese": return paletteColors("CC04")
         case "preset_cat_calico": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
         default: return [Color(pixelHex: 0xE9A53C)]
         }
@@ -87,6 +88,7 @@ private enum WBTheme {
         case "C08": return [Color(pixelHex: 0x232326), Color(pixelHex: 0x3D3D41)]
         case "CC01": return [Color(pixelHex: 0xE08A4A), Color(pixelHex: 0xFFF6E8)]
         case "CC02": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
+        case "CC04": return [Color(pixelHex: 0xF6E3CA), Color(pixelHex: 0x704932), Color(pixelHex: 0x6794B5)]
         case "CC03": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
         default: return [Color(pixelHex: 0x9E9E9E)]
         }
@@ -159,7 +161,7 @@ struct WorkbenchView: View {
 
     private let fields = [
         ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
-        ("eye", "眼型"), ("eyeColor", "瞳色"), ("pattern", "面部花纹"),
+        ("eye", "眼型"), ("eyeColor", "瞳色"), ("pattern", "面部花纹"), ("accessory", "配饰"),
     ]
     private let fieldColumns = [
         GridItem(.flexible(), spacing: 10, alignment: .top),
@@ -179,8 +181,8 @@ struct WorkbenchView: View {
         let cat = state.appearance["frame"] == "CAT"
         return [
             ("sit", "待机"),
-            ("left", cat ? "左走" : "左跑"),
-            ("right", cat ? "右走" : "右跑"),
+            ("left", cat ? "左拖" : "左跑"),
+            ("right", cat ? "右拖" : "右跑"),
             ("typing", "打字"),
         ]
     }
