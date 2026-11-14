@@ -31,7 +31,8 @@ struct ReminderListCard: View {
         guard !value.isEmpty else { return }
         onAdd(value)
         model.draft = ""
-        DispatchQueue.main.async { focused = true }
+        // One reminder per click: collapse the inline field again.
+        model.isAdding = false
     }
 
     var body: some View {
