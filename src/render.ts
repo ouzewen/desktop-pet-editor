@@ -12,11 +12,11 @@ export const actions: Readonly<Record<Action, number>> = Object.defineProperties
 );
 
 const art = {
-  tail: ['T01'],
+  tail: ['T01', 'T02'],
   ear: ['E01', 'E02', 'E03'],
   eye: ['Y01', 'Y02', 'Y03'],
   muzzle: ['N01', 'N02'],
-  pattern: ['P00', 'P02'],
+  pattern: ['P00', 'P02', 'P03'],
 } as const;
 
 const baseLayers = [
@@ -25,7 +25,10 @@ const baseLayers = [
   ...art.tail.map(id => `parts/M1_tail_${id}`),
   ...art.ear.map(id => `parts/M1_ear_${id}`),
 ];
+const bodyPattern = 'parts/M1_pattern_P03';
 const fixedLayers = [
+  bodyPattern,
+  'masks/M1_pattern_P03_s',
   'parts/M1_pattern_P02',
   ...art.eye.map(id => `parts/M1_eye_${id}`),
   ...art.muzzle.map(id => `parts/M1_muzzle_${id}`),
@@ -69,7 +72,7 @@ function makeLayer() {
 }
 
 const tinted = new Map<string, HTMLCanvasElement>();
-function furLayer(layer: string, palette: Config['palette']) {
+function furLayer(layer: string, palette: Config['palette'], slots: readonly FurSlot[] = furSlots) {
   const source = imageFor(layer);
   if (palette === 'C01') return source;
   const key = `${layer}/${palette}`;
@@ -79,17 +82,32 @@ function furLayer(layer: string, palette: Config['palette']) {
   const result = makeLayer();
   const mask = makeLayer();
   result.ctx.drawImage(source, 0, 0);
-  furSlots.forEach((slot, index) => {
+  slots.forEach(slot => {
     mask.ctx.clearRect(0, 0, SIZE, SIZE);
     mask.ctx.drawImage(imageFor(maskPath(layer, slot)), 0, 0);
     mask.ctx.globalCompositeOperation = 'source-in';
-    mask.ctx.fillStyle = palettes[palette][index];
+    mask.ctx.fillStyle = palettes[palette][furSlots.indexOf(slot)];
     mask.ctx.fillRect(0, 0, SIZE, SIZE);
     mask.ctx.globalCompositeOperation = 'source-over';
     result.ctx.drawImage(mask.canvas, 0, 0);
   });
   tinted.set(key, result.canvas);
   return result.canvas;
+}
+
+const bodyWithPattern = new Map<Config['palette'], HTMLCanvasElement>();
+function bodyLayer(palette: Config['palette'], pattern: Config['pattern']) {
+  const base = furLayer('frames/M1_body', palette);
+  if (pattern !== 'P03') return base;
+  const cached = bodyWithPattern.get(palette);
+  if (cached) return cached;
+
+  const body = makeLayer();
+  body.ctx.drawImage(base, 0, 0);
+  body.ctx.globalCompositeOperation = 'source-atop';
+  body.ctx.drawImage(furLayer(bodyPattern, palette, ['s']), 0, 0);
+  bodyWithPattern.set(palette, body.canvas);
+  return body.canvas;
 }
 
 const headWithPattern = new Map<Config['palette'], HTMLCanvasElement>();
@@ -127,8 +145,8 @@ export function render(canvas: HTMLCanvasElement, config: Config, _action: Actio
   canvas.setAttribute('aria-label', canvas.title || '宠物像素预览');
 
   try {
-    ctx.drawImage(furLayer('parts/M1_tail_T01', config.palette), 0, 0);
-    ctx.drawImage(furLayer('frames/M1_body', config.palette), 0, 0);
+    ctx.drawImage(furLayer(`parts/M1_tail_${config.tail}`, config.palette), 0, 0);
+    ctx.drawImage(bodyLayer(config.palette, config.pattern), 0, 0);
     ctx.drawImage(headLayer(config.palette, config.pattern === 'P02' ? 'P02' : 'P00'), 0, 0);
     const ear = art.ear.find(id => id === config.ear) ?? 'E01';
     const eye = art.eye.find(id => id === config.eye) ?? 'Y01';
