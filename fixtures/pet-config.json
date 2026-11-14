@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "name": "布丁",
+  "name": "柴犬",
   "frame": "M1",
   "accessory": null,
-  "ear": "E03",
-  "muzzle": "N02",
-  "tail": "T02",
-  "eye": "Y04",
-  "palette": "C03",
-  "pattern": "P03"
+  "ear": "E01",
+  "muzzle": "N01",
+  "tail": "T01",
+  "eye": "Y01",
+  "palette": "C01",
+  "pattern": "P02"
 }
