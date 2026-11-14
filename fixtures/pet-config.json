@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "布丁",
+  "frame": "M1",
+  "accessory": null,
+  "ear": "E03",
+  "muzzle": "N02",
+  "tail": "T02",
+  "eye": "Y04",
+  "palette": "C03",
+  "pattern": "P03"
+}
