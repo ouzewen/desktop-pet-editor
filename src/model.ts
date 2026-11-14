@@ -3,12 +3,18 @@ export const options = {
   muzzle: { N01: '尖嘴', N02: '方嘴', N03: '圆嘴' },
   tail: { T01: '卷尾', T02: '长直尾' },
   eye: { Y01: '圆眼', Y02: '开心闭眼', Y03: '眯眯眼', Y04: '亮晶晶眼' },
+  eyeColor: { natural: '原色', amber: '琥珀', blue: '蓝灰', green: '橄榄绿' },
+  pattern: { P00: '无面部花纹', P02: '眉斑与白颊', P01: '白额线', P06: '眉斑 + 白额线' },
   palette: { C01: '黄白', C02: '黑白', C03: '三色', C04: '巧克力棕', C05: '奶油白', C06: '灰白', C07: '赤棕', C08: '纯黑' },
 } as const;
 
 export type Part = keyof typeof options;
 type Parts = { [Key in Part]: keyof typeof options[Key] };
-export type Config = Parts & { version: 1; name: string; frame: 'M1'; pattern: 'P00'; accessory: null };
+export type Config = Parts & { version: 1; name: string; frame: 'M1'; accessory: null };
+
+export const irisColors: Record<Exclude<Config['eyeColor'], 'natural'>, string> = {
+  amber: '#A87133', blue: '#6794B5', green: '#7F985F',
+};
 
 export const parts = Object.keys(options) as Part[];
 
@@ -30,9 +36,9 @@ export const palettes: Record<Config['palette'], readonly [string, string, strin
 };
 
 export const presets = {
-  preset_m1_12: { name: '柴犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T01', eye: 'Y01', palette: 'C01', pattern: 'P00', accessory: null },
-  preset_m1_13: { name: '比格犬', version: 1, frame: 'M1', ear: 'E03', muzzle: 'N02', tail: 'T02', eye: 'Y01', palette: 'C03', pattern: 'P00', accessory: null },
-  preset_m1_14: { name: '中华田园犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T02', eye: 'Y01', palette: 'C01', pattern: 'P00', accessory: null },
+  preset_m1_12: { name: '柴犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T01', eye: 'Y01', eyeColor: 'natural', palette: 'C01', pattern: 'P06', accessory: null },
+  preset_m1_13: { name: '比格犬', version: 1, frame: 'M1', ear: 'E03', muzzle: 'N02', tail: 'T02', eye: 'Y01', eyeColor: 'natural', palette: 'C03', pattern: 'P00', accessory: null },
+  preset_m1_14: { name: '中华田园犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T02', eye: 'Y01', eyeColor: 'natural', palette: 'C01', pattern: 'P00', accessory: null },
 } satisfies Record<string, Config>;
 
 export type PresetId = keyof typeof presets;
@@ -51,13 +57,18 @@ export function readConfig(input: unknown): Config {
   if (typeof data.name !== 'string' || nameLength(data.name) < 1 || nameLength(data.name) > 8) {
     throw Error('name 须为 1–8 字');
   }
+  // Retired body patterns in older exports load as a plain face.
+  const pattern = typeof data.pattern === 'string' && /^P0[3-5]$/.test(data.pattern) ? 'P00' : data.pattern;
+  const choices: Record<string, unknown> = {
+    ...data,
+    eyeColor: data.eyeColor === undefined ? 'natural' : data.eyeColor,
+    pattern,
+  };
   for (const part of parts) {
-    const value = data[part];
+    const value = choices[part];
     if (typeof value !== 'string' || !Object.hasOwn(options[part], value)) throw Error(`${part} 缺失或编号无效`);
   }
-  // Older exports may contain a retired pattern. Keep the field in v1 JSON.
-  if (typeof data.pattern !== 'string' || !/^P0[0-5]$/.test(data.pattern)) throw Error('pattern 缺失或编号无效');
-  const config = { version: 1, name: data.name.trim(), frame: 'M1', pattern: 'P00', accessory: null } as Config;
-  Object.assign(config, Object.fromEntries(parts.map(part => [part, data[part]])));
+  const config = { version: 1, name: data.name.trim(), frame: 'M1', accessory: null } as Config;
+  Object.assign(config, Object.fromEntries(parts.map(part => [part, choices[part]])));
   return config;
 }

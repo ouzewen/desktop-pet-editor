@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { strToU8, zipSync } from 'fflate';
 import { nameLength, options, parts, presets, readConfig, type Config, type Part, type PresetId } from './model';
-import { actions, png, render, type Action } from './render';
+import { actions, assetsReady, png, render, type Action } from './render';
 import './style.css';
 
-const labels: Record<Part, string> = { ear: '耳朵', muzzle: '嘴鼻', tail: '尾巴', eye: '眼睛', palette: '毛色' };
+const labels: Record<Part, string> = { ear: '耳朵', muzzle: '嘴鼻', tail: '尾巴', eye: '眼睛', eyeColor: '瞳色', pattern: '面部花纹', palette: '毛色' };
 const actionLabels: Record<Action, string> = { sit: '正面坐姿', left: '向左跑', right: '向右跑', typing: '打字' };
-const steps = ['选体型', '选框架', '换细节', '起名'];
+const steps = ['选体型', '选品种', '换细节', '起名'];
 const defaultId = 'preset_m1_12';
 
 function download(blob: Blob, file: string) {
@@ -38,15 +38,15 @@ function App() {
   }, [config, action, frame]);
 
   useEffect(() => {
-    if (!playing || action === 'sit') return;
-    const timer = window.setInterval(() => setFrame(i => (i + 1) % actions[action]), action === 'typing' ? 145 : 88);
+    if (!playing) return;
+    const timer = window.setInterval(() => setFrame(i => (i + 1) % actions[action]), action === 'typing' ? 145 : 90);
     return () => window.clearInterval(timer);
   }, [action, playing]);
 
   function chooseAction(next: Action) {
     setFrame(0);
     setAction(next);
-    setPlaying(next !== 'sit');
+    setPlaying(true);
   }
 
   function setPart(part: Part, value: string) {
@@ -104,7 +104,7 @@ function App() {
       setConfig(next);
       setHistory([]);
       setStep(3);
-      setMessage('已导入同一份 M1 配置');
+      setMessage('已导入宠物配置');
     } catch (error) {
       setMessage(`导入失败 · ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -132,13 +132,12 @@ function App() {
     }
   }
 
-  const selected = presetId && parts.every(part => config[part] === presets[presetId][part]);
   const validName = nameLength(config.name) >= 1 && nameLength(config.name) <= 8;
 
   return (
     <main>
       <header>
-        <div><p className="kicker">桌面宠物 / M1</p><h1>宠物形象编辑器</h1></div>
+        <h1>宠物形象编辑器</h1>
         <div>
           <button className="secondary" onClick={() => fileInput.current?.click()}>导入 JSON</button>
           <input ref={fileInput} type="file" accept=".json,application/json" onChange={importFile} hidden aria-label="选择配置文件" />
@@ -148,7 +147,7 @@ function App() {
       <div className="workspace">
         <section className="preview" aria-label="画布预览">
           <div className="preview-heading">
-            <div><h2>{config.name.trim() || '未命名'}</h2><p>{selected && presetId ? presets[presetId].name : '自定义'} · 标准短毛</p></div>
+            <div><h2>{config.name.trim() || '未命名'}</h2><p>{presetId ? presets[presetId].name : '自定义'}</p></div>
             <span className="dimensions">160 × 160</span>
           </div>
           <div className="stage"><canvas ref={canvas} width="160" height="160" aria-label="宠物像素预览" /></div>
@@ -172,13 +171,18 @@ function App() {
           <div className="panel-content">
             {step === 0 && <>
               <h2>选择体型</h2>
-              <button className="choice picked" onClick={() => setStep(1)}><strong>中型</strong><span>M1 标准短毛</span></button>
+              <button className="choice picked" onClick={() => setStep(1)}><strong>中型</strong></button>
             </>}
             {step === 1 && <>
-              <h2>选择框架或品种</h2>
-              <button className={`choice ${presetId === null ? 'picked' : ''}`} onClick={() => { setPresetId(null); setBase(config); setStep(2); }}><strong>M1 标准短毛</strong><span>自定义</span></button>
+              <h2>选品种</h2>
               <div className="preset-list">
-                {(Object.keys(presets) as PresetId[]).map(id => <button key={id} className={`choice ${id === presetId && selected ? 'picked' : ''}`} onClick={() => selectPreset(id)}><strong>{presets[id].name}</strong></button>)}
+                {(Object.keys(presets) as PresetId[]).map(id => (
+                  <button key={id} className={`choice ${id === presetId ? 'picked' : ''}`}
+                    aria-pressed={id === presetId} onClick={() => selectPreset(id)}>
+                    <strong>{presets[id].name}</strong>
+                    <canvas aria-hidden="true" ref={element => { if (element) render(element, presets[id]); }} />
+                  </button>
+                ))}
               </div>
             </>}
             {step === 2 && <>
@@ -190,18 +194,19 @@ function App() {
               </div>
               <div className="part-list">
                 {parts.map(part => {
+                  const disabled = part === 'eyeColor' && config.eye === 'Y02';
                   const dict: Record<string, string> = options[part];
                   return <div className="part" key={part}>
                     <label htmlFor={part}>{labels[part]}</label>
-                    <button aria-label={`上一款${labels[part]}`} onClick={() => cycle(part, -1)}>‹</button>
-                    <select id={part} value={config[part]} onChange={event => setPart(part, event.target.value)}>
+                    <button aria-label={`上一款${labels[part]}`} disabled={disabled} onClick={() => cycle(part, -1)}>‹</button>
+                    <select id={part} disabled={disabled} value={config[part]} onChange={event => setPart(part, event.target.value)}>
                       {Object.entries(dict).map(([id, name]) => <option value={id} key={id}>{name}</option>)}
                     </select>
-                    <button aria-label={`下一款${labels[part]}`} onClick={() => cycle(part, 1)}>›</button>
+                    <button aria-label={`下一款${labels[part]}`} disabled={disabled} onClick={() => cycle(part, 1)}>›</button>
                   </div>;
                 })}
               </div>
-              {config.eye === 'Y03' && <p className="hint">眯眯眼常驻会看不到眨眼动画。</p>}
+              {config.eye === 'Y02' && <p className="hint">闭眼时不显示瞳色，睁眼后会恢复所选颜色。</p>}
             </>}
             {step === 3 && <>
               <h2>给宠物起名</h2>
@@ -225,4 +230,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+void assetsReady.then(() => createRoot(document.getElementById('root')!).render(<App />));
