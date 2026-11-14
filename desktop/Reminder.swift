@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-private let reminderAccent = Color(red: 0.90, green: 0.55, blue: 0.24)
-
 final class ReminderListModel: ObservableObject {
     @Published var items: [String]
     @Published var isAdding = false
@@ -20,7 +18,10 @@ struct ReminderListCard: View {
     let onBeginAdd: () -> Void
     let onHeightChange: (CGFloat) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var focused: Bool
+
+    private var palette: PixelPalette { .of(colorScheme) }
 
     private var trimmedDraft: String {
         model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,106 +32,99 @@ struct ReminderListCard: View {
         guard !value.isEmpty else { return }
         onAdd(value)
         model.draft = ""
-        // One reminder per click: collapse the inline field again.
         model.isAdding = false
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(reminderAccent)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                PixelGlyph(kind: .bell, color: palette.accent, size: 12)
                 Text("重要提醒")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
                 Spacer(minLength: 6)
                 if !model.isAdding {
                     Button {
                         onBeginAdd()
                         model.isAdding = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(reminderAccent)
+                        PixelGlyph(kind: .plus, color: palette.ink, size: 11)
+                            .frame(width: 16, height: 16)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("添加一条提醒")
                 }
                 Text("\(model.items.count)")
-                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+                    .padding(.horizontal, 4)
                     .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.primary.opacity(0.08)))
+                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
             }
 
             ForEach(model.items.indices, id: \.self) { index in
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(reminderAccent)
+                HStack(alignment: .top, spacing: 6) {
+                    Rectangle()
+                        .fill(palette.accent)
                         .frame(width: 5, height: 5)
                         .padding(.top, 5)
                     Text(model.items[index])
-                        .font(.system(size: 12))
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.ink)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button {
                         onClose(index)
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Color.primary.opacity(0.34))
-                            .frame(width: 16, height: 16)
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                            .frame(width: 15, height: 15)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("移除这条提醒")
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    Color.primary.opacity(0.05),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
+                .padding(.horizontal, 6)
+                .padding(.vertical, 5)
+                .background(PixelBox(corner: 1).fill(palette.panelAlt))
             }
 
             if model.isAdding {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     TextField("添加一条重要提醒…", text: $model.draft)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.ink)
                         .focused($focused)
                         .onSubmit(submit)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(PixelBox(corner: 1).fill(palette.panelDeep))
+
                     Button("添加", action: submit)
-                        .buttonStyle(.borderedProminent)
-                        .tint(reminderAccent)
-                        .controlSize(.mini)
+                        .buttonStyle(PixelButtonStyle(palette: palette))
                         .disabled(trimmedDraft.isEmpty)
+                        .opacity(trimmedDraft.isEmpty ? 0.5 : 1)
+
                     Button {
                         model.isAdding = false
                         model.draft = ""
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Color.primary.opacity(0.34))
-                            .frame(width: 16, height: 16)
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                            .frame(width: 15, height: 15)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("收起")
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    reminderAccent.opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
             }
         }
-        .padding(12)
+        .padding(10)
         .frame(width: 240, alignment: .leading)
+        .background(PixelBox(corner: 3).fill(palette.panel))
+        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
+        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
         .background(
             GeometryReader { proxy in
                 Color.clear
@@ -138,12 +132,6 @@ struct ReminderListCard: View {
                     .onChange(of: proxy.size.height) { onHeightChange($0) }
             }
         )
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.10))
-        )
-        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 3)
         .onAppear {
             if model.isAdding {
                 DispatchQueue.main.async { focused = true }
@@ -171,49 +159,47 @@ struct ReminderInputCard: View {
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var focused: Bool
+
+    private var palette: PixelPalette { .of(colorScheme) }
 
     private var trimmed: String {
         model.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(reminderAccent)
+        HStack(spacing: 6) {
+            PixelGlyph(kind: .plus, color: palette.accent, size: 12)
 
             TextField("添加一条重要提醒…", text: $model.text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.ink)
                 .focused($focused)
                 .onSubmit(onSubmit)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(PixelBox(corner: 1).fill(palette.panelDeep))
 
             Button("添加", action: onSubmit)
-                .buttonStyle(.borderedProminent)
-                .tint(reminderAccent)
-                .controlSize(.small)
+                .buttonStyle(PixelButtonStyle(palette: palette))
                 .disabled(trimmed.isEmpty)
+                .opacity(trimmed.isEmpty ? 0.5 : 1)
 
             Button(action: onCancel) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.primary.opacity(0.34))
-                    .frame(width: 16, height: 16)
+                PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                    .frame(width: 15, height: 15)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("取消")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(8)
         .frame(width: 288)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.10))
-        )
-        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 3)
+        .background(PixelBox(corner: 3).fill(palette.panel))
+        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
+        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }

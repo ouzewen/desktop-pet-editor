@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import SwiftUI
 import WebKit
 
@@ -90,6 +91,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        registerPixelFont()
         installApplicationMenu()
         panel.isExcludedFromWindowsMenu = true
         panel.isOpaque = false
@@ -178,6 +180,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
+    private func registerPixelFont() {
+        guard let url = Bundle.main.url(forResource: "ArkPixel12", withExtension: "ttf") else { return }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }
+
     private func configureWorkbench() {
         workbenchState.choosePreset = { [weak self] id in self?.choosePreset(id) }
         workbenchState.refresh = { [weak self] in self?.refreshPreview() }
@@ -194,9 +201,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let host = NSHostingController(rootView: WorkbenchView(state: workbenchState, preview: preview))
         let window = NSWindow(contentViewController: host)
         window.title = "桌宠工作台"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 940, height: 690))
-        window.contentMinSize = NSSize(width: 840, height: 640)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.setContentSize(NSSize(width: 960, height: 760))
+        window.contentMinSize = NSSize(width: 900, height: 700)
         window.center()
         window.isReleasedWhenClosed = false
         workbenchWindow = window

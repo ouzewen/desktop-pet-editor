@@ -61,237 +61,86 @@ final class WorkbenchState: ObservableObject {
     }
 }
 
-// MARK: - Theme
+// MARK: - Swatches
 
 private enum WBTheme {
-    static let accent = Color(red: 0.90, green: 0.55, blue: 0.24)
-    static let accentDeep = Color(red: 0.78, green: 0.40, blue: 0.13)
-
-    static func hex(_ value: UInt32) -> Color {
-        Color(
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255
-        )
-    }
-
     static func presetColors(_ id: String) -> [Color] {
         switch id {
-        case "preset_m1_12", "preset_m1_14": return [hex(0xEFB373), hex(0xFFF6E8)]
-        case "preset_m1_13": return [hex(0x2E2E31), hex(0x996138), hex(0xFFFFFF)]
-        case "preset_cat_orange": return [hex(0xE08A4A), hex(0xFFF6E8)]
-        case "preset_cat_black": return [hex(0x2B2930), hex(0x4A4750)]
-        case "preset_cat_calico": return [hex(0xD98E4A), hex(0x2B2930), hex(0xFFFFFF)]
-        default: return [accent]
+        case "preset_m1_12", "preset_m1_14": return [Color(pixelHex: 0xEFB373), Color(pixelHex: 0xFFF6E8)]
+        case "preset_m1_13": return [Color(pixelHex: 0x2E2E31), Color(pixelHex: 0x996138), Color(pixelHex: 0xFFFFFF)]
+        case "preset_cat_orange": return [Color(pixelHex: 0xE08A4A), Color(pixelHex: 0xFFF6E8)]
+        case "preset_cat_black": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
+        case "preset_cat_calico": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
+        default: return [Color(pixelHex: 0xE9A53C)]
         }
     }
 
     static func paletteColors(_ id: String) -> [Color] {
         switch id {
-        case "C01": return [hex(0xEFB373), hex(0xFFFFFF)]
-        case "C02": return [hex(0x2E2E31), hex(0xFFFFFF)]
-        case "C03": return [hex(0x2E2E31), hex(0x996138), hex(0xFFFFFF)]
-        case "C04": return [hex(0x996138), hex(0xFFF6E8)]
-        case "C05": return [hex(0xF2D8A0), hex(0xFFFFFF)]
-        case "C06": return [hex(0x8E949A), hex(0xFFFFFF)]
-        case "C07": return [hex(0xC85A28), hex(0xFFF3E6)]
-        case "C08": return [hex(0x232326), hex(0x3D3D41)]
-        case "CC01": return [hex(0xE08A4A), hex(0xFFFFFF)]
-        case "CC02": return [hex(0x2B2930), hex(0x4A4750)]
-        case "CC03": return [hex(0xD98E4A), hex(0x2B2930), hex(0xFFFFFF)]
-        default: return [hex(0x9E9E9E)]
+        case "C01": return [Color(pixelHex: 0xEFB373), Color(pixelHex: 0xFFFFFF)]
+        case "C02": return [Color(pixelHex: 0x2E2E31), Color(pixelHex: 0xFFFFFF)]
+        case "C03": return [Color(pixelHex: 0x2E2E31), Color(pixelHex: 0x996138), Color(pixelHex: 0xFFFFFF)]
+        case "C04": return [Color(pixelHex: 0x996138), Color(pixelHex: 0xFFF6E8)]
+        case "C05": return [Color(pixelHex: 0xF2D8A0), Color(pixelHex: 0xFFFFFF)]
+        case "C06": return [Color(pixelHex: 0x8E949A), Color(pixelHex: 0xFFFFFF)]
+        case "C07": return [Color(pixelHex: 0xC85A28), Color(pixelHex: 0xFFF3E6)]
+        case "C08": return [Color(pixelHex: 0x232326), Color(pixelHex: 0x3D3D41)]
+        case "CC01": return [Color(pixelHex: 0xE08A4A), Color(pixelHex: 0xFFF6E8)]
+        case "CC02": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
+        case "CC03": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
+        default: return [Color(pixelHex: 0x9E9E9E)]
         }
     }
 }
 
-// MARK: - Building blocks
-
-private struct WBCard: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var isDark: Bool { colorScheme == .dark }
-
-    func body(content: Content) -> some View {
-        content
-            .padding(15)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isDark ? Color.white.opacity(0.055) : Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(
-                        isDark ? Color.white.opacity(0.10) : Color.black.opacity(0.06),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(
-                color: Color.black.opacity(isDark ? 0.30 : 0.07),
-                radius: isDark ? 14 : 10,
-                x: 0,
-                y: 5
-            )
-    }
-}
-
-private extension View {
-    func wbCard() -> some View { modifier(WBCard()) }
-}
-
-private struct Checkerboard: View {
-    var cell: CGFloat = 14
+private struct PixelSwatch: View {
+    let colors: [Color]
+    let palette: PixelPalette
+    var size: CGFloat = 14
 
     var body: some View {
-        Canvas { context, size in
-            let columns = Int(ceil(size.width / cell))
-            let rows = Int(ceil(size.height / cell))
-            guard columns > 0, rows > 0 else { return }
-            for row in 0..<rows {
-                for column in 0..<columns where (row + column).isMultiple(of: 2) {
-                    let rect = CGRect(
-                        x: CGFloat(column) * cell,
-                        y: CGFloat(row) * cell,
-                        width: cell,
-                        height: cell
-                    )
-                    context.fill(Path(rect), with: .color(Color.primary.opacity(0.06)))
-                }
+        ZStack {
+            ForEach(colors.indices, id: \.self) { index in
+                Rectangle()
+                    .fill(colors[index])
+                    .frame(height: size / CGFloat(colors.count))
+                    .offset(y: (CGFloat(index) - CGFloat(colors.count - 1) / 2) * (size / CGFloat(colors.count)))
             }
         }
+        .frame(width: size, height: size)
+        .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 1))
     }
 }
 
-private struct SwatchCircle: View {
-    let colors: [Color]
-    var size: CGFloat = 18
-
-    var body: some View {
-        Circle()
-            .fill(fillStyle)
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.16), lineWidth: 1))
-            .frame(width: size, height: size)
-    }
-
-    private var fillStyle: AnyShapeStyle {
-        if colors.count > 1 {
-            return AnyShapeStyle(AngularGradient(colors: colors, center: .center))
-        }
-        return AnyShapeStyle(colors.first ?? WBTheme.accent)
-    }
-}
-
-private struct BreedChip: View {
-    let preset: AppearancePreset
-    let selected: Bool
-    let colors: [Color]
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                SwatchCircle(colors: colors, size: 15)
-                Text(preset.name)
-                    .font(.system(size: 12, weight: selected ? .semibold : .medium))
-                    .lineLimit(1)
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(WBTheme.accent)
-                }
-            }
-            .foregroundStyle(Color.primary.opacity(selected ? 0.95 : 0.72))
-            .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 32)
-            .background(
-                Capsule().fill(selected ? WBTheme.accent.opacity(0.16) : Color.primary.opacity(0.05))
-            )
-            .overlay(
-                Capsule().strokeBorder(
-                    selected ? WBTheme.accent.opacity(0.65) : Color.primary.opacity(0.07),
-                    lineWidth: 1
-                )
-            )
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct PaletteSwatch: View {
-    let option: AppearanceOption
-    let selected: Bool
-    let colors: [Color]
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                SwatchCircle(colors: colors, size: 26)
-                if selected {
-                    Circle()
-                        .strokeBorder(WBTheme.accent, lineWidth: 2)
-                        .frame(width: 30, height: 30)
-                }
-            }
-            .frame(width: 32, height: 32)
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(option.name)
-    }
-}
-
-private struct StatusPill: View {
+private struct PixelStatusBadge: View {
     let text: String
     let color: Color
+    let palette: PixelPalette
 
     var body: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
+        HStack(spacing: 5) {
+            Rectangle().fill(color).frame(width: 6, height: 6)
             Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.75))
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.ink)
                 .lineLimit(1)
-                .truncationMode(.tail)
                 .accessibilityIdentifier("workbench-status")
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
-        .background(Capsule().fill(color.opacity(0.12)))
-        .overlay(Capsule().strokeBorder(color.opacity(0.25), lineWidth: 1))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(PixelBox(corner: 1).fill(color.opacity(0.16)))
+        .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 1))
     }
 }
 
-private struct FieldPicker: View {
-    let title: String
-    let options: [AppearanceOption]
-    @Binding var selection: String
-    var isDisabled = false
-
+private struct PixelDivider: View {
+    let palette: PixelPalette
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-            Picker(title, selection: $selection) {
-                ForEach(options, id: \.id) { option in
-                    Text(option.name).tag(option.id)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .disabled(isDisabled)
-            .opacity(isDisabled ? 0.4 : 1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        Rectangle()
+            .fill(palette.borderSoft.opacity(0.7))
+            .frame(height: 2)
     }
 }
-
-// MARK: - Preview bridge
 
 private struct SpritePreview: NSViewRepresentable {
     let web: WKWebView
@@ -304,14 +153,17 @@ private struct SpritePreview: NSViewRepresentable {
 struct WorkbenchView: View {
     @ObservedObject var state: WorkbenchState
     let preview: WKWebView
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: PixelPalette { .of(colorScheme) }
 
     private let fields = [
         ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
         ("eye", "眼型"), ("eyeColor", "瞳色"), ("pattern", "面部花纹"),
     ]
-    private let gridColumns = [
-        GridItem(.flexible(), spacing: 12, alignment: .top),
-        GridItem(.flexible(), spacing: 12, alignment: .top),
+    private let fieldColumns = [
+        GridItem(.flexible(), spacing: 10, alignment: .top),
+        GridItem(.flexible(), spacing: 10, alignment: .top),
     ]
     private let presetColumns = [
         GridItem(.flexible(), spacing: 8, alignment: .top),
@@ -319,375 +171,407 @@ struct WorkbenchView: View {
         GridItem(.flexible(), spacing: 8, alignment: .top),
     ]
 
-    /// 当前阶段只开放猫形象，犬预设仍保留在 JS catalog 中以便后续恢复。
     private var visiblePresets: [AppearancePreset] {
         (state.catalog?.presets ?? []).filter { $0.frame == "CAT" }
     }
 
+    private var actionOptions: [(String, String)] {
+        let cat = state.appearance["frame"] == "CAT"
+        return [
+            ("sit", "待机"),
+            ("left", cat ? "左走" : "左跑"),
+            ("right", cat ? "右走" : "右跑"),
+            ("typing", "打字"),
+        ]
+    }
+
     var body: some View {
         ZStack {
-            background
-            VStack(spacing: 18) {
+            PixelBackdrop(palette: palette)
+            VStack(spacing: 14) {
                 header
-                HStack(alignment: .top, spacing: 18) {
-                    previewCard
+                HStack(alignment: .top, spacing: 16) {
+                    previewPanel
                     detailPane
                 }
                 .frame(maxHeight: .infinity)
                 footer
             }
-            .padding(22)
+            .padding(.horizontal, 20)
+            .padding(.top, 30)
+            .padding(.bottom, 16)
         }
-        .frame(minWidth: 840, minHeight: 620)
-    }
-
-    private var background: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-            LinearGradient(
-                colors: [
-                    WBTheme.accent.opacity(0.07),
-                    Color.clear,
-                    WBTheme.accentDeep.opacity(0.035),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .ignoresSafeArea()
+        .frame(minWidth: 860, minHeight: 640)
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [WBTheme.accent, WBTheme.accentDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: "pawprint.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
+                PixelBox(corner: 3).fill(palette.panel)
+                PixelBox(corner: 3).stroke(palette.border, lineWidth: 3)
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: 38, height: 38)
             }
-            .frame(width: 44, height: 44)
-            .shadow(color: WBTheme.accentDeep.opacity(0.3), radius: 6, x: 0, y: 3)
+            .frame(width: 46, height: 46)
+            .background(PixelBox(corner: 3).fill(palette.shadow).offset(x: 2, y: 2))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("桌宠工作台")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(PixelFont.font(24))
+                    .foregroundStyle(palette.ink)
                 Text("挑选品种与外观，实时预览后应用到桌面")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
         }
     }
 
-    private var previewCard: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.45))
-                Checkerboard()
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                RadialGradient(
-                    colors: [WBTheme.accent.opacity(0.16), Color.clear],
-                    center: .center,
-                    startRadius: 12,
-                    endRadius: 165
-                )
-                SpritePreview(web: preview)
-                    .frame(width: 300, height: 300)
-                    .accessibilityLabel("桌宠动作预览")
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08))
-            )
-            .overlay(alignment: .topLeading) { nameChip.padding(10) }
-            .overlay(alignment: .topTrailing) { frameChip.padding(10) }
-
-            VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    Text("动作预览")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 4)
-
-                    Toggle("眼神跟随", isOn: $state.eyeFollow)
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .font(.system(size: 11, weight: .medium))
-                        .tint(WBTheme.accent)
-                        .accessibilityIdentifier("eye-follow-toggle")
-                        .help("让猫咪瞳孔跟随鼠标移动")
-                        .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
+    private var previewPanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(spacing: 10) {
+                ZStack {
+                    PixelChecker(even: palette.panelAlt, odd: palette.panelDeep, cell: 12)
+                    SpritePreview(web: preview)
+                        .frame(width: 300, height: 300)
+                        .accessibilityLabel("桌宠动作预览")
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(PixelBox(corner: 2))
+                .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
+                .overlay(alignment: .topLeading) { nameBadge.padding(7) }
+                .overlay(alignment: .topTrailing) { frameBadge.padding(7) }
 
-                Picker("动作预览", selection: $state.action) {
-                    Text("待机").tag("sit")
-                    Text(state.appearance["frame"] == "CAT" ? "左走" : "左跑").tag("left")
-                    Text(state.appearance["frame"] == "CAT" ? "右走" : "右跑").tag("right")
-                    Text("打字").tag("typing")
+                HStack(spacing: 4) {
+                    ForEach(actionOptions, id: \.0) { action, title in
+                        Button(title) {
+                            state.action = action
+                            state.refresh()
+                        }
+                        .buttonStyle(PixelTabStyle(palette: palette, selected: state.action == action))
+                        .frame(maxWidth: .infinity)
+                    }
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .tint(WBTheme.accent)
-                .onChange(of: state.action) { _ in state.refresh() }
             }
         }
-        .wbCard()
-        .frame(width: 392)
+        .frame(width: 376)
     }
 
-    private var nameChip: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(WBTheme.accent)
-                .frame(width: 6, height: 6)
+    private var nameBadge: some View {
+        HStack(spacing: 5) {
+            Rectangle().fill(palette.accent).frame(width: 6, height: 6)
             Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
-                .font(.system(size: 11, weight: .medium))
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.ink)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(PixelBox(corner: 1).fill(palette.panel.opacity(0.92)))
+        .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2))
     }
 
-    private var frameChip: some View {
+    private var frameBadge: some View {
         Text(state.appearance["frame"] == "CAT" ? "猫" : "犬")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Color.primary.opacity(0.65))
-            .padding(.horizontal, 9)
-            .frame(height: 22)
-            .background(Color.primary.opacity(0.06), in: Capsule())
+            .font(PixelFont.font(12))
+            .foregroundStyle(palette.inkSoft)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(PixelBox(corner: 1).fill(palette.panelAlt.opacity(0.92)))
+            .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2))
     }
 
     @ViewBuilder
     private var detailPane: some View {
         if state.catalog != nil {
-            GeometryReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 14) {
-                        breedCard
-                        appearanceCard
-                    }
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                    .padding(.bottom, 20)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    breedPanel
+                    appearancePanel
+                    tipsPanel
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 6)
             }
         } else {
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("正在加载形象…")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+            PixelPanel(palette: palette) {
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text("正在加载形象…")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .wbCard()
         }
     }
 
-    private var breedCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("品种", detail: "猫咪预设（犬暂时隐藏）")
-            LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
-                if state.catalog != nil {
+    private var breedPanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("品种")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+
+                LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
                     ForEach(visiblePresets, id: \.id) { preset in
-                        BreedChip(
-                            preset: preset,
-                            selected: preset.id == state.preset,
-                            colors: WBTheme.presetColors(preset.id)
-                        ) {
-                            state.choosePreset(preset.id)
-                        }
+                        breedChip(preset)
                     }
                 }
             }
         }
-        .wbCard()
+    }
+
+    private func breedChip(_ preset: AppearancePreset) -> some View {
+        let selected = preset.id == state.preset
+        return Button {
+            state.choosePreset(preset.id)
+        } label: {
+            HStack(spacing: 6) {
+                PixelSwatch(colors: WBTheme.presetColors(preset.id), palette: palette, size: 12)
+                Text(preset.name)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                if selected {
+                    PixelGlyph(kind: .check, color: palette.green, size: 10)
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PixelBox(corner: 2).fill(selected ? palette.accent.opacity(0.42) : palette.panelAlt))
+            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
-    private var appearanceCard: some View {
+    private var appearancePanel: some View {
         if let catalog = state.catalog {
             let frame = state.appearance["frame", default: "M1"]
             let fieldsForFrame = catalog.fieldsByFrame[frame] ?? [:]
             let palettes = fieldsForFrame["palette"] ?? []
 
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("外观", detail: "改动会实时预览")
-                nameRow
+            PixelPanel(palette: palette, padding: 12) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("外观")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft)
 
-                Divider()
+                    nameRow
 
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 10) {
-                    ForEach(fields, id: \.0) { key, title in
-                        FieldPicker(
-                            title: title,
-                            options: fieldsForFrame[key] ?? [],
-                            selection: appearanceBinding(key),
-                            isDisabled: key == "eyeColor" && state.appearance["eye"] == "Y02"
-                        )
+                    PixelDivider(palette: palette)
+
+                    LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                        ForEach(fields, id: \.0) { key, title in
+                            fieldPicker(title: title, key: key, options: fieldsForFrame[key] ?? [])
+                        }
                     }
+
+                    paletteRow(options: palettes)
                 }
-
-                paletteRow(options: palettes)
-
-                Spacer(minLength: 12)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .wbCard()
         }
     }
 
     private var nameRow: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
                 Text("宠物名")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
                 Spacer()
                 Text("\(state.appearance["name", default: ""].count)/8")
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(PixelFont.font(12))
                     .foregroundStyle(nameCountColor)
             }
-            TextField("给桌宠起个名字", text: appearanceBinding("name"))
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { state.refresh() }
+            PixelTextField(
+                text: appearanceBinding("name"),
+                placeholder: "给桌宠起个名字",
+                palette: palette
+            )
+            .onSubmit { state.refresh() }
         }
     }
 
     private var nameCountColor: Color {
         let count = state.appearance["name", default: ""].count
-        return (count == 0 || count > 8) ? .red : .secondary
+        return (count == 0 || count > 8) ? palette.red : palette.inkSoft
+    }
+
+    private func fieldPicker(title: String, key: String, options: [AppearanceOption]) -> some View {
+        let disabled = key == "eyeColor" && state.appearance["eye"] == "Y02"
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            PixelSelect(
+                options: options.map { (id: $0.id, name: $0.name) },
+                selection: appearanceBinding(key),
+                palette: palette
+            )
+            .disabled(disabled)
+            .opacity(disabled ? 0.45 : 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func paletteRow(options: [AppearanceOption]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("毛色")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
                 if let selected = options.first(where: { $0.id == state.appearance["palette"] }) {
                     Text(selected.name)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft.opacity(0.8))
                 }
             }
             HStack(spacing: 6) {
                 ForEach(options, id: \.id) { option in
-                    PaletteSwatch(
-                        option: option,
-                        selected: state.appearance["palette"] == option.id,
-                        colors: WBTheme.paletteColors(option.id)
-                    ) {
+                    let selected = state.appearance["palette"] == option.id
+                    Button {
                         state.appearance["palette"] = option.id
                         state.refresh()
+                    } label: {
+                        ZStack {
+                            PixelSwatch(colors: WBTheme.paletteColors(option.id), palette: palette, size: 22)
+                            if selected {
+                                PixelBox(corner: 1)
+                                    .stroke(palette.accent, lineWidth: 2)
+                                    .frame(width: 27, height: 27)
+                            }
+                        }
+                        .frame(width: 27, height: 27)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help(option.name)
                 }
                 Spacer(minLength: 0)
             }
         }
     }
 
-    private func sectionHeader(_ title: String, detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
+    private var tipsPanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 5) {
+                    PixelGlyph(kind: .paw, color: palette.accent, size: 12)
+                    Text("小贴士")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft)
+                }
+                Text("拖动小猫可以移动位置，右键打开菜单。")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+                Text("提醒卡片和输入条会跟着小猫一起移动。")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var footer: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                StatusPill(text: state.typingStatus.text, color: state.typingStatus == .active ? .green : .orange)
-                Spacer(minLength: 8)
-                Button {
-                    state.enableTyping()
-                } label: {
-                    Label(state.typingStatus.buttonTitle, systemImage: "keyboard")
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    PixelStatusBadge(text: statusText, color: statusColor, palette: palette)
+                    Spacer(minLength: 8)
+                    Button("打字同步") {
+                        state.enableTyping()
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                    .help(state.typingStatus.text)
+                    .accessibilityIdentifier("typing-sync-button")
+
+                    applyButton
                 }
-                .help(state.typingStatus.text)
 
-                applyButton
-            }
+                PixelDivider(palette: palette)
 
-            if !state.message.isEmpty {
-                Text(state.message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+                HStack(spacing: 10) {
+                    Toggle("显示桌宠", isOn: $state.visible)
+                        .toggleStyle(PixelToggleStyle(palette: palette))
+                        .onChange(of: state.visible) { state.setVisibility($0) }
 
-            Divider()
+                    Rectangle().fill(palette.borderSoft).frame(width: 2, height: 14)
 
-            HStack(spacing: 12) {
-                Toggle("显示桌宠", isOn: $state.visible)
-                    .toggleStyle(.switch)
-                    .tint(WBTheme.accent)
-                    .onChange(of: state.visible) { state.setVisibility($0) }
+                    Toggle("眼神跟随", isOn: $state.eyeFollow)
+                        .toggleStyle(PixelToggleStyle(palette: palette))
+                        .accessibilityIdentifier("eye-follow-toggle")
+                        .help("让猫咪瞳孔跟随鼠标移动")
+                        .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
 
-                Divider().frame(height: 18)
+                    Rectangle().fill(palette.borderSoft).frame(width: 2, height: 14)
 
-                Text("大小")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Slider(value: $state.petSize, in: 160...360, step: 20)
-                    .frame(width: 150)
-                    .labelsHidden()
+                    Text("大小")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft)
+                    PixelSlider(
+                        value: $state.petSize,
+                        range: 160...360,
+                        step: 20,
+                        palette: palette
+                    )
+                    .frame(width: 140)
                     .accessibilityLabel("桌宠大小")
-                    .tint(WBTheme.accent)
                     .onChange(of: state.petSize) { state.setSize($0) }
-                Text("\(Int(state.petSize)) px")
-                    .font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 52, alignment: .leading)
+                    Text("\(Int(state.petSize)) px")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.ink)
+                        .frame(width: 52, alignment: .leading)
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                Button {
-                    state.reset()
-                } label: {
-                    Label("归位", systemImage: "scope")
+                    Button("归位") { state.reset() }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .help("将桌宠移回屏幕")
                 }
-                .help("将桌宠移回屏幕")
             }
         }
-        .wbCard()
     }
 
     private var applyButton: some View {
-        Button {
+        let disabled = state.catalog == nil || state.applying
+        return Button {
             state.apply()
         } label: {
-            HStack(spacing: 6) {
-                if state.applying {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
+            HStack(spacing: 5) {
+                if !state.applying {
+                    PixelGlyph(kind: .check, color: palette.ink, size: 10)
                 }
                 Text(state.applying ? "正在应用…" : "应用到桌宠")
             }
-            .frame(minWidth: 108)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(WBTheme.accent)
-        .controlSize(.large)
+        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
         .keyboardShortcut(.defaultAction)
-        .disabled(state.catalog == nil || state.applying)
+    }
+
+    private var statusText: String {
+        state.message.isEmpty ? state.typingStatus.text : state.message
+    }
+
+    private var statusColor: Color {
+        if !state.message.isEmpty {
+            let failed = state.message.contains("无法") || state.message.contains("失败")
+            return failed ? palette.red : palette.green
+        }
+        switch state.typingStatus {
+        case .active: return palette.green
+        case .needsPermission: return palette.accent
+        case .checking, .unavailable: return palette.inkSoft
+        }
     }
 
     private func appearanceBinding(_ key: String) -> Binding<String> {
