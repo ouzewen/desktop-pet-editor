@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { strToU8, zipSync } from 'fflate';
-import { compatible, nameLength, options, parts, presets, readConfig, type Config, type Part, type PresetId } from './model';
+import { nameLength, options, parts, presets, readConfig, type Config, type Part, type PresetId } from './model';
 import { actions, png, render, type Action } from './render';
 import './style.css';
 
-const labels: Record<Part, string> = { ear: '耳朵', muzzle: '嘴鼻', tail: '尾巴', eye: '眼睛', palette: '毛色', pattern: '花纹' };
+const labels: Record<Part, string> = { ear: '耳朵', muzzle: '嘴鼻', tail: '尾巴', eye: '眼睛', palette: '毛色' };
 const actionLabels: Record<Action, string> = { sit: '正面坐姿', left: '向左跑', right: '向右跑', typing: '打字' };
 const steps = ['选体型', '选框架', '换细节', '起名'];
 const defaultId = 'preset_m1_12';
@@ -51,7 +51,7 @@ function App() {
 
   function setPart(part: Part, value: string) {
     const next = { ...config, [part]: value } as Config;
-    if (compatible(next)) apply(next);
+    apply(next);
   }
 
   function apply(next: Config) {
@@ -70,7 +70,7 @@ function App() {
   }
 
   function cycle(part: Part, direction: number) {
-    const ids = Object.keys(options[part]).filter(id => compatible({ ...config, [part]: id } as Config));
+    const ids = Object.keys(options[part]);
     const next = ids[(ids.indexOf(config[part]) + direction + ids.length) % ids.length];
     setPart(part, next);
   }
@@ -78,7 +78,7 @@ function App() {
   function randomize() {
     const next = { ...config };
     for (const part of parts) {
-      const ids = Object.keys(options[part]).filter(id => compatible({ ...next, [part]: id }));
+      const ids = Object.keys(options[part]);
       Object.assign(next, { [part]: ids[Math.floor(Math.random() * ids.length)] });
     }
     apply(next);
@@ -195,7 +195,7 @@ function App() {
                     <label htmlFor={part}>{labels[part]}</label>
                     <button aria-label={`上一款${labels[part]}`} onClick={() => cycle(part, -1)}>‹</button>
                     <select id={part} value={config[part]} onChange={event => setPart(part, event.target.value)}>
-                      {Object.entries(dict).map(([id, name]) => <option value={id} key={id} disabled={!compatible({ ...config, [part]: id } as Config)}>{name}</option>)}
+                      {Object.entries(dict).map(([id, name]) => <option value={id} key={id}>{name}</option>)}
                     </select>
                     <button aria-label={`下一款${labels[part]}`} onClick={() => cycle(part, 1)}>›</button>
                   </div>;

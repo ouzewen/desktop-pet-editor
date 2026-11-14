@@ -13,10 +13,9 @@ export const actions: Readonly<Record<Action, number>> = Object.defineProperties
 
 const art = {
   tail: ['T01', 'T02'],
-  ear: ['E01', 'E02', 'E03'],
+  ear: ['E01', 'E02', 'E03', 'E04'],
   eye: ['Y01', 'Y02', 'Y03'],
-  muzzle: ['N01', 'N02'],
-  pattern: ['P00', 'P02', 'P03'],
+  muzzle: ['N01', 'N02', 'N03'],
 } as const;
 
 const baseLayers = [
@@ -25,11 +24,7 @@ const baseLayers = [
   ...art.tail.map(id => `parts/M1_tail_${id}`),
   ...art.ear.map(id => `parts/M1_ear_${id}`),
 ];
-const bodyPattern = 'parts/M1_pattern_P03';
 const fixedLayers = [
-  bodyPattern,
-  'masks/M1_pattern_P03_s',
-  'parts/M1_pattern_P02',
   ...art.eye.map(id => `parts/M1_eye_${id}`),
   ...art.muzzle.map(id => `parts/M1_muzzle_${id}`),
 ];
@@ -54,6 +49,10 @@ const images = new Map(await Promise.all([
   ...baseLayers,
   ...fixedLayers,
   ...baseLayers.flatMap(layer => furSlots.map(slot => maskPath(layer, slot))),
+  maskPath('parts/M1_eye_Y01', 'g'),
+  maskPath('parts/M1_eye_Y01', 's'),
+  maskPath('parts/M1_muzzle_N01', 's'),
+  maskPath('parts/M1_muzzle_N01', 'l'),
 ].map(loadLayer)));
 
 function imageFor(layer: string) {
@@ -95,38 +94,6 @@ function furLayer(layer: string, palette: Config['palette'], slots: readonly Fur
   return result.canvas;
 }
 
-const bodyWithPattern = new Map<Config['palette'], HTMLCanvasElement>();
-function bodyLayer(palette: Config['palette'], pattern: Config['pattern']) {
-  const base = furLayer('frames/M1_body', palette);
-  if (pattern !== 'P03') return base;
-  const cached = bodyWithPattern.get(palette);
-  if (cached) return cached;
-
-  const body = makeLayer();
-  body.ctx.drawImage(base, 0, 0);
-  body.ctx.globalCompositeOperation = 'source-atop';
-  body.ctx.drawImage(furLayer(bodyPattern, palette, ['s']), 0, 0);
-  bodyWithPattern.set(palette, body.canvas);
-  return body.canvas;
-}
-
-const headWithPattern = new Map<Config['palette'], HTMLCanvasElement>();
-function headLayer(palette: Config['palette'], pattern: string) {
-  const base = furLayer('frames/M1_head_base', palette);
-  if (pattern === 'P00') return base;
-  const cached = headWithPattern.get(palette);
-  if (cached) return cached;
-
-  // P02 belongs to the head surface. Combine it with the head before
-  // placing that surface over the body so the opaque head cannot hide the markings.
-  const head = makeLayer();
-  head.ctx.drawImage(base, 0, 0);
-  head.ctx.globalCompositeOperation = 'source-atop';
-  head.ctx.drawImage(imageFor('parts/M1_pattern_P02'), 0, 0);
-  headWithPattern.set(palette, head.canvas);
-  return head.canvas;
-}
-
 function availability(config: Config) {
   return Object.entries(art).flatMap(([key, ids]) => {
     const id = config[key as keyof typeof art];
@@ -146,13 +113,15 @@ export function render(canvas: HTMLCanvasElement, config: Config, _action: Actio
 
   try {
     ctx.drawImage(furLayer(`parts/M1_tail_${config.tail}`, config.palette), 0, 0);
-    ctx.drawImage(bodyLayer(config.palette, config.pattern), 0, 0);
-    ctx.drawImage(headLayer(config.palette, config.pattern === 'P02' ? 'P02' : 'P00'), 0, 0);
+    ctx.drawImage(furLayer('frames/M1_body', config.palette), 0, 0);
+    ctx.drawImage(furLayer('frames/M1_head_base', config.palette), 0, 0);
     const ear = art.ear.find(id => id === config.ear) ?? 'E01';
     const eye = art.eye.find(id => id === config.eye) ?? 'Y01';
     ctx.drawImage(furLayer(`parts/M1_ear_${ear}`, config.palette), 0, 0);
-    ctx.drawImage(imageFor(`parts/M1_eye_${eye}`), 0, 0);
-    ctx.drawImage(imageFor(`parts/M1_muzzle_${config.muzzle}`), 0, 0);
+    const eyeLayer = `parts/M1_eye_${eye}`;
+    ctx.drawImage(eye === 'Y01' ? furLayer(eyeLayer, config.palette, ['g', 's']) : imageFor(eyeLayer), 0, 0);
+    const muzzleLayer = `parts/M1_muzzle_${config.muzzle}`;
+    ctx.drawImage(config.muzzle === 'N01' ? furLayer(muzzleLayer, config.palette, ['s', 'l']) : imageFor(muzzleLayer), 0, 0);
   } catch (error) {
     canvas.title = error instanceof Error ? error.message : String(error);
     canvas.setAttribute('aria-label', canvas.title);
