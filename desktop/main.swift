@@ -44,7 +44,7 @@ final class PetView: WKWebView {
     }
 }
 
-final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSWindowDelegate {
     private let panel = PetPanel(
         contentRect: NSRect(x: 0, y: 0, width: 240, height: 240),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
@@ -82,6 +82,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var reminderWindow: ReminderPanel?
     private var reminderInputWindow: ReminderPanel?
     private var reminderInputPetOrigin: NSPoint?
+    private var isHidingReminderInput = false
+    private var reminderClickMonitor: Any?
     private var reminderInputShiftedOrigin: NSPoint?
     private let reminderInput = ReminderInputModel()
     private var reminderObserver: NSObjectProtocol?
@@ -128,6 +130,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             if let self, !self.hasActiveKeyboardTap { self.recordKey(event) }
             return event
         }
+        reminderClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.dismissTransientReminderUI(at: NSEvent.mouseLocation)
+            return event
+        }
         if !isTest {
             setupTypingSync()
             startGazeTimer()
@@ -136,6 +142,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         if !isTest { refreshTypingListener() }
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        hideReminderInput()
+        if reminderList.isAdding {
+            reminderList.isAdding = false
+            reminderList.draft = ""
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -413,6 +427,26 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     // MARK: Reminder
 
+    func windowDidResignKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if window === reminderInputWindow {
+            hideReminderInput()
+        } else if window === reminderWindow, reminderList.isAdding {
+            reminderList.isAdding = false
+            reminderList.draft = ""
+        }
+    }
+
+    private func dismissTransientReminderUI(at point: NSPoint) {
+        if let input = reminderInputWindow, input.isVisible, !input.frame.contains(point) {
+            hideReminderInput()
+        }
+        if reminderList.isAdding, let card = reminderWindow, card.isVisible, !card.frame.contains(point) {
+            reminderList.isAdding = false
+            reminderList.draft = ""
+        }
+    }
+
     private func loadReminders() {
         let defaults = UserDefaults.standard
         if let stored = defaults.stringArray(forKey: "shibaReminders") {
@@ -569,6 +603,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     private func hideReminderInput() {
+        guard !isHidingReminderInput else { return }
+        isHidingReminderInput = true
+        defer { isHidingReminderInput = false }
         reminderInputWindow?.orderOut(nil)
         reminderInput.text = ""
         if let origin = reminderInputPetOrigin,
@@ -592,6 +629,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         reminder.level = .floating
         reminder.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         reminder.isFloatingPanel = true
+        reminder.delegate = self
         return reminder
     }
 
@@ -750,6 +788,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         gazeTimer?.invalidate()
         stopListening()
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        if let reminderClickMonitor { NSEvent.removeMonitor(reminderClickMonitor) }
         if let reminderObserver { NotificationCenter.default.removeObserver(reminderObserver) }
     }
 
