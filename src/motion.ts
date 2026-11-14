@@ -1,4 +1,4 @@
-import { frameCount, render, type Action } from './render';
+import { frameCount, render, type Action, type Gaze } from './render';
 import type { PetConfig } from './cat';
 
 /** Drive the same sprite with editor previews or native pointer/keyboard events. */
@@ -10,11 +10,18 @@ export class Motion {
   private typingFrame = 0;
   private idleSince = performance.now();
   private rendered = '';
+  private gaze: Gaze = { x: 0, y: 0 };
 
   constructor(private canvas: HTMLCanvasElement, private config: PetConfig) {}
 
   setConfig(config: PetConfig) {
     this.config = config;
+    this.rendered = '';
+  }
+
+  setGaze(x: number, y: number) {
+    if (this.gaze.x === x && this.gaze.y === y) return;
+    this.gaze = { x, y };
     this.rendered = '';
   }
 
@@ -61,7 +68,7 @@ export class Motion {
     }
     const pose = `${action}/${frame}`;
     if (pose !== this.rendered) {
-      render(this.canvas, this.config, action, frame);
+      render(this.canvas, this.config, action, frame, this.gaze);
       this.rendered = pose;
     }
   }

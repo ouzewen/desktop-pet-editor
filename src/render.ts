@@ -136,6 +136,11 @@ function makeLayer() {
   return { canvas, ctx };
 }
 
+export type Gaze = { x: number; y: number };
+const noGaze: Gaze = { x: 0, y: 0 };
+
+const gazeFrameCache = new Map<string, HTMLCanvasElement>();
+
 const tinted = new Map<string, HTMLCanvasElement>();
 
 function paintMask(mask: CanvasRenderingContext2D, layer: string, color: string) {
@@ -273,15 +278,49 @@ function catFur(layer: string, palette: CatConfig['palette']) {
   return result.canvas;
 }
 
+function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
+  const key = `${name}/${irisColor ?? 'natural'}/${gaze.x}/${gaze.y}`;
+  const cached = gazeFrameCache.get(key);
+  if (cached) return cached;
+
+  const source = imageFor(`cat/${name}`);
+  const irisMask = `cat/masks/${name}_iris`;
+  // The bundled PNGs can be composited under WebKit's file-origin rules.
+  const pupil = makeLayer();
+  if (irisColor) {
+    paintMask(pupil.ctx, irisMask, irisColor);
+  } else {
+    pupil.ctx.drawImage(imageFor(irisMask), 0, 0);
+    pupil.ctx.globalCompositeOperation = 'source-in';
+    pupil.ctx.drawImage(source, 0, 0);
+  }
+
+  const socket = makeLayer();
+  paintMask(socket.ctx, irisMask, '#442416');
+  const shifted = makeLayer();
+  shifted.ctx.drawImage(pupil.canvas, gaze.x, gaze.y);
+  shifted.ctx.globalCompositeOperation = 'destination-in';
+  shifted.ctx.drawImage(source, 0, 0);
+
+  const result = makeLayer();
+  result.ctx.drawImage(source, 0, 0);
+  result.ctx.drawImage(socket.canvas, 0, 0);
+  result.ctx.drawImage(shifted.canvas, 0, 0);
+  gazeFrameCache.set(key, result.canvas);
+  return result.canvas;
+}
+
 function catEye(
   view: typeof catViews[number],
   eye: CatConfig['eye'],
   color: CatConfig['eyeColor'],
   palette: CatConfig['palette'],
+  gaze: Gaze = noGaze,
 ) {
   const name = `${view}_eye_${eye}`;
   const source = imageFor(`cat/${name}`);
   const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
+  if (eye !== 'Y02' && (gaze.x !== 0 || gaze.y !== 0)) return gazeEye(name, irisColor, gaze);
   if (!irisColor || eye === 'Y02') return source;
   const key = `cat/${name}/${irisColor}`;
   const existing = tinted.get(key);
@@ -295,7 +334,7 @@ function catEye(
   return result.canvas;
 }
 
-function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number) {
+function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number, gaze: Gaze = noGaze) {
   const walking = action === 'left' || action === 'right';
   const typing = action === 'typing';
   const view = walking ? 'walk' : 'sit';
@@ -322,7 +361,8 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
     ctx.drawImage(imageFor(`cat/${view}_face_P01`), 0, headY);
   }
   const blink = action === 'sit' && frame >= 25 && frame <= 26;
-  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette), 0, headY + (typing ? 1 : 0));
+  const look = typing ? noGaze : action === 'right' ? { x: -gaze.x, y: gaze.y } : gaze;
+  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette, blink ? noGaze : look), 0, headY + (typing ? 1 : 0));
   drawFur(config.muzzle === 'CN01' ? `${view}_muzzle` : `${view}_muzzle_${config.muzzle}`, headY);
   if (!upright) drawFur(`${view}_ear_${config.ear}`, headY);
   ctx.restore();
@@ -338,7 +378,7 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
   }
 }
 
-export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0) {
+export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0, gaze: Gaze = noGaze) {
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw Error('无法初始化 Canvas');
@@ -354,7 +394,7 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
     const pose = frame % frameCount(config, action);
     if (action === 'left' || action === 'right') {
       const left = makeLayer();
-      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose);
+      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose, gaze);
       else drawRun(left.ctx, config, pose);
       if (action === 'right') {
         ctx.translate(SIZE, 0);
@@ -362,7 +402,7 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
       }
       ctx.drawImage(left.canvas, 0, 0);
     } else if (config.frame === 'CAT') {
-      drawCat(ctx, config, action, pose);
+      drawCat(ctx, config, action, pose, gaze);
     } else {
       drawFront(ctx, config, action === 'typing', pose);
     }

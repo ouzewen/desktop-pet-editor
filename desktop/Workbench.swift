@@ -42,6 +42,7 @@ final class WorkbenchState: ObservableObject {
     @Published var action = "sit"
     @Published var petSize: Double = 240
     @Published var visible = true
+    @Published var eyeFollow = true
     @Published var message = ""
     @Published var applying = false
     @Published var typingStatus = TypingSyncStatus.checking
@@ -50,9 +51,9 @@ final class WorkbenchState: ObservableObject {
     var apply: () -> Void = {}
     var reset: () -> Void = {}
     var enableTyping: () -> Void = {}
-    var importConfig: () -> Void = {}
     var setSize: (Double) -> Void = { _ in }
     var setVisibility: (Bool) -> Void = { _ in }
+    var setEyeFollow: (Bool) -> Void = { _ in }
 
     func update(_ config: [String: Any]) {
         appearance = config.compactMapValues { $0 as? String }
@@ -383,14 +384,6 @@ struct WorkbenchView: View {
             }
 
             Spacer(minLength: 12)
-
-            Button {
-                state.importConfig()
-            } label: {
-                Label("导入配置", systemImage: "square.and.arrow.down")
-            }
-            .controlSize(.large)
-            .help("从 JSON 文件导入已有的宠物配置")
         }
     }
 
@@ -421,10 +414,22 @@ struct WorkbenchView: View {
             .overlay(alignment: .topTrailing) { frameChip.padding(10) }
 
             VStack(spacing: 6) {
-                Text("动作预览")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) {
+                    Text("动作预览")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 4)
+
+                    Toggle("眼神跟随", isOn: $state.eyeFollow)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .font(.system(size: 11, weight: .medium))
+                        .tint(WBTheme.accent)
+                        .accessibilityIdentifier("eye-follow-toggle")
+                        .help("让猫咪瞳孔跟随鼠标移动")
+                        .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
+                }
 
                 Picker("动作预览", selection: $state.action) {
                     Text("待机").tag("sit")

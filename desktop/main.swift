@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import WebKit
-import UniformTypeIdentifiers
 
 final class PetPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -73,6 +72,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     private var typingAlert: NSAlert?
     private var requestedTypingPermission = false
     private var ready = false
+    private var eyeFollow = true
+    private var gazeTimer: Timer?
+    private var petGaze: (x: Int, y: Int)?
+    private var previewGaze: (x: Int, y: Int)?
+    private let reminderList = ReminderListModel()
+    private var reminderListHost: ReminderHostingView<ReminderListCard>?
+    private var reminderWindow: ReminderPanel?
+    private var reminderInputWindow: ReminderPanel?
+    private var reminderInputPetOrigin: NSPoint?
+    private var reminderInputShiftedOrigin: NSPoint?
+    private let reminderInput = ReminderInputModel()
+    private var reminderObserver: NSObjectProtocol?
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -90,11 +101,19 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         panel.contentView = web
         configureWorkbench()
         let prefs = UserDefaults.standard
+        eyeFollow = prefs.object(forKey: "shibaEyeFollow") as? Bool ?? true
+        workbenchState.eyeFollow = eyeFollow
+        loadReminders()
         workbenchState.visible = prefs.object(forKey: "shibaVisible") as? Bool ?? (prefs.string(forKey: "shibaConfig") != nil)
         let savedSize = prefs.object(forKey: "shibaSize") as? Double ?? 240
         workbenchState.petSize = min(360, max(160, savedSize))
         panel.setContentSize(NSSize(width: workbenchState.petSize, height: workbenchState.petSize))
         resetPosition()
+        reminderObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            self?.layoutReminder()
+        }
 
         status.button?.title = "桌宠"
         status.menu = makeMenu()
@@ -108,7 +127,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             if let self, !self.hasActiveKeyboardTap { self.recordKey(event) }
             return event
         }
-        if !isTest { setupTypingSync() }
+        if !isTest {
+            setupTypingSync()
+            startGazeTimer()
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -131,7 +153,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         } else if webView === web {
             ready = true
             if let appliedConfig { configurePet(appliedConfig) }
-            if !isTest && workbenchState.visible { panel.orderFrontRegardless() }
+            if !isTest && workbenchState.visible {
+                panel.orderFrontRegardless()
+                if !reminderList.items.isEmpty { showReminders() }
+            }
             runSelfTestIfReady()
         }
     }
@@ -142,9 +167,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         workbenchState.apply = { [weak self] in self?.applyDraft() }
         workbenchState.reset = { [weak self] in self?.resetPosition() }
         workbenchState.enableTyping = { [weak self] in self?.enableTyping() }
-        workbenchState.importConfig = { [weak self] in self?.importConfig() }
         workbenchState.setSize = { [weak self] size in self?.resizePet(size) }
         workbenchState.setVisibility = { [weak self] visible in self?.showPet(visible) }
+        workbenchState.setEyeFollow = { [weak self] enabled in self?.setEyeFollow(enabled) }
     }
 
     private func createWorkbench() {
@@ -274,11 +299,40 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                         exit(1)
                     }
                     self.checkWorkbenchReopen()
+                    guard self.verifyReminderPanel() else {
+                        fputs("Reminder card failed to position above the pet\n", stderr)
+                        exit(1)
+                    }
                     print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions")
                     NSApp.terminate(nil)
                 }
             }
         }
+    }
+
+    private func verifyReminderPanel() -> Bool {
+        let savedItems = reminderList.items
+        let savedAdding = reminderList.isAdding
+        let savedDraft = reminderList.draft
+        reminderList.items = ["自检提醒 A", "自检提醒 B"]
+        showReminders()
+        defer {
+            hideReminderInput()
+            hideReminders()
+            reminderList.items = savedItems
+            reminderList.isAdding = savedAdding
+            reminderList.draft = savedDraft
+            if !savedItems.isEmpty { showReminders() }
+        }
+        guard let list = reminderWindow, list.frame.minY >= panel.frame.maxY - 1, list.frame.height >= 60 else {
+            return false
+        }
+        showReminderInput()
+        guard let input = reminderInputWindow, input.frame.maxY <= panel.frame.minY + 1,
+              input.frame.width >= 200 else {
+            return false
+        }
+        return true
     }
 
     private func checkWorkbenchReopen() {
@@ -293,6 +347,274 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
               window.isVisible else {
             fputs("Desktop workbench could not reopen after closing\n", stderr)
             exit(1)
+        }
+    }
+
+    // MARK: Eye tracking
+
+    private func setEyeFollow(_ enabled: Bool) {
+        eyeFollow = enabled
+        UserDefaults.standard.set(enabled, forKey: "shibaEyeFollow")
+        if enabled {
+            pollGaze()
+        } else {
+            petGaze = (0, 0)
+            previewGaze = (0, 0)
+            if ready { web.evaluateJavaScript("window.pet.gaze(0, 0)") }
+            if previewReady { preview.evaluateJavaScript("window.pet.gaze(0, 0)") }
+        }
+    }
+
+    private func startGazeTimer() {
+        guard gazeTimer == nil else { return }
+        // Common mode keeps the pupils tracking while windows are being dragged.
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            self?.pollGaze()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        gazeTimer = timer
+    }
+
+    private func pollGaze() {
+        guard eyeFollow else { return }
+        if ready, panel.isVisible {
+            sendGaze(gazeOffset(for: web), to: web, last: &petGaze)
+        }
+        if previewReady, preview.window?.isVisible == true {
+            sendGaze(gazeOffset(for: preview), to: preview, last: &previewGaze)
+        }
+    }
+
+    private func sendGaze(_ offset: (x: Int, y: Int), to view: WKWebView, last: inout (x: Int, y: Int)?) {
+        guard last?.x != offset.x || last?.y != offset.y else { return }
+        last = offset
+        view.evaluateJavaScript("window.pet.gaze(\(offset.x), \(offset.y))")
+    }
+
+    private func gazeOffset(for view: NSView) -> (x: Int, y: Int) {
+        guard let window = view.window else { return (0, 0) }
+        let frameOnScreen = window.convertToScreen(view.convert(view.bounds, to: nil))
+        guard frameOnScreen.width > 0, frameOnScreen.height > 0 else { return (0, 0) }
+        let mouse = NSEvent.mouseLocation
+        let normalizedX = (mouse.x - frameOnScreen.minX) / frameOnScreen.width
+        let normalizedY = (mouse.y - frameOnScreen.minY) / frameOnScreen.height
+        // The canvas is 160 x 160; the cat's eyes sit around (80, 58).
+        let dx = normalizedX * 160 - 80
+        let dy = (1 - normalizedY) * 160 - 58
+        let distance = (dx * dx + dy * dy).squareRoot()
+        guard distance > 6 else { return (0, 0) }
+        let gx = Int((dx / distance * 2.0).rounded())
+        let gy = Int((dy / distance * 1.4).rounded())
+        return (max(-2, min(2, gx)), max(-2, min(1, gy)))
+    }
+
+    // MARK: Reminder
+
+    private func loadReminders() {
+        let defaults = UserDefaults.standard
+        if let stored = defaults.stringArray(forKey: "shibaReminders") {
+            reminderList.items = stored
+        } else if let legacy = defaults.string(forKey: "shibaReminder"), !legacy.isEmpty {
+            reminderList.items = [legacy]
+            defaults.removeObject(forKey: "shibaReminder")
+            saveReminders()
+        }
+    }
+
+    private func saveReminders() {
+        UserDefaults.standard.set(reminderList.items, forKey: "shibaReminders")
+    }
+
+    @objc private func addReminder() {
+        if reminderList.items.isEmpty {
+            reminderInput.text = ""
+            showReminderInput()
+        } else {
+            beginInlineAdd()
+        }
+    }
+
+    @objc private func clearReminders() {
+        guard !reminderList.items.isEmpty else { return }
+        reminderList.items.removeAll()
+        reminderList.isAdding = false
+        reminderList.draft = ""
+        saveReminders()
+        hideReminderInput()
+        hideReminders()
+    }
+
+    private func appendReminder(_ text: String) {
+        let value = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+        guard !value.isEmpty else { return }
+        reminderList.items.append(value)
+        saveReminders()
+        showReminders()
+    }
+
+    private func submitReminder() {
+        let value = reminderInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        hideReminderInput()
+        appendReminder(value)
+    }
+
+    private func closeReminder(at index: Int) {
+        guard reminderList.items.indices.contains(index) else { return }
+        reminderList.items.remove(at: index)
+        saveReminders()
+        if reminderList.items.isEmpty {
+            reminderList.isAdding = false
+            hideReminders()
+        } else {
+            showReminders()
+        }
+    }
+
+    private func beginInlineAdd() {
+        guard !reminderList.items.isEmpty else {
+            reminderInput.text = ""
+            showReminderInput()
+            return
+        }
+        showReminders()
+        reminderList.isAdding = true
+        NSApp.activate(ignoringOtherApps: true)
+        reminderWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func showReminders() {
+        guard !reminderList.items.isEmpty else {
+            hideReminders()
+            return
+        }
+        let host: ReminderHostingView<ReminderListCard>
+        if let existing = reminderListHost {
+            host = existing
+        } else {
+            let created = ReminderHostingView(rootView: ReminderListCard(
+                model: reminderList,
+                onAdd: { [weak self] text in self?.appendReminder(text) },
+                onClose: { [weak self] index in self?.closeReminder(at: index) },
+                onBeginAdd: { [weak self] in self?.beginInlineAdd() },
+                onHeightChange: { [weak self] height in self?.resizeReminderList(height: height) }
+            ))
+            fitCardHost(created, fallback: NSSize(width: 240, height: 64))
+            reminderListHost = created
+            host = created
+        }
+        let panel = reminderWindow ?? makeReminderPanel()
+        if reminderWindow == nil {
+            panel.setContentSize(host.frame.size)
+            panel.contentView = host
+            reminderWindow = panel
+        }
+        panel.orderFrontRegardless()
+        layoutReminder()
+    }
+
+    private func resizeReminderList(height: CGFloat) {
+        guard let panel = reminderWindow, height > 1 else { return }
+        guard abs(panel.frame.height - height) > 0.5 else { return }
+        panel.setContentSize(NSSize(width: 240, height: height))
+        layoutReminder()
+    }
+
+    private func hideReminders() {
+        reminderWindow?.orderOut(nil)
+    }
+
+    private func showReminderInput() {
+        let host = ReminderHostingView(rootView: ReminderInputCard(
+            model: reminderInput,
+            onSubmit: { [weak self] in self?.submitReminder() },
+            onCancel: { [weak self] in self?.hideReminderInput() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 288, height: 44))
+        let size = host.frame.size
+        if reminderInputPetOrigin == nil, let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            // Keep the input directly under the cat even when the pet sits near the screen bottom.
+            let required = screen.minY + 8 + size.height + 8 - panel.frame.minY
+            let room = screen.maxY - panel.frame.maxY - 8
+            let shift = min(max(required, 0), max(room, 0))
+            if shift > 0.5 {
+                reminderInputPetOrigin = panel.frame.origin
+                let moved = NSPoint(x: panel.frame.minX, y: panel.frame.minY + shift)
+                panel.setFrameOrigin(moved)
+                reminderInputShiftedOrigin = moved
+            }
+        }
+        let input = reminderInputWindow ?? makeReminderPanel()
+        input.setContentSize(size)
+        input.contentView = host
+        reminderInputWindow = input
+        NSApp.activate(ignoringOtherApps: true)
+        input.makeKeyAndOrderFront(nil)
+        layoutReminder()
+    }
+
+    private func hideReminderInput() {
+        reminderInputWindow?.orderOut(nil)
+        reminderInput.text = ""
+        if let origin = reminderInputPetOrigin,
+           let shifted = reminderInputShiftedOrigin,
+           panel.frame.origin == shifted {
+            panel.setFrameOrigin(origin)
+        }
+        reminderInputPetOrigin = nil
+        reminderInputShiftedOrigin = nil
+    }
+
+    private func makeReminderPanel() -> ReminderPanel {
+        let reminder = ReminderPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false
+        )
+        reminder.isOpaque = false
+        reminder.backgroundColor = .clear
+        reminder.hasShadow = false
+        reminder.level = .floating
+        reminder.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        reminder.isFloatingPanel = true
+        return reminder
+    }
+
+    private func fitCardHost<Content: View>(_ host: NSHostingView<Content>, fallback: NSSize) {
+        host.frame = NSRect(origin: .zero, size: fallback)
+        host.layoutSubtreeIfNeeded()
+        let fitted = host.fittingSize
+        host.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: fitted.width > 1 ? fitted.width : fallback.width,
+                height: fitted.height > 1 ? fitted.height : fallback.height
+            )
+        )
+    }
+
+    private func layoutReminder() {
+        guard let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        if let reminder = reminderWindow {
+            let size = reminder.frame.size
+            var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+            if origin.y + size.height > screen.maxY {
+                origin.y = panel.frame.minY - size.height - 8
+            }
+            origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+            origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+            reminder.setFrameOrigin(origin)
+        }
+        if let input = reminderInputWindow {
+            let size = input.frame.size
+            var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.minY - size.height - 8)
+            if origin.y < screen.minY + 8 {
+                let stackTop = reminderWindow?.frame.maxY ?? panel.frame.maxY
+                origin.y = stackTop + 8
+            }
+            origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+            origin.y = min(origin.y, screen.maxY - size.height - 8)
+            input.setFrameOrigin(origin)
         }
     }
 
@@ -390,7 +712,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     private func showPet(_ visible: Bool) {
         UserDefaults.standard.set(visible, forKey: "shibaVisible")
-        if visible { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
+        if visible {
+            panel.orderFrontRegardless()
+            if !reminderList.items.isEmpty { showReminders() }
+        } else {
+            panel.orderOut(nil)
+            hideReminders()
+            hideReminderInput()
+        }
     }
 
     private func resizePet(_ size: Double) {
@@ -398,12 +727,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         panel.setContentSize(NSSize(width: size, height: size))
         panel.setFrameOrigin(NSPoint(x: corner.x - size, y: corner.y))
         UserDefaults.standard.set(size, forKey: "shibaSize")
+        layoutReminder()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         typingRetry?.invalidate()
+        gazeTimer?.invalidate()
         stopListening()
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        if let reminderObserver { NotificationCenter.default.removeObserver(reminderObserver) }
     }
 
     private func send(_ command: String) {
@@ -514,9 +846,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        let reminderItem = menu.addItem(withTitle: "添加重要提醒…", action: #selector(addReminder), keyEquivalent: "")
+        reminderItem.target = self
+        if !reminderList.items.isEmpty {
+            let clearItem = menu.addItem(withTitle: "清除全部提醒", action: #selector(clearReminders), keyEquivalent: "")
+            clearItem.target = self
+        }
+        menu.addItem(.separator())
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
-            ("导入配置…", #selector(importConfig)),
             ("打字同步设置…", #selector(enableTyping)),
             ("将桌宠移回屏幕", #selector(resetPosition)),
             ("退出桌宠", #selector(quit)),
@@ -536,33 +874,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             workbenchState.message = "已连接，可以到其他应用里打字测试。"
         case .checking, .unavailable:
             workbenchState.message = "输入监控已授权，正在重试键盘监听。"
-        }
-    }
-
-    @objc private func importConfig() {
-        let picker = NSOpenPanel()
-        picker.allowedContentTypes = [.json]
-        NSApp.activate(ignoringOtherApps: true)
-        guard picker.runModal() == .OK, let url = picker.url, let config = try? String(contentsOf: url, encoding: .utf8) else { return }
-        openWorkbench()
-        presetRequest += 1
-        preview.callAsyncJavaScript("return window.pet.normalize(JSON.parse(config))",
-            arguments: ["config": config], in: nil, in: .page
-        ) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let value):
-                guard let config = value as? [String: Any] else { return }
-                guard config["frame"] as? String == "CAT" else {
-                    self.workbenchState.message = "暂时只支持猫的配置"
-                    return
-                }
-                self.workbenchState.preset = self.matchingPreset(config)
-                self.setDraft(config)
-                self.workbenchState.message = "已导入，可预览后应用"
-            case .failure:
-                self.workbenchState.message = "无法导入宠物配置"
-            }
         }
     }
 

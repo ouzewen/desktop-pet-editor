@@ -22,7 +22,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 </dict></plist>
 PLIST
-swiftc -target "$(uname -m)-apple-macosx13.0" desktop/main.swift desktop/Workbench.swift -o "$app/Contents/MacOS/DesktopPet"
+swiftc -target "$(uname -m)-apple-macosx13.0" desktop/main.swift desktop/Workbench.swift desktop/Reminder.swift -o "$app/Contents/MacOS/DesktopPet"
 sign_identity="${DESKTOP_PET_SIGN_IDENTITY:-}"
 if [ -z "$sign_identity" ]; then
   sign_identity=$(security find-identity -v -p codesigning |

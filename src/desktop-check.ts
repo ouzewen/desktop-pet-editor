@@ -114,5 +114,18 @@ export function checkCatActions() {
   assert(same(pixels(), typing), 'Key did not trigger typing');
   motion.tick(time + 521);
   assert(same(pixels(), snapshot('sit', 5, calico)), 'Typing did not return to sitting');
+
+  for (const eye of Object.keys(catOptions.eye).filter(id => id !== 'Y02') as (keyof typeof catOptions.eye)[]) {
+    const config = { ...orange, eye };
+    const straight = snapshot('sit', 0, config);
+    render(canvas, config, 'sit', 0, { x: 2, y: 0 });
+    const lookingRight = pixels();
+    render(canvas, config, 'sit', 0, { x: -2, y: 0 });
+    const lookingLeft = pixels();
+    assert(!same(straight, lookingRight), `Gaze right did not move ${eye}`);
+    assert(!same(lookingRight, lookingLeft), `Gaze left matched gaze right for ${eye}`);
+    render(canvas, config, 'sit', 0, { x: 0, y: 0 });
+    assert(same(pixels(), straight), `Gaze reset did not restore ${eye}`);
+  }
   return 'cat actions ready';
 }
