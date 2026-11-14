@@ -1,5 +1,5 @@
-import { render, type Action } from './render';
-import type { Config } from './model';
+import { frameCount, render, type Action } from './render';
+import type { PetConfig } from './cat';
 
 /** Drive the same sprite with editor previews or native pointer/keyboard events. */
 export class Motion {
@@ -11,9 +11,9 @@ export class Motion {
   private idleSince = performance.now();
   private rendered = '';
 
-  constructor(private canvas: HTMLCanvasElement, private config: Config) {}
+  constructor(private canvas: HTMLCanvasElement, private config: PetConfig) {}
 
-  setConfig(config: Config) {
+  setConfig(config: PetConfig) {
     this.config = config;
     this.rendered = '';
   }
@@ -50,7 +50,8 @@ export class Motion {
     let frame: number;
     if (this.pressing) {
       action = this.dragAction ?? 'sit';
-      frame = this.dragAction ? Math.floor(this.dragDistance / 10) % 6 : 0;
+      const stride = this.config.frame === 'CAT' ? 16 : 10;
+      frame = this.dragAction ? Math.floor(this.dragDistance / stride) % frameCount(this.config, action) : 0;
     } else if (now - this.lastKey <= 520) {
       action = 'typing';
       // Each key press advances the contact or rebound pose.

@@ -7,7 +7,7 @@ export default defineConfig({
     outDir: 'dist-desktop',
     lib: {
       entry: fileURLToPath(new URL('../src/desktop.ts', import.meta.url)),
-      name: 'ShibaPet',
+      name: 'DesktopPet',
       formats: ['iife'],
       fileName: () => 'pet.js',
     },

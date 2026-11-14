@@ -1,10 +1,15 @@
 /// <reference types="vite/client" />
 
+import { blackCatCoat, catWalkFrames, type CatConfig, type PetConfig } from './cat';
 import { irisColors, palettes, type Config } from './model';
 
 export const SIZE = 160;
 export type Action = 'sit' | 'left' | 'right' | 'typing';
 export const actions: Readonly<Record<Action, number>> = { sit: 80, left: 6, right: 6, typing: 4 };
+
+export function frameCount(config: PetConfig, action: Action) {
+  return config.frame === 'CAT' && (action === 'left' || action === 'right') ? catWalkFrames : actions[action];
+}
 
 const art = {
   tail: ['T01', 'T02'],
@@ -18,6 +23,7 @@ const typingPaws = ['left_0', 'left_1', 'right_0', 'right_1'].map(id => `motion/
 const baseLayers = [
   ...runBodies,
   ...typingPaws,
+  'motion/type_body',
   'motion/run_head',
   ...art.tail.map(id => `motion/run_tail_${id}`),
   ...art.ear.map(id => `motion/run_ear_${id}`),
@@ -71,6 +77,41 @@ export const assetsReady = Promise.all([
   for (const [name, image] of entries) images.set(name, image);
 });
 
+const catWalkBodies = Array.from({ length: catWalkFrames }, (_, index) => `walk_body_${index}`);
+const catFurLayers = [
+  'sit_body', 'sit_head', 'sit_ears', 'sit_tail', 'sit_muzzle',
+  'type_body', 'type_tail', 'type_paw_l0', 'type_paw_l1', 'type_paw_r0', 'type_paw_r1',
+  ...catWalkBodies, 'walk_head', 'walk_ears', 'walk_tail', 'walk_muzzle',
+];
+const catCalicoLayers = new Set([
+  'sit_body', 'sit_head', 'sit_tail', 'type_body', 'type_tail',
+  ...catWalkBodies, 'walk_head', 'walk_tail',
+]);
+const catViews = ['sit', 'walk'] as const;
+const catFurSlots = ['g', 's', 'l', 'w', 'd'] as const;
+const catMarkings = ['P01', 'P02'] as const;
+let catAssets: Promise<void> | undefined;
+export function prepareCatAssets() {
+  return catAssets ??= Promise.all([
+    ...catFurLayers.flatMap(layer => [
+      `cat/${layer}`,
+      ...catFurSlots.map(slot => `cat/masks/${layer}_${slot}`),
+      ...(catCalicoLayers.has(layer) ? [`cat/masks/${layer}_calico`] : []),
+    ]),
+    'cat/type_keyboard', 'cat/type_screen',
+    ...catViews.flatMap(view => [
+      ...art.eye.map(eye => `cat/${view}_eye_${eye}`),
+      ...visibleIris.map(eye => `cat/masks/${view}_eye_${eye}_iris`),
+      ...catMarkings.map(mark => `cat/${view}_face_${mark}`),
+    ]),
+  ].map(loadLayer)).then(entries => {
+    for (const [name, image] of entries) {
+      if (!image) throw Error(`缺少猫图层 · ${name}`);
+      images.set(name, image);
+    }
+  });
+}
+
 function imageFor(layer: string) {
   const image = images.get(layer);
   if (!image) throw Error(`缺少图层 · ${layer}`);
@@ -87,6 +128,15 @@ function makeLayer() {
 }
 
 const tinted = new Map<string, HTMLCanvasElement>();
+
+function paintMask(mask: CanvasRenderingContext2D, layer: string, color: string) {
+  mask.clearRect(0, 0, SIZE, SIZE);
+  mask.drawImage(imageFor(layer), 0, 0);
+  mask.globalCompositeOperation = 'source-in';
+  mask.fillStyle = color;
+  mask.fillRect(0, 0, SIZE, SIZE);
+  mask.globalCompositeOperation = 'source-over';
+}
 function furLayer(layer: string, palette: Config['palette'], slots: readonly FurSlot[] = furSlots) {
   const source = imageFor(layer);
   if (palette === 'C01') return source;
@@ -98,12 +148,7 @@ function furLayer(layer: string, palette: Config['palette'], slots: readonly Fur
   const mask = makeLayer();
   result.ctx.drawImage(source, 0, 0);
   slots.forEach(slot => {
-    mask.ctx.clearRect(0, 0, SIZE, SIZE);
-    mask.ctx.drawImage(imageFor(maskPath(layer, slot)), 0, 0);
-    mask.ctx.globalCompositeOperation = 'source-in';
-    mask.ctx.fillStyle = palettes[palette][furSlots.indexOf(slot)];
-    mask.ctx.fillRect(0, 0, SIZE, SIZE);
-    mask.ctx.globalCompositeOperation = 'source-over';
+    paintMask(mask.ctx, maskPath(layer, slot), palettes[palette][furSlots.indexOf(slot)]);
     result.ctx.drawImage(mask.canvas, 0, 0);
   });
   tinted.set(key, result.canvas);
@@ -173,7 +218,7 @@ function drawFront(ctx: CanvasRenderingContext2D, config: Config, typing: boolea
   ctx.drawImage(furLayer(`parts/M1_tail_${config.tail}`, config.palette), 0, 0);
   ctx.restore();
 
-  ctx.drawImage(furLayer('frames/M1_body', config.palette), 0, 0);
+  ctx.drawImage(furLayer(typing ? 'motion/type_body' : 'frames/M1_body', config.palette), 0, 0);
   const nod = typing && frame % 2 === 0 ? 2 : 0;
   ctx.drawImage(furLayer('frames/M1_head_base', config.palette), 0, nod);
   if (config.pattern === 'P02' || config.pattern === 'P06') {
@@ -196,12 +241,85 @@ function drawFront(ctx: CanvasRenderingContext2D, config: Config, typing: boolea
   }
 }
 
-export function render(canvas: HTMLCanvasElement, config: Config, action: Action = 'sit', frame = 0) {
+function catFur(layer: string, palette: CatConfig['palette']) {
+  const source = imageFor(`cat/${layer}`);
+  if (palette === 'CC01' || (palette === 'CC03' && !catCalicoLayers.has(layer))) return source;
+  const key = `cat/${layer}/${palette}`;
+  const existing = tinted.get(key);
+  if (existing) return existing;
+
+  const result = makeLayer();
+  const mask = makeLayer();
+  result.ctx.drawImage(source, 0, 0);
+  const apply = (slot: string, color: string) => {
+    paintMask(mask.ctx, `cat/masks/${layer}_${slot}`, color);
+    result.ctx.drawImage(mask.canvas, 0, 0);
+  };
+  if (palette === 'CC02') {
+    catFurSlots.forEach((slot, index) => apply(slot, blackCatCoat[index]!));
+  } else {
+    result.ctx.drawImage(imageFor(`cat/masks/${layer}_calico`), 0, 0);
+  }
+  tinted.set(key, result.canvas);
+  return result.canvas;
+}
+
+function catEye(view: typeof catViews[number], eye: CatConfig['eye'], color: CatConfig['eyeColor'], palette: CatConfig['palette']) {
+  const name = `${view}_eye_${eye}`;
+  const source = imageFor(`cat/${name}`);
+  const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
+  if (!irisColor || eye === 'Y02') return source;
+  const key = `cat/${name}/${irisColor}`;
+  const existing = tinted.get(key);
+  if (existing) return existing;
+  const result = makeLayer();
+  const mask = makeLayer();
+  paintMask(mask.ctx, `cat/masks/${name}_iris`, irisColor);
+  result.ctx.drawImage(source, 0, 0);
+  result.ctx.drawImage(mask.canvas, 0, 0);
+  tinted.set(key, result.canvas);
+  return result.canvas;
+}
+
+function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number) {
+  const walking = action === 'left' || action === 'right';
+  const typing = action === 'typing';
+  const view = walking ? 'walk' : 'sit';
+  const breathing = action === 'sit' && frame >= 17 && frame < 30 ? -1 : 0;
+  const nod = walking ? frame % 2 : typing ? [1, 0, 1, 2][frame]! : 0;
+  const drawFur = (layer: string, y = 0) => ctx.drawImage(catFur(layer, config.palette), 0, y);
+  ctx.translate(0, breathing);
+  // The root stays tucked under the rump while the visible tail moves.
+  const tailShift = walking ? [0, -1, 0, 1][frame]!
+    : action === 'sit' ? [0, -1, -2, -2, -1, 0][Math.floor((frame - 30) / 2)] ?? 0 : 0;
+  drawFur(typing ? 'type_tail' : `${view}_tail`, tailShift);
+  drawFur(walking ? catWalkBodies[frame]! : typing ? 'type_body' : 'sit_body');
+  drawFur(`${view}_ears`, nod);
+  drawFur(`${view}_head`, nod);
+  if (config.pattern === 'P02' || config.pattern === 'P06') {
+    ctx.drawImage(imageFor(`cat/${view}_face_P02`), 0, nod);
+  }
+  if (config.pattern === 'P01' || config.pattern === 'P06') {
+    ctx.drawImage(imageFor(`cat/${view}_face_P01`), 0, nod);
+  }
+  const blink = action === 'sit' && frame >= 25 && frame <= 26;
+  ctx.drawImage(catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette), 0, nod + (typing ? 1 : 0));
+  drawFur(`${view}_muzzle`, nod);
+  if (typing) {
+    ctx.drawImage(imageFor('cat/type_keyboard'), 0, 0);
+    const [left, right] = [[0, 1], [0, 0], [1, 0], [0, 0]][frame]!;
+    drawFur(`type_paw_l${left}`);
+    drawFur(`type_paw_r${right}`);
+    ctx.drawImage(imageFor('cat/type_screen'), 0, 0);
+  }
+}
+
+export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0) {
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw Error('无法初始化 Canvas');
 
-  const unavailable = availability(config);
+  const unavailable = config.frame === 'M1' ? availability(config) : [];
   ctx.resetTransform();
   ctx.clearRect(0, 0, SIZE, SIZE);
   ctx.imageSmoothingEnabled = false;
@@ -209,15 +327,18 @@ export function render(canvas: HTMLCanvasElement, config: Config, action: Action
   canvas.setAttribute('aria-label', canvas.title || '宠物像素预览');
 
   try {
-    const pose = frame % actions[action];
+    const pose = frame % frameCount(config, action);
     if (action === 'left' || action === 'right') {
       const left = makeLayer();
-      drawRun(left.ctx, config, pose);
+      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose);
+      else drawRun(left.ctx, config, pose);
       if (action === 'right') {
         ctx.translate(SIZE, 0);
         ctx.scale(-1, 1);
       }
       ctx.drawImage(left.canvas, 0, 0);
+    } else if (config.frame === 'CAT') {
+      drawCat(ctx, config, action, pose);
     } else {
       drawFront(ctx, config, action === 'typing', pose);
     }
