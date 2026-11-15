@@ -1,6 +1,4 @@
 node_modules/
-dist/
+build/
 .playwright-cli/
 .DS_Store
-
-dist-desktop/

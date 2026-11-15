@@ -1,44 +1,83 @@
-# 宠物形象编辑器 · G2a 柴犬正面样板
+# 桌宠工作台
 
-本次审核使用 M1 柴犬预设 `preset_m1_12`。正面坐姿按 160 px 原画逐格描摹，按身体、头、耳朵、眼睛、嘴鼻和尾巴拆成独立 PNG。运行时由 Canvas 按层合成，换色只覆盖三种毛色槽位的 PNG 遮罩。
+一只像素猫桌面宠物，加一个可以调形象、预览动作、管理提醒的 macOS 工作台。工作台用 SwiftUI 写，宠物画面由 WKWebView 里的 Canvas 分层合成，和 Web 形象编辑器共用同一套渲染代码。
 
-## 本地运行
+当前默认展示猫；柴犬 M1 的代码、素材和自检仍然保留，只是工作台暂时隐藏了犬类入口。
+
+## 快速开始
+
+### macOS 桌宠 App
+
+需要 macOS 13+ 与 Xcode Command Line Tools。
+
+```sh
+./desktop/build.sh
+open build/desktop/桌宠.app
+```
+
+自检：
+
+```sh
+build/desktop/桌宠.app/Contents/MacOS/DesktopPet --self-test
+```
+
+### Web 形象编辑器
 
 需要 Node.js 22.12+ 或 24。
 
 ```sh
 npm ci
 npm run dev
+npm run build     # 输出到 build/web/
+npm run preview
 ```
 
-打开终端里的本地地址。默认显示柴犬。可用 `npm run build` 做生产构建，或用 `npm run preview` 预览构建结果。
+## 功能
 
-## 给 Muse 的验收材料
+- 猫品种：橘猫、黑猫、三花、暹罗；耳朵、嘴鼻、眼型、瞳色、面部花纹、毛色可组合
+- 动作预览：待机、左走、右走、打字；拖动桌宠时按方向走动
+- 眼神跟随：瞳孔跟随鼠标，可在工作台底部开关
+- 重要提醒：右键小猫添加，提醒以待办列表悬浮在小猫上方；点击输入框外部自动收起
+- 打字同步：读取全局按键节拍驱动打字动画，需要「输入监控」授权
+- 像素风工作台与提醒卡片，支持亮色/夜间两套配色
+- 形象编辑器：图层预览、配置调整与 PNG 导出
 
-- [柴犬整犬对照](fixtures/m1-shiba-variants.png)包含 E03、E04、N02、N03 和 C05、C06 换色。
-- [主锚点原画](fixtures/m1-shiba-front-160.png)和[默认柴犬导出](fixtures/pet-1x.png)均为 160 px。
-- [柴犬预设文件](public/assets/presets/preset_m1_12.json)和[图层目录](public/assets/)。
+## 目录结构
 
-在「换细节」下逐件切换 E03、E04、N02、N03，每次用整犬检查耳根、脸颊和下巴。切到 C06 灰白检查毛色，再切到 C05 奶油白检查白胸的对比度。
+```text
+.
+├── src/                     # TypeScript 渲染器与 Web 编辑器
+├── public/assets/           # 运行时素材（Vite public）
+│   └── cat/hd/              # 320×320 HD 猫素材
+├── desktop/
+│   ├── Sources/             # SwiftUI / AppKit 源码
+│   ├── Resources/           # pet.html、App 图标、像素字体
+│   ├── build.sh             # 构建桌宠 App
+│   └── vite.config.ts       # 桌宠 bundle 的 Vite 配置
+├── fixtures/                # 柴犬 M1 验收对照图（不参与运行）
+├── docs/                    # 素材、版本与历史说明
+├── scripts/clean.sh         # 清理构建产物与缓存
+├── VERSION                  # 源版本号
+└── CHANGELOG.md
+```
 
-E03 与 E04 由 ImageGen 先生成完整正面柴犬，再从候选提取耳朵、对齐像素网格并限制到 C01 毛色和描边。短垂耳到下巴附近，长垂耳到肩部。N02 与 N03 按原画尺寸用像素绘制。旧版配置导入时，花纹字段统一归为 P00。柴犬的眉斑、白颊与额线已并入头底座。
+- 构建产物统一放在 `build/`（已忽略）：`build/web` 是 Web 编辑器，`build/desktop/桌宠.app` 是 App。
+- 素材目录、命名约定和新增零件流程见 [docs/ASSETS.md](docs/ASSETS.md)。
+- 版本号、构建号与发布流程见 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
-Chrome 验证了四款换件、C06 下四种耳型的整犬毛色、旧配置导入与导出。C01 默认柴犬与改前的实际合成逐像素一致。四款新零件均为 160 × 160 RGBA，alpha 只有 0 和 255。TypeScript 检查与 Vite 生产构建通过。
+## 素材说明
 
-## macOS 桌宠工作台
+- 猫的基础层是 160×160；部分 HD 素材（耳、嘴、眼、毛色、打字动作）是 320×320，位于 `public/assets/cat/hd/`，文件名保留 `new_` 前缀以区分代际。
+- 换色通过 `*_g/_s/_l/_w/_d` 遮罩完成，瞳色和眼神跟随使用 `*_iris` 遮罩。
+- 柴犬 M1 的 160×160 素材仍在 `public/assets/` 根目录下的 `frames/`、`parts/`、`motion/`、`masks/` 中，历史说明见 [docs/SHIBA-NOTES.md](docs/SHIBA-NOTES.md)。
 
-在 macOS 运行 `./desktop/build.sh`，然后打开 `dist-desktop/桌宠.app`。启动后进入工作台，可以选择品种和外观、预览四种动作、调整桌宠显示与大小，再点「应用到桌宠」。关闭工作台后，桌宠继续运行。点击 Dock 图标或菜单栏的「桌宠」可重新打开工作台，按 ⌘Q 退出应用。
+## 版本与签名
 
-工作台使用 [Ark Pixel Font](https://github.com/TakWolf/ark-pixel-font)（SIL OFL 1.1）作为像素字体，许可证见 `desktop/ArkPixel-OFL.txt`。
+- `VERSION` 是源版本号；构建时写入 App 的 `CFBundleShortVersionString`，`CFBundleVersion` 使用 git 提交数。
+- 本地构建优先使用 `DESKTOP_PET_SIGN_IDENTITY`，其次使用钥匙串里的 `Desktop Pet Local Signing`；没有签名身份时使用临时签名，重建后可能需要重新授权输入监控。
+- 对外分发需要 Developer ID 签名并提交 Apple 公证。
 
-拖动桌宠时，步态随水平移动距离推进，松手回到正面。启动时自动尝试开启打字同步，按键节拍推进打字帧。跨应用触发需要在 macOS 的「输入监控」中允许桌宠。缺少授权时，工作台会提示并提供设置入口，授权后自动重试。打字时两只前爪交替落在键盘上，两只后脚着地。
+## 许可
 
-App 的窗口和设置位于 `desktop/`，动作和图层合成位于 `src/`。工作台与桌宠均从应用包读取素材，可直接通过 App 验收。
-
-### 猫桌宠
-
-工作台内可选橘猫、黑猫和三花猫，共用 160×160 猫框架。三个预设都可切换橘白、纯黑、三花毛色，眼型、瞳色和面部花纹可独立选择。动作预览包含正面待机、左走、右走、打字。拖动桌宠时按方向走动，松手坐回去。按键同步用四帧循环交替抬爪和触键。
-
-构建后可执行 `dist-desktop/桌宠.app/Contents/MacOS/DesktopPet --self-test` 检查原生工作台应用配置、猫的图层组合、镜像和动作切换。
-
-macOS 构建优先使用 `DESKTOP_PET_SIGN_IDENTITY` 指定的签名身份，其次使用本机钥匙串里的 `Desktop Pet Local Signing`。后续更新沿用同一签名身份和 Bundle ID，首次切换签名需要重新授权输入监控。没有签名身份的开发机可以用临时签名构建，每次重建后可能需要重新授权。对外分发使用 Developer ID Application 签名并提交 Apple 公证。
+- 像素字体 [Ark Pixel Font](https://github.com/TakWolf/ark-pixel-font)，SIL OFL 1.1，许可证见 `desktop/Resources/ArkPixel-OFL.txt`。
+- 项目内其余美术素材为项目自绘，仅用于本项目。

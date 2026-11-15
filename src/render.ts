@@ -54,7 +54,7 @@ type FurSlot = typeof furSlots[number];
 const maskPath = (layer: string, slot: FurSlot) => `masks/${layer.split('/').at(-1)}_${slot}`;
 
 function loadLayer(layer: string) {
-  const size = layer.startsWith('cat/new_') ? CAT_SIZE : SIZE;
+  const size = layer.startsWith('cat/hd/') ? CAT_SIZE : SIZE;
   const image = new Image();
   image.src = `${import.meta.env.BASE_URL}assets/${layer}.png`;
   return image.decode().then(() => {
@@ -118,7 +118,7 @@ const newCatLayers = [
 let catAssets: Promise<void> | undefined;
 export function prepareCatAssets() {
   return catAssets ??= Promise.all([
-    ...newCatLayers.map(layer => `cat/${layer}`),
+    ...newCatLayers.map(layer => `cat/hd/${layer}`),
     ...catFurLayers.flatMap(layer => [
       `cat/${layer}`,
       ...catFurSlots.map(slot => `cat/masks/${layer}_${slot}`),
@@ -306,7 +306,7 @@ function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
   const cached = gazeFrameCache.get(key);
   if (cached) return cached;
 
-  const source = imageFor(`cat/${name}`);
+  const source = imageFor(catLayerPath(name));
   const irisMask = catIrisPath(name);
   const size = source.naturalWidth;
   // The bundled PNGs can be composited under WebKit's file-origin rules.
@@ -334,8 +334,12 @@ function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
   return result.canvas;
 }
 
+function catLayerPath(name: string) {
+  return name.startsWith('new_') ? `cat/hd/${name}` : `cat/${name}`;
+}
+
 function catIrisPath(name: string) {
-  return name.startsWith('new_') ? `cat/${name}_iris` : `cat/masks/${name}_iris`;
+  return name.startsWith('new_') ? `cat/hd/${name}_iris` : `cat/masks/${name}_iris`;
 }
 
 function catEye(
@@ -346,11 +350,11 @@ function catEye(
   gaze: Gaze = noGaze,
 ) {
   const name = view === 'sit' && ['Y05', 'Y06', 'Y07'].includes(eye) ? `new_eye_${eye}` : `${view}_eye_${eye}`;
-  const source = imageFor(`cat/${name}`);
+  const source = imageFor(catLayerPath(name));
   const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
   if (eye !== 'Y02' && (gaze.x !== 0 || gaze.y !== 0)) return gazeEye(name, irisColor, gaze);
   if (!irisColor || eye === 'Y02') return source;
-  const key = `cat/${name}/${irisColor}`;
+  const key = `${catLayerPath(name)}/${irisColor}`;
   const existing = tinted.get(key);
   if (existing) return existing;
   const result = makeLayer(source.naturalWidth);
@@ -363,7 +367,7 @@ function catEye(
 }
 
 function newCatFur(layer: string, palette: CatConfig['palette']) {
-  const path = `cat/new_${layer}`;
+  const path = `cat/hd/new_${layer}`;
   const source = imageFor(path);
   if (palette === 'CC01' || palette === 'CC03') return source;
   const key = `${path}/${palette}`;
@@ -391,7 +395,7 @@ function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Actio
   const headX = typing ? -3 : 0;
   const drawFur = (layer: string, y = 0) => ctx.drawImage(catFur(layer, config.palette), 0, y);
   const drawNew = (layer: string, x = 0, y = 0) =>
-    ctx.drawImage(imageFor(`cat/new_${layer}`), x, y, SIZE, SIZE);
+    ctx.drawImage(imageFor(`cat/hd/new_${layer}`), x, y, SIZE, SIZE);
   const stretch = pose.stretch ?? 0;
   ctx.translate(0, breathing);
   if (stretch) {
