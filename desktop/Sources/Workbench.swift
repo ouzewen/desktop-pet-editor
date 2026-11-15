@@ -161,7 +161,7 @@ struct WorkbenchView: View {
 
     private let fields = [
         ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
-        ("eye", "眼型"), ("eyeColor", "瞳色"), ("pattern", "面部花纹"), ("accessory", "配饰"),
+        ("eyeColor", "瞳色"), ("pattern", "面部花纹"), ("accessory", "配饰"),
     ]
     private let fieldColumns = [
         GridItem(.flexible(), spacing: 10, alignment: .top),
