@@ -57,7 +57,12 @@ final class WorkbenchState: ObservableObject {
 
     func update(_ config: [String: Any]) {
         appearance = config.compactMapValues { $0 as? String }
+        resetUnavailablePreview()
         refresh()
+    }
+
+    func resetUnavailablePreview() {
+        if appearance["palette"] != "CC01" && action == "typing-gentle" { action = "typing" }
     }
 }
 
@@ -177,12 +182,15 @@ struct WorkbenchView: View {
         (state.catalog?.presets ?? []).filter { $0.frame == "CAT" }
     }
 
+    // The workbench only previews states you cannot reach by using the pet
+    // itself. Left/right drag animation stays on the desktop pet, so it is not
+    // offered here.
     private var actionOptions: [(String, String)] {
-        let cat = state.appearance["frame"] == "CAT"
+        if state.appearance["palette"] == "CC01" {
+            return [("sit", "待机"), ("typing-gentle", "温柔打字"), ("typing", "疯狂打字")]
+        }
         return [
             ("sit", "待机"),
-            ("left", cat ? "左拖" : "左跑"),
-            ("right", cat ? "右拖" : "右跑"),
             ("typing", "打字"),
         ]
     }
@@ -356,7 +364,8 @@ struct WorkbenchView: View {
     private var appearancePanel: some View {
         if let catalog = state.catalog {
             let frame = state.appearance["frame", default: "M1"]
-            let fieldsForFrame = catalog.fieldsByFrame[frame] ?? [:]
+            let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
+            let fieldsForFrame = catalog.fieldsByFrame[optionGroup] ?? [:]
             let palettes = fieldsForFrame["palette"] ?? []
 
             PixelPanel(palette: palette, padding: 12) {
@@ -440,6 +449,7 @@ struct WorkbenchView: View {
                     let selected = state.appearance["palette"] == option.id
                     Button {
                         state.appearance["palette"] = option.id
+                        state.resetUnavailablePreview()
                         state.refresh()
                     } label: {
                         ZStack {

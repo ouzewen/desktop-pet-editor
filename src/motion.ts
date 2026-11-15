@@ -1,5 +1,7 @@
 import { frameCount, render, type Action, type Gaze, type TypingMode } from './render';
-import type { PetConfig } from './cat';
+import { isOrangeCat, type PetConfig } from './cat';
+
+const orangeTypingTimeout = 500;
 
 /** Drive the same sprite with editor previews or native pointer/keyboard events. */
 export class Motion {
@@ -10,6 +12,8 @@ export class Motion {
   private typingFrame = 0;
   private typingMode: TypingMode = 'gentle';
   private typingSince = 0;
+  private orangeFrameTick = 0;
+  private orangePhase = 0;
   private recentKeys: number[] = [];
   private stretch = 0;
   private stretchTarget = 0;
@@ -68,6 +72,11 @@ export class Motion {
   key(now = performance.now()) {
     if (this.pressing) return;
     if (this.config.frame === 'CAT') {
+      if (isOrangeCat(this.config) && now - this.lastKey >= orangeTypingTimeout) {
+        this.orangeFrameTick = now;
+        this.orangePhase = 0;
+        this.typingMode = 'gentle';
+      }
       this.recentKeys = this.recentKeys.filter(time => now - time < 1000);
       this.recentKeys.push(now);
       if (now - this.lastKey > 1000) this.typingSince = now;
@@ -81,6 +90,7 @@ export class Motion {
     let action: Action = 'sit';
     let frame: number;
     const cat = this.config.frame === 'CAT';
+    const orange = isOrangeCat(this.config);
     if (this.pressing && cat) {
       frame = 0;
       this.stretch += (this.stretchTarget - this.stretch) * 0.36;
@@ -88,17 +98,28 @@ export class Motion {
     } else if (this.pressing) {
       action = this.dragAction ?? 'sit';
       frame = this.dragAction ? Math.floor(this.dragDistance / 10) % frameCount(this.config, action) : 0;
-    } else if (now - this.lastKey <= (cat ? 1000 : 520)) {
+    } else if (now - this.lastKey < (orange ? orangeTypingTimeout : cat ? 1001 : 521)) {
       action = 'typing';
-      if (cat) {
+      if (orange) {
+        this.recentKeys = this.recentKeys.filter(time => now - time < 1000);
+        const rate = this.recentKeys.length;
+        if (rate < 3) this.typingMode = 'gentle';
+        else if (rate > 5) this.typingMode = 'fast';
+        const mix = Math.max(0, Math.min(1, (rate - 3) / 2));
+        const interval = 250 - 160 * mix * mix * (3 - 2 * mix);
+        this.orangePhase = (this.orangePhase + (now - this.orangeFrameTick) / interval) % 4;
+        this.orangeFrameTick = now;
+        frame = Math.floor(this.orangePhase);
+      } else if (cat) {
         this.recentKeys = this.recentKeys.filter(time => now - time < 1000);
         const rate = this.recentKeys.length;
         const mode = rate > 5 ? 'fast' : rate < 3 ? 'gentle' : this.typingMode;
         if (mode !== this.typingMode) this.typingSince = now;
         this.typingMode = mode;
+        frame = Math.floor(Math.max(0, now - this.typingSince) / (mode === 'fast' ? 90 : 250)) % 4;
+      } else {
+        frame = this.typingFrame;
       }
-      frame = cat ? Math.floor(Math.max(0, now - this.typingSince) / (this.typingMode === 'fast' ? 90 : 250)) % 4
-        : this.typingFrame;
     } else {
       frame = Math.floor(Math.max(0, now - this.idleSince) / 90) % 80;
     }

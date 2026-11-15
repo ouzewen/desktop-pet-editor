@@ -2,7 +2,7 @@
 
 ## 版本号
 
-- 源版本号在 `VERSION`（当前 `0.2.0`），`package.json` 保持同步。
+- 源版本号在 `VERSION`，`package.json` 和锁文件保持同步。
 - App 的 `CFBundleShortVersionString` 来自 `VERSION`。
 - `CFBundleVersion` 使用 `git rev-list --count HEAD`，每次提交自动递增，便于判断本机运行的是哪个构建。
 - 构建成功后终端会打印 `v<version>, build <n>`。

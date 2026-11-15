@@ -37,7 +37,7 @@ export function checkCatActions() {
       const base = snapshot(action, frame);
       const looks = [
         ...Object.keys(catOptions.palette).filter(id => id !== orange.palette).map(palette => ({ palette })),
-        ...Object.keys(catOptions.eye).filter(id => id !== orange.eye).map(eye => ({ eye })),
+        ...action === 'left' ? Object.keys(catOptions.eye).filter(id => id !== orange.eye).map(eye => ({ eye })) : [],
         ...Object.keys(catOptions.pattern).filter(id => id !== orange.pattern).map(pattern => ({ pattern })),
         { eyeColor: 'blue' }, { eyeColor: 'green' },
       ] as Partial<typeof orange>[];
@@ -50,12 +50,13 @@ export function checkCatActions() {
   for (const action of ['sit', 'left', 'right', 'typing'] as const) {
     const frames = action === 'sit' ? 1 : 4;
     for (let frame = 0; frame < frames; frame++) {
-      for (const part of ['ear', 'muzzle', 'eye'] as const) {
+      for (const part of ['ear', 'muzzle', 'eye', 'accessory'] as const) {
+        if (part === 'accessory' && (action === 'left' || action === 'right')) continue;
         const ids = Object.keys(catOptions[part]);
         const choices = part === 'ear' && (action === 'left' || action === 'right')
           ? ids.filter(id => id !== 'CE03' && id !== 'CE05') : ids;
         const poses = choices.map(id =>
-          snapshot(action, frame, readPetConfig({ ...orange, [part]: id })),
+          snapshot(action, frame, readPetConfig({ ...(part === 'eye' ? calico : orange), [part]: id })),
         );
         assert(distinct(poses), `Duplicate ${part} variant in ${action}/${frame}`);
       }
@@ -74,13 +75,23 @@ export function checkCatActions() {
     );
     assert(distinct(accessories), `Accessory missing for ${preset.name}`);
     for (const typingMode of ['gentle', 'fast'] as const) {
-      const first = snapshot('typing', 0, preset, { typingMode });
+      const poses = Array.from({ length: 4 }, (_, frame) => snapshot('typing', frame, preset, { typingMode }));
+      const first = poses[0]!;
+      if (preset === orange) assert(distinct(poses), `Repeated orange cat ${typingMode} frame`);
       for (let frame = 1; frame < 4; frame++) {
-        const next = snapshot('typing', frame, preset, { typingMode });
+        const next = poses[frame]!;
         for (let y = 0; y < 154; y++) {
           for (let x = 147; x < 181; x++) {
             const i = (y * SIZE + x) * 4;
             assert(rgba(first, i) === rgba(next, i), `Typing moved the center of the cat's head`);
+          }
+        }
+        if (preset === orange) {
+          for (let y = 215; y < 320; y++) {
+            for (let x = 0; x < 320; x++) {
+              const i = (y * SIZE + x) * 4;
+              assert(rgba(first, i) === rgba(next, i), 'Orange typing moved the laptop');
+            }
           }
         }
       }
@@ -129,7 +140,7 @@ export function checkCatActions() {
     'Gentle typing did not advance at 250 ms');
 
   for (const eye of Object.keys(catOptions.eye).filter(id => id !== 'Y02') as (keyof typeof catOptions.eye)[]) {
-    const config = { ...orange, eye };
+    const config = { ...calico, eye };
     const straight = snapshot('sit', 0, config);
     render(canvas, config, 'sit', 0, { x: 2, y: 0 });
     const lookingRight = pixels();
@@ -140,5 +151,25 @@ export function checkCatActions() {
     render(canvas, config, 'sit', 0, { x: 0, y: 0 });
     assert(same(pixels(), straight), `Gaze reset did not restore ${eye}`);
   }
+  const orangeMotion = new Motion(canvas, orange);
+  const begin = performance.now();
+  orangeMotion.key(begin);
+  orangeMotion.tick(begin);
+  assert(same(pixels(), snapshot('typing', 0)), 'Orange typing did not start gentle');
+  orangeMotion.tick(begin + 250);
+  assert(same(pixels(), snapshot('typing', 1)), 'Orange gentle typing did not advance at 250 ms');
+  orangeMotion.tick(begin + 500);
+  assert(same(pixels(), snapshot('sit', 5)), 'Orange typing did not stop at 500 ms');
+  orangeMotion.key(begin + 1000);
+  orangeMotion.tick(begin + 1000);
+  for (let i = 1; i <= 5; i++) {
+    orangeMotion.key(begin + 1000 + i * 100);
+    orangeMotion.tick(begin + 1000 + i * 100);
+  }
+  const firstFast = pixels();
+  assert(Array.from({ length: 4 }, (_, i) => snapshot('typing', i, orange, { typingMode: 'fast' }))
+    .some(frame => same(frame, firstFast)), 'Orange typing did not switch to fast above five keys per second');
+  orangeMotion.tick(begin + 1591);
+  assert(!same(pixels(), firstFast), 'Orange fast typing did not advance after 90 ms');
   return 'cat actions ready';
 }

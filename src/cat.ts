@@ -20,11 +20,22 @@ const standardCat = {
   version: 1, frame: 'CAT', accessory: 'A00', ear: 'CE01', muzzle: 'CN01', tail: 'CT01', eye: 'Y01',
 } as const;
 export const catPresets = {
-  preset_cat_orange: { ...standardCat, name: '橘猫', eyeColor: 'amber', palette: 'CC01', pattern: 'P00' },
+  preset_cat_orange: { ...standardCat, name: '橘猫', eyeColor: 'natural', palette: 'CC01', pattern: 'P00' },
   preset_cat_black: { ...standardCat, name: '黑猫', eyeColor: 'natural', palette: 'CC02', pattern: 'P00' },
   preset_cat_calico: { ...standardCat, name: '三花猫', eyeColor: 'green', palette: 'CC03', pattern: 'P00' },
   preset_cat_siamese: { ...standardCat, name: '暹罗猫', eyeColor: 'blue', palette: 'CC04', pattern: 'P00' },
 } satisfies Record<string, CatConfig>;
+
+export function isOrangeCat(config: PetConfig): config is CatConfig & { palette: 'CC01' } {
+  return config.frame === 'CAT' && config.palette === 'CC01';
+}
+
+export const orangeCatOptions = {
+  ...catOptions,
+  eyeColor: { natural: '原色', amber: '琥珀', blue: '蓝色', green: '绿色' },
+  pattern: { P00: '无', P01: '白额线', P02: '眉斑与白颊', P06: '眉斑 + 白额线' },
+  accessory: { ...catOptions.accessory, A00: '无', A06: '蓝色鸭舌帽' },
+} as const;
 
 // Fur base, shadow, highlight, pale coat, pale coat shadow.
 export const blackCatCoat = ['#3B3941', '#2B2930', '#625D67', '#45424D', '#342F39'] as const;

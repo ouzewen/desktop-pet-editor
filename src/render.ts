@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { blackCatCoat, catOptions, catWalkFrames, type CatConfig, type PetConfig } from './cat';
+import { blackCatCoat, catOptions, catWalkFrames, isOrangeCat, type CatConfig, type PetConfig } from './cat';
 import { irisColors, palettes, type Config } from './model';
 
 export const SIZE = 160;
@@ -54,7 +54,7 @@ type FurSlot = typeof furSlots[number];
 const maskPath = (layer: string, slot: FurSlot) => `masks/${layer.split('/').at(-1)}_${slot}`;
 
 function loadLayer(layer: string) {
-  const size = layer.startsWith('cat/hd/') ? CAT_SIZE : SIZE;
+  const size = layer.startsWith('cat/hd/') || layer.startsWith('cat/new_/') ? CAT_SIZE : SIZE;
   const image = new Image();
   image.src = `${import.meta.env.BASE_URL}assets/${layer}.png`;
   return image.decode().then(() => {
@@ -116,8 +116,21 @@ const newCatLayers = [
   'new_point_CC03', 'new_point_CC04', 'new_whiskers', 'new_siamese_ear_base',
 ];
 let catAssets: Promise<void> | undefined;
+const orangePath = 'cat/new_/CAT_';
+// Existing config IDs stay stable; the replacement art uses its own CE01–CE04 filenames.
+const orangeEars = { CE01: 'upright', CE02: 'CE01', CE03: 'CE02', CE04: 'CE03', CE05: 'CE04' } as const;
+const orangeLayers = [
+  'body', 'head_base', 'iris',
+  ...Object.values(orangeEars).map(id => `ear_${id}`),
+  ...['CN02', 'CN03', 'CN04'].map(id => `muzzle_${id}`),
+  ...['P01', 'P02', 'P06'].map(id => `face_${id}`),
+  ...Object.keys(catOptions.accessory).filter(id => id !== 'A00').map(id => `accessory_${id}`),
+  ...Array.from({ length: 4 }, (_, i) => [`typing_gentle_${i}`, `typing_fast_${i}`]).flat(),
+  ...[0, 1, 2].map(i => `typing_front_${i}`),
+];
 export function prepareCatAssets() {
   return catAssets ??= Promise.all([
+    ...orangeLayers.map(layer => orangePath + layer),
     ...newCatLayers.map(layer => `cat/hd/${layer}`),
     ...catFurLayers.flatMap(layer => [
       `cat/${layer}`,
@@ -385,9 +398,59 @@ function newCatFur(layer: string, palette: CatConfig['palette']) {
   return result.canvas;
 }
 
+const orangeIris = new Map<string, HTMLCanvasElement>();
+function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing: boolean, frame: number, pose: CatPose) {
+  // Work in actual 320px coordinates; the outer renderer uses 160 logical units.
+  ctx.save();
+  ctx.scale(0.5, 0.5);
+  const draw = (layer: string) => ctx.drawImage(imageFor(orangePath + layer), 0, 0);
+  const stretch = typing ? 0 : pose.stretch ?? 0;
+  if (!typing && frame >= 17 && frame < 30) ctx.translate(0, -2);
+  if (stretch) {
+    ctx.translate(160, 278);
+    ctx.scale(1 + Math.abs(stretch) * 0.11, 1 - Math.abs(stretch) * 0.055);
+    ctx.translate(-160, -278);
+  }
+  const mode = pose.typingMode ?? 'gentle';
+  const bodyAccessory = config.accessory === 'A04' || config.accessory === 'A05';
+  if (typing) draw(`typing_${mode}_${frame}`);
+  else draw('body');
+  ctx.save();
+  if (typing) {
+    ctx.translate(24, 4);
+    ctx.scale(0.88, 0.88);
+  } else if (stretch) ctx.translate(2 * Math.round(stretch * 7), 0);
+  if (bodyAccessory) draw(`accessory_${config.accessory}`);
+  draw('head_base');
+  draw(`ear_${orangeEars[config.ear]}`);
+  if (config.pattern !== 'P00') draw(`face_${config.pattern}`);
+  if (config.muzzle !== 'CN01') draw(`muzzle_${config.muzzle}`);
+  if (config.eyeColor !== 'natural') {
+    let iris = orangeIris.get(config.eyeColor);
+    if (!iris) {
+      const layer = makeLayer(CAT_SIZE);
+      layer.ctx.drawImage(imageFor(orangePath + 'iris'), 0, 0);
+      layer.ctx.globalCompositeOperation = 'source-in';
+      layer.ctx.fillStyle = irisColors[config.eyeColor];
+      layer.ctx.fillRect(0, 0, CAT_SIZE, CAT_SIZE);
+      iris = layer.canvas;
+      orangeIris.set(config.eyeColor, iris);
+    }
+    ctx.drawImage(iris, 0, 0);
+  }
+  if (!bodyAccessory && config.accessory !== 'A00') draw(`accessory_${config.accessory}`);
+  ctx.restore();
+  if (typing && mode === 'fast' && frame < 3) draw(`typing_front_${frame}`);
+  ctx.restore();
+}
+
 function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number, gaze: Gaze, pose: CatPose) {
   const walking = action === 'left' || action === 'right';
   const typing = action === 'typing';
+  if (!walking && isOrangeCat(config)) {
+    drawOrangeCat(ctx, config, typing, frame, pose);
+    return;
+  }
   const view = walking ? 'walk' : 'sit';
   const breathing = action === 'sit' && frame >= 17 && frame < 30 ? -1 : 0;
   const headY = walking ? frame % 2 : typing ? 1 : 0;
