@@ -8,6 +8,7 @@
 public/assets/
 ├── cat/                  # 160×160 猫基础层（sit_ / walk_ / type_）
 │   ├── hd/               # 320×320 HD 猫素材（new_*），含 HD 眼睛遮罩
+│   │   └── breeds/       # 黑猫、三花猫和暹罗猫的正面及打字层，共用电脑
 │   ├── new_/             # 320×320 LibTV 橘猫分层，只用于橘猫待机和打字
 │   └── masks/            # 160×160 猫的换色遮罩与虹膜遮罩
 ├── frames/               # 160×160 柴犬（M1）身体/头
@@ -57,9 +58,9 @@ aseprite -b --layer ears art/orange-cat/ears/round.aseprite \
 | --- | --- | --- |
 | `muzzle` | CN02–CN04 | `CAT_muzzle_<ID>.png` |
 | `face` | P01、P02、P06 | `CAT_face_<ID>.png` |
-| `accessory` | A01–A06 | `CAT_accessory_<ID>.png` |
+| `accessory` | A01–A03、A06 | `CAT_accessory_<ID>.png` |
 
-鼻子随嘴形一起替换。原小圆嘴 CN01 保存在基础头部。A04 小书包和 A05 围巾源稿的配饰层位于身体之上、头部之下，和运行时遮挡顺序一致。
+鼻子随嘴形一起替换。原小圆嘴 CN01 保存在基础头部。A04 小书包和 A05 围巾的源稿保留在原目录。这两件已从工作台移除，旧配置加载时会切换为 A00 无配饰。
 
 ### 橘猫打字动画
 
@@ -77,6 +78,14 @@ done
 ```
 
 导出后用桌宠 App 的 `--self-test` 检查八帧变化、头部定位和跨速度切换时的电脑与尾巴。
+
+### 黑猫、三花猫与暹罗猫
+
+源稿在 `art/cat-breeds/`。每个品种的 `*-front.aseprite` 有独立的身体、头部、五套耳朵、眼睛与虹膜遮罩、四套嘴鼻和三套可选花纹。打开时显示默认组合，替换零件时切换相应图层。慢打、快打各有四帧源稿，锁定头部、身体和电脑，动作层保留各品种的爪部毛色。三花的右侧行走源稿为 `calico-right-walk.aseprite`，在共用的行走坐标上单独绘制斑块。
+
+正面和打字图层在 `public/assets/cat/hd/breeds/CC02/`、`CC03/`、`CC04/`。正面运行图层以源稿图层名导出为 320×320 PNG。打字依次读取 `typing_body`、`typing_arms_<模式>_<帧号>`、头部、`typing_front_<帧号>` 和共用的 `breeds/typing_laptop.png`。右侧三花颜色层放在 `public/assets/cat/masks/`，以 `_calico_right.png` 结尾。
+
+红蝴蝶结、蓝色小鱼帽、黄色星星发卡和蓝色鸭舌帽共用正面坐标。鸭舌帽在橘猫中使用 `A06`，其他三种猫使用 `A07`。黑猫、三花和暹罗的旧版 `A06` 打字猫配饰加载时会切换为 `A00` 无配饰。打字动画由动作控制。
 
 ## 命名约定
 

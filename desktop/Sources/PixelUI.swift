@@ -201,7 +201,7 @@ struct PixelChecker: View {
 // MARK: - Glyphs
 
 enum PixelIconKind {
-    case bell, plus, close, check, paw, eye, keyboard, chevron, arrowLeft, arrowRight
+    case bell, plus, close, check, paw, eye, keyboard, chevron, arrowLeft, arrowRight, pin, cloud, note, clip, chat, timer
 }
 
 struct PixelGlyph: View {
@@ -244,6 +244,69 @@ struct PixelGlyph: View {
                 "11111111",
                 "........",
                 "...11...",
+            ]
+        case .clip:
+            return [
+                ".111111.",
+                "..1111..",
+                ".111111.",
+                ".1....1.",
+                ".1....1.",
+                ".1....1.",
+                ".111111.",
+                "........",
+            ]
+        case .chat:
+            return [
+                "11111111",
+                "1......1",
+                "1..11..1",
+                "1..11..1",
+                "1......1",
+                "11111111",
+                "..1.....",
+                "........",
+            ]
+        case .timer:
+            return [
+                "..1111..",
+                ".1....1.",
+                "1...1..1",
+                "1...1..1",
+                "1...11.1",
+                ".1....1.",
+                "..1111..",
+                "........",
+            ]
+        case .note:
+            return [
+                "...11..",
+                "...11..",
+                "...11..",
+                "...11..",
+                ".1111..",
+                "1111...",
+                ".11....",
+            ]
+        case .cloud:
+            return [
+                "..111...",
+                ".11111..",
+                "11111111",
+                "11111111",
+                ".111111.",
+                "..1111..",
+            ]
+        case .pin:
+            // A staple seen from the front: crown plus two legs, with the
+            // clinched tips bent inwards.
+            return [
+                "11111111",
+                "11....11",
+                "11....11",
+                "11....11",
+                "11....11",
+                "..1..1..",
             ]
         case .plus:
             return [
@@ -437,10 +500,21 @@ struct PixelSlider: View {
     let step: Double
     let palette: PixelPalette
 
+    private var span: Double { max(range.upperBound - range.lowerBound, 0.0001) }
+
+    /// Dragging is continuous: the track maps the pointer straight to the range
+    /// and only rounds to whole units, so the thumb follows the mouse instead of
+    /// jumping between steps. `step` stays for keyboard and VoiceOver.
+    private func apply(_ x: CGFloat, width: CGFloat) {
+        let fraction = min(max(x / max(width, 1), 0), 1)
+        let raw = range.lowerBound + Double(fraction) * span
+        value = min(max(raw.rounded(), range.lowerBound), range.upperBound)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
-            let progress = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+            let progress = (value - range.lowerBound) / span
             let thumbX = min(max(CGFloat(progress) * width, 0), width)
             ZStack(alignment: .leading) {
                 PixelBox(corner: 2).fill(palette.panelDeep).frame(height: 6)
@@ -451,14 +525,11 @@ struct PixelSlider: View {
                     .frame(width: 10, height: 14)
                     .offset(x: thumbX - 5)
             }
-            .frame(height: 16)
+            .frame(width: width, height: 20)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { gesture in
-                    let fraction = min(max(gesture.location.x / width, 0), 1)
-                    let raw = range.lowerBound + Double(fraction) * (range.upperBound - range.lowerBound)
-                    let stepped = (raw / step).rounded() * step
-                    value = min(max(stepped, range.lowerBound), range.upperBound)
+                    apply(gesture.location.x, width: width)
                 }
             )
             .accessibilityValue("\(Int(value))")
@@ -470,7 +541,25 @@ struct PixelSlider: View {
                 }
             }
         }
-        .frame(height: 16)
+        .frame(height: 20)
+    }
+}
+
+// MARK: - Window drag
+
+/// Draggable strip for the workbench header. The window itself no longer enables
+/// `isMovableByWindowBackground`, because that setting takes mouse drags away
+/// from SwiftUI gestures and made the custom slider impossible to drag.
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
     }
 }
 

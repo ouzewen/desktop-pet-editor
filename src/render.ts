@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { blackCatCoat, catOptions, catWalkFrames, isOrangeCat, type CatConfig, type PetConfig } from './cat';
+import { blackCatCoat, catOptions, catWalkFrames, orangeCatOptions, type CatConfig, type PetConfig } from './cat';
 import { irisColors, palettes, type Config } from './model';
 
 export const SIZE = 160;
@@ -82,67 +82,54 @@ export const assetsReady = Promise.all([
 });
 
 const catWalkBodies = Array.from({ length: catWalkFrames }, (_, index) => `walk_body_${index}`);
-const catViews = ['sit', 'walk'] as const;
-const extraCatEars = Object.keys(catOptions.ear).filter(id => id === 'CE02' || id === 'CE04');
 const extraCatMuzzles = Object.keys(catOptions.muzzle).filter(id => id !== 'CN01');
 const catEyes = Object.keys(catOptions.eye);
-const catFurLayers = [
-  ...catViews.flatMap(view => [
-    `${view}_head_alt`,
-    ...extraCatEars.map(id => `${view}_ear_${id}`),
-    ...extraCatMuzzles.map(id => `${view}_muzzle_${id}`),
-  ]),
-  'sit_body', 'sit_head', 'sit_ears', 'sit_tail', 'sit_muzzle',
-  'type_body', 'type_tail', 'type_paw_l0', 'type_paw_l1', 'type_paw_r0', 'type_paw_r1',
-  ...catWalkBodies, 'walk_head', 'walk_ears', 'walk_tail', 'walk_muzzle',
+const catWalkFurLayers = [
+  ...catWalkBodies, 'walk_head', 'walk_head_alt', 'walk_ears', 'walk_tail', 'walk_muzzle',
+  'walk_ear_CE02', 'walk_ear_CE04',
+  ...extraCatMuzzles.map(id => `walk_muzzle_${id}`),
 ];
 const catCalicoLayers = new Set([
-  'sit_body', 'sit_head', 'sit_tail', 'type_body', 'type_tail',
-  ...catViews.map(view => `${view}_head_alt`),
-  ...catWalkBodies, 'walk_head', 'walk_tail',
+  ...catWalkBodies, 'walk_head', 'walk_head_alt', 'walk_tail',
 ]);
 const catFurSlots = ['g', 's', 'l', 'w', 'd'] as const;
 const catMarkings = ['P01', 'P02'] as const;
-const newCatLayers = [
-  ...['CE02', 'CE03', 'CE04', 'CE05'].flatMap(id =>
-    ['', '_g', '_s', '_l'].map(slot => `new_ear_${id}${slot}`)),
-  ...['CN02', 'CN03', 'CN04'].map(id => `new_mouth_${id}`),
-  ...['Y05', 'Y06', 'Y07'].flatMap(id => [`new_eye_${id}`, `new_eye_${id}_iris`]),
-  ...['A01', 'A02', 'A03', 'A04', 'A05'].map(id => `new_accessory_${id}`),
-  ...['CC01', 'CC02', 'CC03', 'CC04'].map(id => `new_coat_${id}`),
-  ...Array.from({ length: 4 }, (_, frame) =>
-    [`new_fast_${frame}`, `new_fast_paw_${frame}`, ...['', '_g', '_s', '_l'].map(slot => `new_fast_arm_${frame}${slot}`)]).flat(),
-  'new_slow', 'new_slow_paw', 'new_typing_icon', 'new_mark_P01', 'new_mark_P02',
-  'new_point_CC03', 'new_point_CC04', 'new_whiskers', 'new_siamese_ear_base',
-];
 let catAssets: Promise<void> | undefined;
 const orangePath = 'cat/new_/CAT_';
-const orangeEars = { CE01: 'upright', CE02: 'folded', CE03: 'round', CE04: 'droopy', CE05: 'curled' } as const;
-const orangeLayers = [
-  'body', 'head_base', 'iris',
-  ...Object.values(orangeEars).map(id => `ear_${id}`),
+const breedLaptop = 'cat/hd/breeds/typing_laptop';
+const breedPath = (palette: CatConfig['palette']) => `cat/hd/breeds/${palette}/`;
+const catFrontEars = { CE01: 'upright', CE02: 'folded', CE03: 'round', CE04: 'droopy', CE05: 'curled' } as const;
+const commonFrontLayers = [
+  'body', 'iris',
+  ...Object.values(catFrontEars).map(id => `ear_${id}`),
   ...['CN02', 'CN03', 'CN04'].map(id => `muzzle_${id}`),
   ...['P01', 'P02', 'P06'].map(id => `face_${id}`),
-  ...Object.keys(catOptions.accessory).filter(id => id !== 'A00').map(id => `accessory_${id}`),
-  'typing_body', 'typing_laptop',
+  'typing_body',
   ...Array.from({ length: 4 }, (_, i) => [`typing_arms_gentle_${i}`, `typing_arms_fast_${i}`]).flat(),
   ...[0, 1, 2].map(i => `typing_front_${i}`),
 ];
+const orangeLayers = [
+  ...commonFrontLayers, 'head_base', 'typing_laptop',
+  ...Object.keys(orangeCatOptions.accessory).filter(id => id !== 'A00').map(id => `accessory_${id}`),
+];
+const breedLayers = [
+  ...commonFrontLayers, 'head', 'eyes', 'aperture', 'muzzle_CN01', 'eye_Y02',
+  ...catEyes.filter(id => id !== 'Y01' && id !== 'Y02')
+    .flatMap(id => [`eye_${id}`, `eye_${id}_iris`, `eye_${id}_aperture`]),
+];
 export function prepareCatAssets() {
   return catAssets ??= Promise.all([
+    breedLaptop,
     ...orangeLayers.map(layer => orangePath + layer),
-    ...newCatLayers.map(layer => `cat/hd/${layer}`),
-    ...catFurLayers.flatMap(layer => [
+    ...(['CC02', 'CC03', 'CC04'] as const).flatMap(palette => breedLayers.map(layer => breedPath(palette) + layer)),
+    ...catWalkFurLayers.flatMap(layer => [
       `cat/${layer}`,
       ...catFurSlots.map(slot => `cat/masks/${layer}_${slot}`),
-      ...(catCalicoLayers.has(layer) ? [`cat/masks/${layer}_calico`] : []),
+      ...(catCalicoLayers.has(layer) ? [`cat/masks/${layer}_calico`, `cat/masks/${layer}_calico_right`] : []),
     ]),
-    'cat/type_keyboard', 'cat/type_screen',
-    ...catViews.flatMap(view => [
-      ...catEyes.map(eye => `cat/${view}_eye_${eye}`),
-      ...catEyes.filter(eye => eye !== 'Y02').map(eye => `cat/masks/${view}_eye_${eye}_iris`),
-      ...catMarkings.map(mark => `cat/${view}_face_${mark}`),
-    ]),
+    ...catEyes.map(eye => `cat/walk_eye_${eye}`),
+    ...catEyes.filter(eye => eye !== 'Y02').map(eye => `cat/masks/walk_eye_${eye}_iris`),
+    ...catMarkings.map(mark => `cat/walk_face_${mark}`),
   ].map(loadLayer)).then(entries => {
     for (const [name, image] of entries) {
       if (!image) throw Error(`缺少猫图层 · ${name}`);
@@ -285,10 +272,11 @@ function drawFront(ctx: CanvasRenderingContext2D, config: Config, typing: boolea
   }
 }
 
-function catFur(layer: string, palette: CatConfig['palette']) {
+function catWalkFur(layer: string, palette: CatConfig['palette'], side: 'left' | 'right') {
   const source = imageFor(`cat/${layer}`);
   if (palette === 'CC01' || (palette === 'CC03' && !catCalicoLayers.has(layer))) return source;
-  const key = `cat/${layer}/${palette}`;
+  const otherFlank = palette === 'CC03' && side === 'right';
+  const key = `cat/${layer}/${palette}${otherFlank ? '/right' : ''}`;
   const existing = tinted.get(key);
   if (existing) return existing;
 
@@ -308,32 +296,42 @@ function catFur(layer: string, palette: CatConfig['palette']) {
   } else if (palette === 'CC02') {
     catFurSlots.forEach((slot, index) => apply(slot, blackCatCoat[index]!));
   } else {
-    result.ctx.drawImage(imageFor(`cat/masks/${layer}_calico`), 0, 0);
+    result.ctx.drawImage(imageFor(`cat/masks/${layer}_calico${otherFlank ? '_right' : ''}`), 0, 0);
   }
   tinted.set(key, result.canvas);
   return result.canvas;
 }
 
-function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
-  const key = `${name}/${irisColor ?? 'natural'}/${gaze.x}/${gaze.y}`;
+function tintCatEye(sourcePath: string, irisMask: string, color?: string) {
+  const source = imageFor(sourcePath);
+  if (!color) return source;
+  const key = `${sourcePath}/${color}`;
+  const cached = tinted.get(key);
+  if (cached) return cached;
+  const result = makeLayer(source.naturalWidth);
+  const mask = makeLayer(source.naturalWidth);
+  paintMask(mask.ctx, irisMask, color);
+  result.ctx.drawImage(source, 0, 0);
+  result.ctx.drawImage(mask.canvas, 0, 0);
+  tinted.set(key, result.canvas);
+  return result.canvas;
+}
+
+function gazeEye(sourcePath: string, irisMask: string, aperture: string, irisColor: string | undefined, gaze: Gaze) {
+  const key = `${sourcePath}/${irisColor ?? 'natural'}/${gaze.x}/${gaze.y}`;
   const cached = gazeFrameCache.get(key);
   if (cached) return cached;
 
-  const source = imageFor(catLayerPath(name));
-  const irisMask = catIrisPath(name);
+  const source = imageFor(sourcePath);
   const size = source.naturalWidth;
   // The bundled PNGs can be composited under WebKit's file-origin rules.
   const pupil = makeLayer(size);
-  if (irisColor) {
-    paintMask(pupil.ctx, irisMask, irisColor);
-  } else {
-    pupil.ctx.drawImage(imageFor(irisMask), 0, 0);
-    pupil.ctx.globalCompositeOperation = 'source-in';
-    pupil.ctx.drawImage(source, 0, 0);
-  }
+  pupil.ctx.drawImage(tintCatEye(sourcePath, irisMask, irisColor), 0, 0);
+  pupil.ctx.globalCompositeOperation = 'destination-in';
+  pupil.ctx.drawImage(imageFor(aperture), 0, 0);
 
   const socket = makeLayer(size);
-  paintMask(socket.ctx, irisMask, '#442416');
+  paintMask(socket.ctx, aperture, aperture === irisMask ? '#442416' : '#fff9ef');
   const shifted = makeLayer(size);
   shifted.ctx.drawImage(pupil.canvas, gaze.x * size / SIZE, gaze.y * size / SIZE);
   shifted.ctx.globalCompositeOperation = 'destination-in';
@@ -343,67 +341,46 @@ function gazeEye(name: string, irisColor: string | undefined, gaze: Gaze) {
   result.ctx.drawImage(source, 0, 0);
   result.ctx.drawImage(socket.canvas, 0, 0);
   result.ctx.drawImage(shifted.canvas, 0, 0);
+  // Avoid retaining a full 320px canvas for every color, breed, and pointer position.
+  const oldest = gazeFrameCache.keys().next().value;
+  if (gazeFrameCache.size >= 64 && oldest) gazeFrameCache.delete(oldest);
   gazeFrameCache.set(key, result.canvas);
   return result.canvas;
 }
 
-function catLayerPath(name: string) {
-  return name.startsWith('new_') ? `cat/hd/${name}` : `cat/${name}`;
+function walkCatEye(config: CatConfig, gaze: Gaze) {
+  const source = `cat/walk_eye_${config.eye}`;
+  if (config.eye === 'Y02') return imageFor(source);
+  const irisMask = `cat/masks/walk_eye_${config.eye}_iris`;
+  const color = config.eyeColor === 'natural'
+    ? (config.palette === 'CC02' ? '#C5D856' : undefined)
+    : irisColors[config.eyeColor];
+  if (gaze.x || gaze.y) return gazeEye(source, irisMask, irisMask, color, gaze);
+  return tintCatEye(source, irisMask, color);
 }
 
-function catIrisPath(name: string) {
-  return name.startsWith('new_') ? `cat/hd/${name}_iris` : `cat/masks/${name}_iris`;
-}
-
-function catEye(
-  view: typeof catViews[number],
-  eye: CatConfig['eye'],
-  color: CatConfig['eyeColor'],
-  palette: CatConfig['palette'],
-  gaze: Gaze = noGaze,
-) {
-  const name = view === 'sit' && ['Y05', 'Y06', 'Y07'].includes(eye) ? `new_eye_${eye}` : `${view}_eye_${eye}`;
-  const source = imageFor(catLayerPath(name));
-  const irisColor = color === 'natural' ? (palette === 'CC02' ? '#C5D856' : undefined) : irisColors[color];
-  if (eye !== 'Y02' && (gaze.x !== 0 || gaze.y !== 0)) return gazeEye(name, irisColor, gaze);
-  if (!irisColor || eye === 'Y02') return source;
-  const key = `${catLayerPath(name)}/${irisColor}`;
-  const existing = tinted.get(key);
-  if (existing) return existing;
-  const result = makeLayer(source.naturalWidth);
-  const mask = makeLayer(source.naturalWidth);
-  paintMask(mask.ctx, catIrisPath(name), irisColor);
-  result.ctx.drawImage(source, 0, 0);
-  result.ctx.drawImage(mask.canvas, 0, 0);
-  tinted.set(key, result.canvas);
-  return result.canvas;
-}
-
-function newCatFur(layer: string, palette: CatConfig['palette']) {
-  const path = `cat/hd/new_${layer}`;
-  const source = imageFor(path);
-  if (palette === 'CC01' || palette === 'CC03') return source;
-  const key = `${path}/${palette}`;
-  const cached = tinted.get(key);
-  if (cached) return cached;
-  const result = makeLayer(CAT_SIZE);
-  const mask = makeLayer(CAT_SIZE);
-  const colors = palette === 'CC02' ? blackCatCoat : ['#704932', '#4C2D20', '#946B4F'];
-  result.ctx.drawImage(source, 0, 0);
-  furSlots.forEach((slot, i) => {
-    paintMask(mask.ctx, `${path}_${slot}`, colors[i]!);
-    result.ctx.drawImage(mask.canvas, 0, 0);
-  });
-  tinted.set(key, result.canvas);
-  return result.canvas;
+function frontCatEye(config: CatConfig, eye: CatConfig['eye'], gaze: Gaze) {
+  const path = breedPath(config.palette);
+  const alternate = eye === 'Y01' ? '' : `eye_${eye}_`;
+  const source = path + (eye === 'Y01' ? 'eyes' : `eye_${eye}`);
+  if (eye === 'Y02') return imageFor(source);
+  const irisMask = path + alternate + 'iris';
+  const defaultColor = config.palette === 'CC03' ? 'green' : config.palette === 'CC04' ? 'blue' : 'natural';
+  const color = config.eyeColor === 'natural' || config.eyeColor === defaultColor ? undefined : irisColors[config.eyeColor];
+  if (gaze.x || gaze.y) return gazeEye(source, irisMask, path + alternate + 'aperture', color, gaze);
+  return tintCatEye(source, irisMask, color);
 }
 
 const orangeIris = new Map<string, HTMLCanvasElement>();
-function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing: boolean, frame: number, pose: CatPose) {
+function drawCatFront(ctx: CanvasRenderingContext2D, config: CatConfig, typing: boolean, frame: number, gaze: Gaze, pose: CatPose) {
+  const orange = config.palette === 'CC01';
+  const path = orange ? orangePath : breedPath(config.palette);
+  const accessory = config.accessory === 'A07' ? 'A06' : config.accessory;
+  const mode = pose.typingMode ?? 'gentle';
   // Work in actual 320px coordinates; the outer renderer uses 160 logical units.
   ctx.save();
   ctx.scale(0.5, 0.5);
-  const draw = (layer: string) => ctx.drawImage(imageFor(orangePath + layer), 0, 0);
+  const draw = (layer: string) => ctx.drawImage(imageFor(path + layer), 0, 0);
   const stretch = typing ? 0 : pose.stretch ?? 0;
   if (!typing && frame >= 17 && frame < 30) ctx.translate(0, -2);
   if (stretch) {
@@ -411,8 +388,6 @@ function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing:
     ctx.scale(1 + Math.abs(stretch) * 0.11, 1 - Math.abs(stretch) * 0.055);
     ctx.translate(-160, -278);
   }
-  const mode = pose.typingMode ?? 'gentle';
-  const bodyAccessory = config.accessory === 'A04' || config.accessory === 'A05';
   if (typing) {
     draw('typing_body');
     draw(`typing_arms_${mode}_${frame}`);
@@ -424,12 +399,15 @@ function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing:
     ctx.translate(24, 4);
     ctx.scale(0.88, 0.88);
   } else if (stretch) ctx.translate(2 * Math.round(stretch * 7), 0);
-  if (bodyAccessory) draw(`accessory_${config.accessory}`);
-  draw('head_base');
-  draw(`ear_${orangeEars[config.ear]}`);
+  draw(orange ? 'head_base' : 'head');
+  draw(`ear_${catFrontEars[config.ear]}`);
   if (config.pattern !== 'P00') draw(`face_${config.pattern}`);
-  if (config.muzzle !== 'CN01') draw(`muzzle_${config.muzzle}`);
-  if (config.eyeColor !== 'natural') {
+  if (!orange) {
+    const eye = !typing && frame >= 25 && frame <= 26 ? 'Y02' : config.eye;
+    ctx.drawImage(frontCatEye(config, eye, typing ? noGaze : gaze), 0, 0);
+  }
+  if (!orange || config.muzzle !== 'CN01') draw(`muzzle_${config.muzzle}`);
+  if (orange && config.eyeColor !== 'natural') {
     let iris = orangeIris.get(config.eyeColor);
     if (!iris) {
       const layer = makeLayer(CAT_SIZE);
@@ -442,95 +420,41 @@ function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing:
     }
     ctx.drawImage(iris, 0, 0);
   }
-  if (!bodyAccessory && config.accessory !== 'A00') draw(`accessory_${config.accessory}`);
+  if (accessory !== 'A00') ctx.drawImage(imageFor(`${orangePath}accessory_${accessory}`), 0, 0);
   ctx.restore();
   if (typing) {
     if (mode === 'fast' && frame < 3) draw(`typing_front_${frame}`);
-    draw('typing_laptop');
+    ctx.drawImage(imageFor(orange ? orangePath + 'typing_laptop' : breedLaptop), 0, 0);
   }
   ctx.restore();
 }
 
-function drawCat(ctx: CanvasRenderingContext2D, config: CatConfig, action: Action, frame: number, gaze: Gaze, pose: CatPose) {
-  const walking = action === 'left' || action === 'right';
-  const typing = action === 'typing';
-  if (!walking && isOrangeCat(config)) {
-    drawOrangeCat(ctx, config, typing, frame, pose);
-    return;
-  }
-  const view = walking ? 'walk' : 'sit';
-  const breathing = action === 'sit' && frame >= 17 && frame < 30 ? -1 : 0;
-  const headY = walking ? frame % 2 : typing ? 1 : 0;
-  // The sitting face is centered at x=83, the typing chest at x=80.
-  const headX = typing ? -3 : 0;
-  const drawFur = (layer: string, y = 0) => ctx.drawImage(catFur(layer, config.palette), 0, y);
-  const drawNew = (layer: string, x = 0, y = 0) =>
-    ctx.drawImage(imageFor(`cat/hd/new_${layer}`), x, y, SIZE, SIZE);
+function drawWalkingCat(ctx: CanvasRenderingContext2D, config: CatConfig, side: 'left' | 'right', frame: number, gaze: Gaze, pose: CatPose) {
+  const headY = frame % 2;
+  const drawFur = (layer: string, y = 0) => ctx.drawImage(catWalkFur(layer, config.palette, side), 0, y);
   const stretch = pose.stretch ?? 0;
-  ctx.translate(0, breathing);
   if (stretch) {
     ctx.translate(80, 139);
     ctx.scale(1 + Math.abs(stretch) * 0.11, 1 - Math.abs(stretch) * 0.055);
     ctx.translate(-80, -139);
   }
-  const tailShift = walking ? [0, -1, 0, 1][frame]!
-    : action === 'sit' ? [0, -1, -2, -2, -1, 0][Math.floor((frame - 30) / 2)] ?? 0 : 0;
-  if (walking || typing) {
-    drawFur(typing ? 'type_tail' : 'walk_tail', tailShift);
-    drawFur(walking ? catWalkBodies[frame]! : 'type_body');
-  } else {
-    drawNew(`coat_${config.palette}`);
-  }
-
-  if (typing && pose.typingMode === 'fast') {
-    ctx.drawImage(newCatFur(`fast_arm_${frame}`, config.palette), 0, 0, SIZE, SIZE);
-  }
-  const accessory = config.accessory;
-  if (!walking && (accessory === 'A04' || accessory === 'A05')) drawNew(`accessory_${accessory}`);
+  drawFur('walk_tail', [0, -1, 0, 1][frame]);
+  drawFur(catWalkBodies[frame]!);
   ctx.save();
-  ctx.translate(headX + Math.round(stretch * 7), 0);
-  const upright = config.ear === 'CE01';
+  ctx.translate(Math.round(stretch * 7), 0);
   const sideEar = config.ear === 'CE03' ? 'CE01' : config.ear === 'CE05' ? 'CE02' : config.ear;
-  if (upright || (walking && sideEar === 'CE01')) drawFur(`${view}_ears`, headY);
-  const head = upright || (walking && sideEar === 'CE01') ? `${view}_head` : `${view}_head_alt`;
-  const headPalette = !walking && config.palette === 'CC03' ? 'CC01' : config.palette;
-  ctx.drawImage(catFur(head, headPalette), 0, headY);
-  if (!walking && upright && config.palette === 'CC04') drawNew('siamese_ear_base', 0, headY);
-  if (!walking && (config.palette === 'CC03' || config.palette === 'CC04')) {
-    drawNew(`point_${config.palette}`, 0, headY);
-  }
-  for (const mark of ['P01', 'P02'] as const) {
-    if (config.pattern !== mark && config.pattern !== 'P06') continue;
-    if (walking) ctx.drawImage(imageFor(`cat/${view}_face_${mark}`), 0, headY);
-    else drawNew(`mark_${mark}`, 0, headY);
-  }
-  const blink = action === 'sit' && frame >= 25 && frame <= 26;
-  const look = typing ? noGaze : action === 'right' ? { x: -gaze.x, y: gaze.y } : gaze;
-  const eyes = catEye(view, blink ? 'Y02' : config.eye, config.eyeColor, config.palette, look);
-  ctx.drawImage(eyes, 0, headY + (typing ? 1 : 0), SIZE, SIZE);
-  if (walking || config.muzzle === 'CN01') {
-    drawFur(config.muzzle === 'CN01' ? `${view}_muzzle` : `${view}_muzzle_${config.muzzle}`, headY);
-  } else {
-    drawNew('whiskers', 0, headY);
-    drawNew(`mouth_${config.muzzle}`, 0, headY);
-  }
-  if (!upright) {
-    if (walking && sideEar !== 'CE01') drawFur(`walk_ear_${sideEar}`, headY);
-    if (!walking) ctx.drawImage(newCatFur(`ear_${config.ear}`, config.palette), 0, headY, SIZE, SIZE);
-  }
-  if (!walking && (accessory === 'A01' || accessory === 'A02' || accessory === 'A03')) {
-    drawNew(`accessory_${accessory}`, 0, headY);
-  }
-  ctx.restore();
-  if (typing || accessory === 'A06' && !walking) {
-    if (typing && pose.typingMode === 'fast') {
-      drawNew(`fast_${frame}`);
-      drawNew(`fast_paw_${frame}`);
-    } else {
-      drawNew(accessory === 'A06' ? 'typing_icon' : 'slow');
-      if (typing) drawNew('slow_paw', 0, frame % 2 ? -1 : 0);
+  if (sideEar === 'CE01') drawFur('walk_ears', headY);
+  drawFur(sideEar === 'CE01' ? 'walk_head' : 'walk_head_alt', headY);
+  for (const mark of catMarkings) {
+    if (config.pattern === mark || config.pattern === 'P06') {
+      ctx.drawImage(imageFor(`cat/walk_face_${mark}`), 0, headY);
     }
   }
+  const look = side === 'right' ? { x: -gaze.x, y: gaze.y } : gaze;
+  ctx.drawImage(walkCatEye(config, look), 0, headY, SIZE, SIZE);
+  drawFur(config.muzzle === 'CN01' ? 'walk_muzzle' : `walk_muzzle_${config.muzzle}`, headY);
+  if (sideEar !== 'CE01') drawFur(`walk_ear_${sideEar}`, headY);
+  ctx.restore();
 }
 
 export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Action = 'sit', frame = 0, gaze: Gaze = noGaze, catPose: CatPose = {}) {
@@ -552,7 +476,7 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
     if (action === 'left' || action === 'right') {
       const left = makeLayer(size);
       left.ctx.scale(size / SIZE, size / SIZE);
-      if (config.frame === 'CAT') drawCat(left.ctx, config, action, pose, gaze, catPose);
+      if (config.frame === 'CAT') drawWalkingCat(left.ctx, config, action, pose, gaze, catPose);
       else drawRun(left.ctx, config, pose);
       if (action === 'right') {
         ctx.translate(SIZE, 0);
@@ -560,7 +484,7 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
       }
       ctx.drawImage(left.canvas, 0, 0, SIZE, SIZE);
     } else if (config.frame === 'CAT') {
-      drawCat(ctx, config, action, pose, gaze, catPose);
+      drawCatFront(ctx, config, action === 'typing', pose, gaze, catPose);
     } else {
       drawFront(ctx, config, action === 'typing', pose);
     }

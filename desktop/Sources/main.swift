@@ -8,17 +8,128 @@ final class PetPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Sits behind the web view and accepts file drags; the web view ignores them,
+/// so AppKit walks up to this view as the drop destination.
+final class DropView: NSView {
+    var onFilesDropped: (([URL]) -> Void)?
+    var onDragActiveChanged: ((Bool) -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web enter urls=\(urls.count)")
+        guard !urls.isEmpty else { return [] }
+        onDragActiveChanged?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = TrashService.fileURLs(from: sender)
+        return urls.isEmpty ? [] : .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        DropLog.write("web exit")
+        onDragActiveChanged?(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web prepare urls=\(urls.count)")
+        return !urls.isEmpty
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web perform urls=\(urls.count)")
+        onDragActiveChanged?(false)
+        guard !urls.isEmpty else { return false }
+        onFilesDropped?(urls)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        DropLog.write("web conclude")
+    }
+}
+
 final class PetView: WKWebView {
     var send: (String) -> Void = { _ in }
     var menuForPet: () -> NSMenu = { NSMenu() }
+    /// Runs right after the panel moves, in the same drag event, so attached
+    /// cards are repositioned before the next frame instead of trailing the pet.
+    var onMove: () -> Void = {}
+    /// True while the focus card is pinned: the pet stays put when dragged.
+    var isLocked: () -> Bool = { false }
     private var start: NSPoint?
     private var origin: NSPoint = .zero
     private var previousX: CGFloat = 0
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    // WKWebView is the hit view for the whole panel, so it has to be the drop
+    // destination itself; a view underneath never sees the drag.
+    var onFilesDropped: (([URL]) -> Void)?
+    var onDragActiveChanged: ((Bool) -> Void)?
+
+    override init(frame: NSRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web enter urls=\(urls.count)")
+        guard !urls.isEmpty else { return [] }
+        onDragActiveChanged?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = TrashService.fileURLs(from: sender)
+        return urls.isEmpty ? [] : .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        DropLog.write("web exit")
+        onDragActiveChanged?(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web prepare urls=\(urls.count)")
+        return !urls.isEmpty
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = TrashService.fileURLs(from: sender)
+        DropLog.write("web perform urls=\(urls.count)")
+        onDragActiveChanged?(false)
+        guard !urls.isEmpty else { return false }
+        onFilesDropped?(urls)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        DropLog.write("web conclude")
+    }
+
     override func mouseDown(with event: NSEvent) {
-        guard let window else { return }
+        guard !isLocked(), let window else { return }
         let point = NSEvent.mouseLocation
         start = point
         previousX = point.x
@@ -27,9 +138,10 @@ final class PetView: WKWebView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let start, let window else { return }
+        guard !isLocked(), let start, let window else { return }
         let point = NSEvent.mouseLocation
         window.setFrameOrigin(NSPoint(x: origin.x + point.x - start.x, y: origin.y + point.y - start.y))
+        onMove()
         let dx = point.x - previousX
         if dx != 0 { send("drag(\(dx))") }
         previousX = point.x
@@ -58,7 +170,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         return PetView(frame: .zero, configuration: config)
     }()
-    private let preview = WKWebView(frame: .zero)
+    private let preview: WKWebView = {
+        let config = WKWebViewConfiguration()
+        // This view only loads bundled content. Pixel editing needs canvas readback.
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        return WKWebView(frame: .zero, configuration: config)
+    }()
     private let workbenchState = WorkbenchState()
     private var workbenchWindow: NSWindow?
     private var previewReady = false
@@ -74,6 +191,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var requestedTypingPermission = false
     private var ready = false
     private var suppressWorkbenchReopen = false
+    private var reopenSuppressionToken = 0
     private var eyeFollow = true
     private var gazeTimer: Timer?
     private var petGaze: (x: Int, y: Int)?
@@ -88,9 +206,51 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var reminderInputShiftedOrigin: NSPoint?
     private let reminderInput = ReminderInputModel()
     private var reminderObserver: NSObjectProtocol?
-    private let focus = FocusModel()
+    private let focus = FocusModel(automaticTimer: !CommandLine.arguments.contains("--self-test"))
     private var focusHost: ReminderHostingView<FocusCard>?
     private var focusWindow: ReminderPanel?
+    private let focusMinutesInput = FocusMinutesModel()
+    private var focusMinutesWindow: ReminderPanel?
+    private let weather = WeatherModel()
+    private var weatherWindow: ReminderPanel?
+    private let weatherCityInput = WeatherCityModel()
+    private var weatherCityWindow: ReminderPanel?
+    private var weatherTimer: Timer?
+    private var weatherRetryAt: Date?
+    private let music = MusicWatcher()
+    private var musicWindow: ReminderPanel?
+    private let clipboard = ClipboardStore()
+    private var clipboardWindow: ReminderPanel?
+    private var clipboardClickMonitor: Any?
+    private let translationEngine = TranslationEngine()
+    private var translateButtonWindow: ReminderPanel?
+    private var translationWindow: ReminderPanel?
+    private var pendingSelection: String?
+    private var currentTranslation: String?
+    private var selectionDownPoint: NSPoint?
+    private var selectionUpMonitor: Any?
+    private var selectionDownMonitor: Any?
+    private var translationDismissMonitor: Any?
+    private var translationTrustRequested = false
+    private let chatMemory = PetMemory()
+    private lazy var chatBrain = ChatBrain(memory: chatMemory)
+    private var chatModel: ChatModel?
+    private var chatWindow: ReminderPanel?
+    private var chatDismissMonitor: Any?
+    private var dropView: DropView?
+    private var pixelEditorWindow: NSWindow?
+    private var dropChoiceWindow: ReminderPanel?
+    private var dropChoiceURL: URL?
+    private var dropChoiceKind: FileKind = .unsupported
+    private var dropChoiceMonitor: Any?
+    private var dropChoiceLocalMonitor: Any?
+    private var quickBarWindow: ReminderPanel?
+    private var quickBarTimer: Timer?
+    private var quickBarLeaveAt: Date?
+    private var quickBarPetOrigin: NSPoint?
+    private var quickBarAdjusting = false
+    private var trashToastWindow: ReminderPanel?
+    private var trashToastHide: DispatchWorkItem?
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -106,7 +266,31 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         web.navigationDelegate = self
         web.send = { [weak self] in self?.send($0) }
         web.menuForPet = { [weak self] in self?.makeMenu() ?? NSMenu() }
-        panel.contentView = web
+        let container = DropView(frame: panel.contentRect(forFrameRect: panel.frame))
+        container.autoresizingMask = [.width, .height]
+        container.onFilesDropped = { [weak self] urls in self?.handleFileDrop(urls) }
+        container.onDragActiveChanged = { [weak self] active in
+            if active {
+                self?.showTrashToast("松手选择操作", tone: .hint, autoHide: nil)
+            } else {
+                self?.hideTrashToast()
+            }
+        }
+        web.frame = container.bounds
+        web.autoresizingMask = [.width, .height]
+        container.addSubview(web)
+        panel.contentView = container
+        dropView = container
+        web.onFilesDropped = { [weak self] urls in self?.handleFileDrop(urls) }
+        web.onDragActiveChanged = { [weak self] active in
+            if active {
+                self?.showTrashToast("松手选择操作", tone: .hint, autoHide: nil)
+            } else {
+                self?.hideTrashToast()
+            }
+        }
+        web.onMove = { [weak self] in self?.layoutReminder() }
+        web.isLocked = { [weak self] in self?.focus.pinned ?? false }
         configureWorkbench()
         let prefs = UserDefaults.standard
         eyeFollow = prefs.object(forKey: "shibaEyeFollow") as? Bool ?? true
@@ -114,7 +298,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         loadReminders()
         workbenchState.visible = prefs.object(forKey: "shibaVisible") as? Bool ?? (prefs.string(forKey: "shibaConfig") != nil)
         let savedSize = prefs.object(forKey: "shibaSize") as? Double ?? 240
-        workbenchState.petSize = min(360, max(160, savedSize))
+        workbenchState.petSize = min(320, max(120, savedSize))
         panel.setContentSize(NSSize(width: workbenchState.petSize, height: workbenchState.petSize))
         resetPosition()
         reminderObserver = NotificationCenter.default.addObserver(
@@ -124,8 +308,29 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
 
         focus.onChange = { [weak self] in self?.focusSessionChanged() }
+        weather.onChange = { [weak self] in
+            guard let self else { return }
+            self.status.menu = self.makeMenu()
+        }
+        clipboard.onChange = { [weak self] in
+            guard let self else { return }
+            self.status.menu = self.makeMenu()
+        }
+        music.onChange = { [weak self] name in
+            guard let self else { return }
+            self.status.menu = self.makeMenu()
+            if let name {
+                self.showMusicBadge(app: name)
+            } else {
+                self.hideMusicBadge()
+            }
+        }
 
-        status.button?.title = "桌宠"
+        status.button?.title = ""
+        status.button?.image = makeStatusIcon()
+        status.button?.imagePosition = .imageOnly
+        status.button?.toolTip = "桌宠"
+        status.button?.setAccessibilityLabel("桌宠")
         status.menu = makeMenu()
         guard let resources = Bundle.main.resourceURL else { NSApp.terminate(nil); return }
         web.loadFileURL(resources.appendingPathComponent("pet.html"), allowingReadAccessTo: resources)
@@ -133,6 +338,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         preview.navigationDelegate = self
         preview.loadFileURL(resources.appendingPathComponent("pet.html"), allowingReadAccessTo: resources)
         if isTest { createWorkbench() } else { openWorkbench() }
+        runChatSmokeIfRequested()
+        startWeatherTimer()
+        music.start()
+        clipboard.start()
+        startSelectionWatcher()
+        if !isTest { startQuickBarTimer() }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if let self, !self.hasActiveKeyboardTap { self.recordKey(event) }
             return event
@@ -177,6 +388,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         } else if webView === web {
             ready = true
             if let appliedConfig { configurePet(appliedConfig) }
+            restoreCustomOverlay()
             if !isTest && workbenchState.visible {
                 panel.orderFrontRegardless()
                 if !reminderList.items.isEmpty { showReminders() }
@@ -191,7 +403,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func configureWorkbench() {
-        workbenchState.choosePreset = { [weak self] id in self?.choosePreset(id) }
+        workbenchState.choosePreset = { [weak self] id in
+            self?.clearCustomOverlay()
+            self?.choosePreset(id)
+        }
+        workbenchState.openPixelEditor = { [weak self] in self?.showPixelEditor() }
+        workbenchState.chooseCustom = { [weak self] preset in self?.applyCustom(preset) }
+        reloadCustomPresets()
         workbenchState.refresh = { [weak self] in self?.refreshPreview() }
         workbenchState.apply = { [weak self] in self?.applyDraft() }
         workbenchState.reset = { [weak self] in self?.resetPosition() }
@@ -209,7 +427,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
+        // Background dragging swallows SwiftUI drag gestures (the size slider);
+        // the header carries an explicit WindowDragArea instead.
+        window.isMovableByWindowBackground = false
         window.setContentSize(NSSize(width: 960, height: 760))
         window.contentMinSize = NSSize(width: 900, height: 700)
         window.center()
@@ -339,8 +559,47 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         fputs("Focus session did not run through focus, break and dismissal\n", stderr)
                         exit(1)
                     }
-                    print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions, focus and break session")
-                    NSApp.terminate(nil)
+                    guard self.verifyWeather() else {
+                        fputs("Weather advice or card layout failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyMusic() else {
+                        fputs("Music detection or badge layout failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyClipboard() else {
+                        fputs("Clipboard history failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyTranslation() else {
+                        fputs("Translation helpers or panels failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyChatBrain() else {
+                        fputs("Chat routing or memory failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyTrash() else {
+                        fputs("Trash move failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyQuickBar() else {
+                        fputs("Quick bar hover or layout failed\n", stderr)
+                        exit(1)
+                    }
+                    guard self.verifyFileActions() else {
+                        fputs("File actions failed\n", stderr)
+                        exit(1)
+                    }
+                    self.refreshPreview()
+                    self.capturePixelPreview { png in
+                        guard let png, self.verifyPixelEditor(png: png) else {
+                            fputs("Pixel editor failed to load or edit the workbench preview\n", stderr)
+                            exit(1)
+                        }
+                        print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions, focus and break session, weather advice and card, music detection, clipboard history, translation panels, chat routing, trash, quick bar, file actions, pixel editor from workbench preview")
+                        NSApp.terminate(nil)
+                    }
                 }
             }
         }
@@ -371,6 +630,313 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return true
     }
 
+    private func verifyPixelEditor(png: Data) -> Bool {
+        guard let model = PixelEditorModel(previewPNG: png),
+              let firstPainted = model.cells.firstIndex(where: { $0 != 0 }),
+              model.cells.prefix(8).allSatisfy({ $0 == 0 }) else { return false }
+        let original = model.cells
+        let side = PixelEditorModel.side
+
+        guard model.brushSize == 8, model.brushShape == .square else { return false }
+        model.brushSize = 1
+        model.isErasing = true
+        model.paint(column: firstPainted % side, row: firstPainted / side)
+        model.endStroke()
+        var expected = original
+        expected[firstPainted] = 0
+        guard model.cells == expected else { return false }
+        model.undo()
+        guard model.cells == original else { return false }
+
+        model.chooseColor(0xEFB373)
+        model.paint(column: 0, row: 0)
+        model.paint(column: 7, row: 0)
+        model.endStroke()
+        expected = original
+        expected.replaceSubrange(0..<8, with: repeatElement(0xFFEFB373, count: 8))
+        guard model.cells == expected,
+              let exported = PixelPresetStore.renderPNG(cells: model.cells),
+              let bitmap = NSBitmapImageRep(data: exported),
+              bitmap.pixelsWide == side, bitmap.pixelsHigh == side,
+              let loaded = PixelEditorModel(previewPNG: exported),
+              loaded.cells == expected else { return false }
+
+        model.undo()
+        guard model.cells == original else { return false }
+        model.brushSize = 5
+        for shape in PixelBrushShape.allCases {
+            model.brushShape = shape
+            model.chooseColor(0x63ADDF)
+            model.paint(column: 0, row: 0)
+            model.endStroke()
+            expected = original
+            for row in 0...2 {
+                let start = row * side
+                expected.replaceSubrange(start..<(start + 3), with: repeatElement(0xFF63ADDF, count: 3))
+            }
+            if shape == .round { expected[2 * side + 2] = original[2 * side + 2] }
+            guard model.cells == expected else { return false }
+            model.isErasing = true
+            model.paint(column: 0, row: 0)
+            model.endStroke()
+            guard model.cells == original else { return false }
+            model.undo()
+            guard model.cells == expected else { return false }
+            model.undo()
+            guard model.cells == original else { return false }
+        }
+
+        model.clear()
+        guard model.cells.allSatisfy({ $0 == 0 }) else { return false }
+        model.undo()
+        return model.cells == original
+    }
+
+    private func verifyFileActions() -> Bool {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pet-file-test")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        // zip
+        let text = folder.appendingPathComponent("sample.txt")
+        try? "hello".write(to: text, atomically: true, encoding: .utf8)
+        guard let archive = FileTools.zip(text),
+              FileManager.default.fileExists(atPath: archive.path),
+              (try? Data(contentsOf: archive))?.count ?? 0 > 0 else { return false }
+
+        // text → pdf
+        guard let pdf = FileTools.convert(text, to: .pdf),
+              let pdfData = try? Data(contentsOf: pdf), pdfData.count > 4 else { return false }
+        guard String(data: pdfData.prefix(4), encoding: .ascii) == "%PDF" else { return false }
+
+        // png → jpg (draw with CGContext so it also works headless)
+        guard let context = CGContext(
+            data: nil,
+            width: 32,
+            height: 32,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return false }
+        context.setFillColor(NSColor.systemRed.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        guard let cgImage = context.makeImage(),
+              let pngData = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else { return false }
+        let png = folder.appendingPathComponent("shot.png")
+        try? pngData.write(to: png)
+        guard FileKind.of(png) == .image,
+              FileTools.formats(for: .image).count == 2,
+              let jpg = FileTools.convert(png, to: .jpg),
+              let jpgData = try? Data(contentsOf: jpg), jpgData.count > 2 else { return false }
+        guard jpgData[0] == 0xFF, jpgData[1] == 0xD8 else { return false }
+
+        // panel
+        dropChoiceURL = text
+        dropChoiceKind = .document
+        showDropChoices()
+        guard let bar = dropChoiceWindow, bar.isVisible,
+              !bar.frame.intersects(panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
+        hideDropChoice()
+        guard !(dropChoiceWindow?.isVisible ?? false) else { return false }
+
+        try? FileManager.default.removeItem(at: folder)
+        return true
+    }
+
+    private func verifyQuickBar() -> Bool {
+        quickBarTick(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY))
+        guard let bar = quickBarWindow, bar.isVisible,
+              !bar.frame.intersects(panel.frame) else { return false }
+        guard bar.frame.maxY <= panel.frame.minY + 1 else { return false }
+        let far = NSPoint(x: 4, y: 4)
+        quickBarTick(at: far)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+        quickBarTick(at: far)
+        guard !(quickBarWindow?.isVisible ?? false) else { return false }
+        guard panel.frame.origin.y == 58 + (NSScreen.main?.visibleFrame.minY ?? 0) else {
+            // The nudge must be undone when the bar hides.
+            return abs(panel.frame.origin.y - (58 + (NSScreen.main?.visibleFrame.minY ?? 0))) < 1
+        }
+        return true
+    }
+
+    private func verifyTrash() -> Bool {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pet-trash-test")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("drop-me-\(UUID().uuidString).txt")
+        try? "bye".write(to: file, atomically: true, encoding: .utf8)
+        let outcome = TrashService.trash([file])
+        guard outcome.trashed == [file], outcome.failed.isEmpty,
+              !FileManager.default.fileExists(atPath: file.path) else { return false }
+
+        let missing = folder.appendingPathComponent("does-not-exist-\(UUID().uuidString).txt")
+        let failure = TrashService.trash([missing])
+        guard failure.trashed.isEmpty, failure.failed == [missing] else { return false }
+
+        showTrashToast("已移到废纸篓：测试", tone: .normal, autoHide: nil)
+        guard let toast = trashToastWindow, toast.isVisible else { return false }
+        hideTrashToast()
+        guard !(trashToastWindow?.isVisible ?? false) else { return false }
+        return true
+    }
+
+    private func verifyChatBrain() -> Bool {
+        guard ChatBrain.keywordDecision("今天北京天气怎么样") == .search,
+              ChatBrain.keywordDecision("今天有什么新闻") == .search,
+              ChatBrain.keywordDecision("股票怎么样") == .search,
+              ChatBrain.keywordDecision("你叫什么") == nil,
+              ChatBrain.keywordDecision("我喜欢喝什么") == nil else { return false }
+
+        let path = NSTemporaryDirectory() + "pet-memory-test-\(UUID().uuidString).sqlite"
+        try? FileManager.default.removeItem(atPath: path)
+        let memory = PetMemory(path: path)
+        memory.remember(from: "我叫小林，我喜欢喝美式")
+        memory.remember(from: "我每天七点起床")
+        guard memory.value(for: .name) == "小林",
+              memory.value(for: .likes)?.contains("美式") == true,
+              memory.value(for: .routine)?.contains("起床") == true else { return false }
+        let summary = memory.summary()
+        guard summary.contains("名字"), summary.contains("美式"), summary.contains("起床") else { return false }
+        try? FileManager.default.removeItem(atPath: path)
+        return true
+    }
+
+    private func verifyTranslation() -> Bool {
+        guard SelectionText.isEnglish("Hello world, this is a test."),
+              SelectionText.isEnglish("The quick brown fox"),
+              !SelectionText.isEnglish("你好，世界"),
+              !SelectionText.isEnglish("Hello 世界"),
+              !SelectionText.isEnglish("12345"),
+              !SelectionText.isEnglish("a") else { return false }
+
+        let long = String(repeating: "a", count: 600)
+        let prepared = SelectionText.prepare(long)
+        guard prepared.text.count == SelectionText.maxLength, prepared.truncated else { return false }
+        let short = SelectionText.prepare("short text")
+        guard short.text == "short text", !short.truncated else { return false }
+
+        let point = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        pendingSelection = "Hello"
+        showTranslateButton(at: point)
+        guard let button = translateButtonWindow, button.isVisible else { return false }
+        hideTranslateButton()
+        guard !(translateButtonWindow?.isVisible ?? false) else { return false }
+
+        showTranslation(.result(original: "Hello world", translated: "你好，世界", truncated: false))
+        guard let bubble = translationWindow, bubble.isVisible,
+              !bubble.frame.intersects(panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
+        hideTranslation()
+        guard !(translationWindow?.isVisible ?? false) else { return false }
+        return true
+    }
+
+    private func verifyClipboard() -> Bool {
+        let board = NSPasteboard.withUniqueName()
+        let store = ClipboardStore()
+
+        board.clearContents()
+        board.setString("第一段文案", forType: .string)
+        store.poll(board)
+        guard store.items.first?.text == "第一段文案" else { return false }
+
+        board.clearContents()
+        board.setString("第二段", forType: .string)
+        store.poll(board)
+        guard store.items.count == 2, store.items.first?.text == "第二段" else { return false }
+
+        store.add("第一段文案")
+        guard store.items.count == 2, store.items.first?.text == "第一段文案" else { return false }
+
+        for index in 0..<20 { store.add("item \(index)") }
+        guard store.items.count == ClipboardStore.limit else { return false }
+
+        board.clearContents()
+        board.setString("secret", forType: .string)
+        board.setString("1", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        let before = store.items.count
+        store.poll(board)
+        guard store.items.count == before else { return false }
+
+        if let workbench = workbenchWindow, workbench.isVisible {
+            workbench.orderOut(nil)
+            showClipboard()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+            let stayedHidden = !workbench.isVisible
+            hideClipboard()
+            workbench.orderFront(nil)
+            guard stayedHidden else { return false }
+        }
+
+        showClipboard()
+        guard let panel = clipboardWindow, panel.isVisible,
+              !panel.frame.intersects(self.panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
+        hideClipboard()
+        guard !(clipboardWindow?.isVisible ?? false) else { return false }
+        return true
+    }
+
+    private func verifyMusic() -> Bool {
+        guard MusicCatalog.name(bundleID: "com.tencent.QQMusicMac", processName: nil) == "QQ音乐",
+              MusicCatalog.name(bundleID: "com.apple.Music", processName: nil) == "Apple Music",
+              MusicCatalog.name(bundleID: "com.google.Chrome", processName: "Google Chrome") == nil else {
+            return false
+        }
+
+        let watcher = MusicWatcher(enabled: true)
+
+        var changes: [String?] = []
+        watcher.onChange = { changes.append($0) }
+        watcher.evaluate(names: ["Apple Music"])
+        guard watcher.activeApp == nil else { return false }
+        watcher.evaluate(names: ["Apple Music"])
+        guard watcher.activeApp == "Apple Music" else { return false }
+        watcher.evaluate(names: [])
+        watcher.evaluate(names: [])
+        guard watcher.activeApp == nil, changes == ["Apple Music", nil] else { return false }
+
+        showMusicBadge(app: "QQ音乐")
+        guard let badge = musicWindow, badge.isVisible else { return false }
+        guard !badge.frame.intersects(panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
+        hideMusicBadge()
+        guard !(musicWindow?.isVisible ?? false) else { return false }
+        return true
+    }
+
+    private func verifyWeather() -> Bool {
+        let cold = WeatherSnapshot(
+            city: "北京", temperature: 2, apparent: -3, humidity: 20,
+            wind: 5, rainChance: 10, low: -6, high: 4, code: 0
+        )
+        let coldAdvice = WeatherRules.advice(for: cold)
+        guard coldAdvice.contains(where: { $0.contains("羽绒服") }),
+              coldAdvice.contains(where: { $0.contains("温差") }),
+              coldAdvice.contains(where: { $0.contains("多喝热水") }) else { return false }
+
+        let hot = WeatherSnapshot(
+            city: "广州", temperature: 30, apparent: 32, humidity: 88,
+            wind: 3, rainChance: 60, low: 28, high: 34, code: 3
+        )
+        let hotAdvice = WeatherRules.advice(for: hot)
+        guard hotAdvice.contains(where: { $0.contains("伞") }),
+              hotAdvice.contains(where: { $0.contains("闷热") }) else { return false }
+
+        let mild = WeatherSnapshot(
+            city: "上海", temperature: 21, apparent: 21, humidity: 50,
+            wind: 8, rainChance: 5, low: 19, high: 23, code: 1
+        )
+        guard WeatherRules.advice(for: mild) == ["舒适，正常穿就好。"] else { return false }
+
+        showWeatherCard(snapshot: mild, failure: nil)
+        guard let card = weatherWindow, card.isVisible,
+              abs(card.frame.midX - panel.frame.midX) <= 1,
+              makeMenu().items.contains(where: { item in
+                  item.title == "天气" && (item.submenu?.items.contains { $0.title == "看看天气" } ?? false)
+              }) else { return false }
+        hideWeatherCard()
+        guard !(weatherWindow?.isVisible ?? false) else { return false }
+        return true
+    }
+
     private func verifyFocusSession() -> Bool {
         guard focus.phase == .idle else { return false }
         guard makeMenu().items.contains(where: { $0.title == "开始专注" }) else { return false }
@@ -382,6 +948,38 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
               makeMenu().items.contains(where: { $0.title == "结束专注" }) else {
             return false
         }
+        guard let resting = focusWindow,
+              abs(resting.frame.midX - panel.frame.midX) <= 1 else { return false }
+
+        focus.togglePin()
+        guard focus.pinned,
+              makeMenu().items.contains(where: { $0.title == "取消钉住" }) else { return false }
+        focus.togglePin()
+        guard !focus.pinned else { return false }
+
+        // Cards follow the pet inside the same drag event, not on the async
+        // didMove notification. Measured away from the screen edge, where the
+        // card is clamped on purpose so it stays visible.
+        if let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            let petOrigin = panel.frame.origin
+            panel.setFrameOrigin(NSPoint(
+                x: screen.midX - panel.frame.width / 2,
+                y: screen.minY + 120
+            ))
+            web.onMove()
+            guard let centred = focusWindow else {
+                panel.setFrameOrigin(petOrigin)
+                return false
+            }
+            let before = centred.frame.origin.x
+            panel.setFrameOrigin(NSPoint(x: panel.frame.origin.x - 40, y: panel.frame.origin.y))
+            web.onMove()
+            let tracked = abs(centred.frame.origin.x - (before - 40)) <= 1
+            panel.setFrameOrigin(petOrigin)
+            web.onMove()
+            guard tracked else { return false }
+        }
+
         focus.hideCard()
         guard !card.isVisible else { return false }
         focus.revealCard()
@@ -404,6 +1002,28 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard focus.phase == .idle, focus.result == .breakFinished else { return false }
         focus.dismiss()
         guard focus.result == nil, !(focusWindow?.isVisible ?? false) else { return false }
+
+        let savedMinutes = focus.focusMinutes
+        defer { focus.setFocusMinutes(savedMinutes) }
+        focus.setFocusMinutes(37)
+        guard focus.focusMinutes == 37 else { return false }
+        focus.startFocus()
+        guard focus.remaining == 37 * 60 else { return false }
+        focus.togglePin()
+        focus.stop()
+        guard !focus.pinned else { return false }
+        focus.setFocusMinutes(0)
+        guard focus.focusMinutes == FocusModel.minuteRange.lowerBound else { return false }
+        focus.setFocusMinutes(9_999)
+        guard focus.focusMinutes == FocusModel.minuteRange.upperBound else { return false }
+        guard makeMenu().items.contains(where: { item in
+            item.title == "开始专注" && (item.submenu?.items.contains { $0.title == "自定义…" } ?? false)
+        }) else { return false }
+
+        showFocusMinutesInput()
+        guard focusMinutesWindow?.isVisible ?? false else { return false }
+        hideFocusMinutesInput()
+        guard !(focusMinutesWindow?.isVisible ?? false) else { return false }
         return true
     }
 
@@ -484,7 +1104,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     func windowDidResignKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        if window === reminderInputWindow {
+        if window === clipboardWindow {
+            hideClipboard()
+        } else if window === weatherCityWindow {
+            hideWeatherCityInput()
+        } else if window === focusMinutesWindow {
+            hideFocusMinutesInput()
+        } else if window === reminderInputWindow {
             hideReminderInput()
         } else if window === reminderWindow, reminderList.isAdding {
             reminderList.isAdding = false
@@ -570,8 +1196,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if !workbenchWasKey, let window = workbenchWindow, window.isVisible {
             window.orderBack(nil)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.suppressWorkbenchReopen = false
+        // AppKit delivers the reopen event after the activation settles, which
+        // can be later than a few hundred milliseconds; keep the suppression
+        // through that window so the workbench stays closed.
+        reopenSuppressionToken &+= 1
+        let token = reopenSuppressionToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.reopenSuppressionToken == token else { return }
+            self.suppressWorkbenchReopen = false
         }
     }
 
@@ -648,13 +1280,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             let created = ReminderHostingView(rootView: FocusCard(
                 model: focus,
                 onTogglePause: { [weak self] in self?.focus.togglePause() },
-                onExtend: { [weak self] in self?.focus.extend() },
                 onStop: { [weak self] in self?.focus.stop() },
                 onStartBreak: { [weak self] in self?.focus.startBreak() },
                 onStartFocus: { [weak self] in self?.focus.startFocus() },
                 onSkipBreak: { [weak self] in self?.focus.skipBreak() },
                 onDismiss: { [weak self] in self?.focus.dismiss() },
                 onHideCard: { [weak self] in self?.focus.hideCard() },
+                onTogglePin: { [weak self] in self?.focus.togglePin() },
                 onHeightChange: { [weak self] height in self?.resizeFocusCard(height: height) }
             ))
             fitCardHost(created, fallback: NSSize(width: 252, height: 96))
@@ -678,7 +1310,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func resizeFocusCard(height: CGFloat) {
         guard let card = focusWindow, height > 1 else { return }
         guard abs(card.frame.height - height) > 0.5 else { return }
-        card.setContentSize(NSSize(width: 252, height: height))
+        card.setContentSize(NSSize(width: FocusCard.width, height: height))
         layoutFocusCard()
     }
 
@@ -698,8 +1330,1018 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         card.setFrameOrigin(origin)
     }
 
+    /// QA hook: `PET_CHAT_SMOKE=1` answers one question through the real local
+    /// runtime and exits, so the bundled model can be checked headlessly.
+    private func runChatSmokeIfRequested() {
+        guard ProcessInfo.processInfo.environment["PET_CHAT_SMOKE"] == "1" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            LocalRuntime.shared.prepare(progress: { print("SMOKE:", $0) }) { ok in
+                print("SMOKE runtime ok:", ok, "url:", LocalRuntime.shared.baseURL.absoluteString,
+                      "embedded:", LocalRuntime.shared.isEmbedded)
+                OllamaClient.shared.check { running, model in
+                    print("SMOKE running:", running, "model:", model ?? "nil")
+                    OllamaClient.shared.chat(
+                        messages: [["role": "user", "content": "你叫什么"]]
+                    ) { answer in
+                        print("SMOKE answer:", answer ?? "nil")
+                        LocalRuntime.shared.shutdown()
+                        NSApp.terminate(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A paw for the menu bar, drawn as a template image so macOS tints it for
+    /// light and dark menu bars.
+    private func makeStatusIcon() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.black.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 4.1, y: 1.4, width: 9.8, height: 7.8)).fill()
+        let toes: [(CGFloat, CGFloat, CGFloat)] = [
+            (2.9, 9.7, 1.65),
+            (6.6, 11.7, 1.8),
+            (11.4, 11.7, 1.8),
+            (15.1, 9.7, 1.65),
+        ]
+        for (x, y, radius) in toes {
+            NSBezierPath(ovalIn: NSRect(
+                x: x - radius, y: y - radius, width: radius * 2, height: radius * 2
+            )).fill()
+        }
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
+    }
+
+    // MARK: Pixel editor
+
+    private func capturePixelPreview(completion: @escaping (Data?) -> Void) {
+        preview.callAsyncJavaScript("return await window.pet.previewPNG()", arguments: [:], in: nil, in: .page) { result in
+            let prefix = "data:image/png;base64,"
+            guard case .success(let value) = result, let url = value as? String, url.hasPrefix(prefix) else {
+                completion(nil)
+                return
+            }
+            completion(Data(base64Encoded: String(url.dropFirst(prefix.count))))
+        }
+    }
+
+    private func showPixelEditor() {
+        if let window = pixelEditorWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        guard previewReady, !draftTemplate.isEmpty, !workbenchState.openingPixelEditor else { return }
+        workbenchState.openingPixelEditor = true
+        capturePixelPreview { [weak self] png in
+            guard let self else { return }
+            self.workbenchState.openingPixelEditor = false
+            guard self.workbenchWindow?.isVisible == true else { return }
+            guard let png, let model = PixelEditorModel(previewPNG: png) else {
+                self.workbenchState.message = "无法读取左侧预览，请重试"
+                return
+            }
+            self.openPixelEditor(model)
+        }
+    }
+
+    private func openPixelEditor(_ model: PixelEditorModel) {
+        let host = NSHostingView(rootView: PixelEditorView(model: model, onSaved: { [weak self] _ in
+            self?.reloadCustomPresets()
+        }))
+        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        let window = NSWindow(
+            contentRect: host.frame,
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "像素编辑"
+        window.contentView = host
+        window.isReleasedWhenClosed = false
+        window.center()
+        pixelEditorWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func reloadCustomPresets() {
+        workbenchState.customPresets = PixelPresetStore.load()
+        if let saved = UserDefaults.standard.string(forKey: "customSpriteName"),
+           workbenchState.customPresets.contains(where: { $0.id == saved }) {
+            workbenchState.customSelected = saved
+        } else {
+            workbenchState.customSelected = nil
+        }
+    }
+
+    private func applyCustom(_ preset: CustomPresetInfo) {
+        guard let data = try? Data(contentsOf: preset.url) else {
+            workbenchState.message = "读取自定义形象失败"
+            return
+        }
+        let runtime = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("DesktopPet/custom", isDirectory: true)
+        try? FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
+        let copy = runtime.appendingPathComponent(preset.url.lastPathComponent)
+        try? data.write(to: copy)
+        UserDefaults.standard.set(copy.path, forKey: "customSpritePath")
+        UserDefaults.standard.set(preset.id, forKey: "customSpriteName")
+        workbenchState.customSelected = preset.id
+        workbenchState.message = "已启用自定义形象：\(preset.name)"
+        applyCustomOverlay(data: data)
+    }
+
+    private func applyCustomOverlay(data: Data) {
+        let js = "window.petShowCustom && window.petShowCustom('data:image/png;base64,\(data.base64EncodedString())')"
+        web.evaluateJavaScript(js)
+        preview.evaluateJavaScript(js)
+    }
+
+    private func clearCustomOverlay() {
+        UserDefaults.standard.removeObject(forKey: "customSpritePath")
+        UserDefaults.standard.removeObject(forKey: "customSpriteName")
+        workbenchState.customSelected = nil
+        let js = "window.petShowCustom && window.petShowCustom(null)"
+        web.evaluateJavaScript(js)
+        preview.evaluateJavaScript(js)
+    }
+
+    private func restoreCustomOverlay() {
+        guard let path = UserDefaults.standard.string(forKey: "customSpritePath"),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
+        applyCustomOverlay(data: data)
+        workbenchState.customSelected = UserDefaults.standard.string(forKey: "customSpriteName")
+    }
+
+    // MARK: Quick bar
+
+    private func startQuickBarTimer() {
+        guard quickBarTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.quickBarTick(at: NSEvent.mouseLocation)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        quickBarTimer = timer
+    }
+
+    /// Visible only while the pointer is on the pet (or on the bar itself).
+    private func quickBarTick(at point: NSPoint) {
+        guard workbenchState.visible else {
+            hideQuickBar()
+            return
+        }
+        if !isTest, !panel.isVisible {
+            hideQuickBar()
+            return
+        }
+        let petZone = panel.frame.insetBy(dx: -10, dy: -10)
+        let barVisible = quickBarWindow?.isVisible ?? false
+        let barZone = quickBarWindow?.frame.insetBy(dx: -6, dy: -6) ?? .zero
+        let over = petZone.contains(point) || (barVisible && barZone.contains(point))
+        if over {
+            quickBarLeaveAt = nil
+            if !barVisible { showQuickBar() }
+        } else if barVisible {
+            if let leaveAt = quickBarLeaveAt {
+                if Date().timeIntervalSince(leaveAt) > 0.35 { hideQuickBar() }
+            } else {
+                quickBarLeaveAt = Date()
+            }
+        }
+    }
+
+    private func showQuickBar() {
+        let host = ReminderHostingView(rootView: QuickBar(
+            onChat: { [weak self] in
+                self?.hideQuickBar()
+                self?.showChat()
+            },
+            onClipboard: { [weak self] in
+                self?.hideQuickBar()
+                self?.showClipboard()
+            },
+            onFocus: { [weak self] in self?.handleQuickFocus() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 110, height: 40))
+        let panel = quickBarWindow ?? makeReminderPanel()
+        panel.ignoresMouseEvents = false
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        quickBarWindow = panel
+        layoutQuickBar()
+        layoutDropChoice()
+        panel.orderFrontRegardless()
+    }
+
+    private func hideQuickBar() {
+        quickBarLeaveAt = nil
+        quickBarWindow?.orderOut(nil)
+        if let origin = quickBarPetOrigin {
+            quickBarPetOrigin = nil
+            quickBarAdjusting = true
+            panel.setFrameOrigin(origin)
+            layoutReminder()
+            quickBarAdjusting = false
+        }
+    }
+
+    private func layoutQuickBar() {
+        guard let card = quickBarWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        guard !quickBarAdjusting else { return }
+        let size = card.frame.size
+
+        // Always below the pet. When the pet sits too low for the bar, lift the
+        // pet just enough and put it back when the bar hides.
+        if panel.frame.minY - size.height - 6 < screen.minY + 6 {
+            quickBarAdjusting = true
+            if quickBarPetOrigin == nil { quickBarPetOrigin = panel.frame.origin }
+            let deficit = screen.minY + 6 - (panel.frame.minY - size.height - 6)
+            panel.setFrameOrigin(NSPoint(x: panel.frame.origin.x, y: panel.frame.origin.y + deficit))
+            layoutReminder()
+            quickBarAdjusting = false
+        }
+
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.minY - size.height - 6)
+        origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
+        origin.y = max(origin.y, screen.minY + 6)
+        card.setFrameOrigin(origin)
+    }
+
+    private func handleQuickFocus() {
+        switch focus.phase {
+        case .idle:
+            focus.startFocus()
+        case .focusing:
+            focus.togglePause()
+        case .resting:
+            focus.skipBreak()
+        }
+        hideQuickBar()
+    }
+
+    // MARK: Trash
+
+    private func handleFileDrop(_ urls: [URL]) {
+        guard urls.count == 1 else {
+            showTrashToast("一次只处理一个文件", tone: .hint, autoHide: 2.2)
+            return
+        }
+        let url = urls[0]
+        dropChoiceURL = url
+        dropChoiceKind = FileKind.of(url)
+        showDropChoices()
+    }
+
+    private func showDropChoices() {
+        guard let url = dropChoiceURL else { return }
+        let host = ReminderHostingView(rootView: DropActionBar(
+            fileName: url.lastPathComponent,
+            onTrash: { [weak self] in self?.performTrash() },
+            onZip: { [weak self] in self?.performZip() },
+            onConvert: { [weak self] in self?.showFormatChoices() }
+        ))
+        presentDropPanel(host: host, fallback: NSSize(width: 236, height: 92))
+    }
+
+    private func showFormatChoices() {
+        guard let url = dropChoiceURL else { return }
+        let formats = FileTools.formats(for: dropChoiceKind)
+        guard !formats.isEmpty else {
+            hideDropChoice()
+            showTrashToast("不支持这种文件", tone: .failure, autoHide: 2.2)
+            return
+        }
+        let host = ReminderHostingView(rootView: DropFormatBar(
+            formats: formats,
+            fileName: url.lastPathComponent,
+            onPick: { [weak self] format in self?.performConvert(format) }
+        ))
+        presentDropPanel(host: host, fallback: NSSize(width: 220, height: 84))
+    }
+
+    private func performTrash() {
+        guard let url = dropChoiceURL else { return }
+        let ok = FileTools.trash(url)
+        hideDropChoice()
+        showTrashToast(ok ? "已移到垃圾桶" : "操作失败", tone: ok ? .normal : .failure, autoHide: 2.4)
+    }
+
+    private func performZip() {
+        guard let url = dropChoiceURL else { return }
+        let ok = FileTools.zip(url) != nil
+        hideDropChoice()
+        showTrashToast(ok ? "已压缩" : "操作失败", tone: ok ? .normal : .failure, autoHide: 2.4)
+    }
+
+    private func performConvert(_ format: ConvertFormat) {
+        guard let url = dropChoiceURL else { return }
+        let ok = FileTools.convert(url, to: format) != nil
+        hideDropChoice()
+        showTrashToast(
+            ok ? "已转换" : "操作失败",
+            tone: ok ? .normal : .failure,
+            autoHide: 2.4
+        )
+    }
+
+    private func presentDropPanel<Content: View>(host: NSHostingView<Content>, fallback: NSSize) {
+        fitCardHost(host, fallback: fallback)
+        let panel = dropChoiceWindow ?? makeReminderPanel()
+        panel.ignoresMouseEvents = false
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        dropChoiceWindow = panel
+        panel.orderFrontRegardless()
+        layoutDropChoice()
+        installDropChoiceMonitor()
+    }
+
+    private func layoutDropChoice() {
+        guard let card = dropChoiceWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    private func hideDropChoice() {
+        dropChoiceWindow?.orderOut(nil)
+        dropChoiceURL = nil
+        dropChoiceKind = .unsupported
+        if let dropChoiceMonitor {
+            NSEvent.removeMonitor(dropChoiceMonitor)
+            self.dropChoiceMonitor = nil
+        }
+        if let dropChoiceLocalMonitor {
+            NSEvent.removeMonitor(dropChoiceLocalMonitor)
+            self.dropChoiceLocalMonitor = nil
+        }
+    }
+
+    private func installDropChoiceMonitor() {
+        guard dropChoiceMonitor == nil else { return }
+        dropChoiceMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self, let card = self.dropChoiceWindow, card.isVisible else { return }
+            if !card.frame.contains(NSEvent.mouseLocation) { self.hideDropChoice() }
+        }
+        dropChoiceLocalMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            guard let self, let card = self.dropChoiceWindow, card.isVisible else { return event }
+            if !card.frame.contains(NSEvent.mouseLocation) { self.hideDropChoice() }
+            return event
+        }
+    }
+
+    private func showTrashToast(_ text: String, tone: TrashToast.Tone, autoHide: TimeInterval?) {
+        let host = ReminderHostingView(rootView: TrashToast(text: text, tone: tone))
+        fitCardHost(host, fallback: NSSize(width: 220, height: 30))
+        let panel = trashToastWindow ?? makeReminderPanel()
+        panel.ignoresMouseEvents = true
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        trashToastWindow = panel
+        panel.orderFrontRegardless()
+        layoutTrashToast()
+        trashToastHide?.cancel()
+        trashToastHide = nil
+        if let autoHide {
+            let item = DispatchWorkItem { [weak self] in self?.hideTrashToast() }
+            trashToastHide = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + autoHide, execute: item)
+        }
+    }
+
+    private func hideTrashToast() {
+        trashToastHide?.cancel()
+        trashToastHide = nil
+        trashToastWindow?.orderOut(nil)
+    }
+
+    private func layoutTrashToast() {
+        guard let card = trashToastWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    // MARK: Chat
+
+    private func showChat() {
+        hideQuickBar()
+        if chatModel == nil {
+            let model = ChatModel(brain: chatBrain)
+            model.prepare()
+            chatModel = model
+        }
+        guard let model = chatModel else { return }
+        let host = ReminderHostingView(rootView: ChatCard(
+            model: model,
+            onClose: { [weak self] in self?.hideChat() },
+            onHeightChange: { [weak self] height in self?.resizeChat(height: height) }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 306, height: 300))
+        let panel = chatWindow ?? makeReminderPanel()
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        chatWindow = panel
+        activateForPetUI()
+        panel.makeKeyAndOrderFront(nil)
+        layoutChat()
+        layoutTrashToast()
+        layoutQuickBar()
+        layoutDropChoice()
+        installChatDismissMonitor()
+    }
+
+    private func hideChat() {
+        chatWindow?.orderOut(nil)
+        if let chatDismissMonitor {
+            NSEvent.removeMonitor(chatDismissMonitor)
+            self.chatDismissMonitor = nil
+        }
+    }
+
+    private func resizeChat(height: CGFloat) {
+        guard let panel = chatWindow, height > 1 else { return }
+        guard abs(panel.frame.height - height) > 0.5 else { return }
+        panel.setContentSize(NSSize(width: 306, height: height))
+        layoutChat()
+        layoutTrashToast()
+        layoutQuickBar()
+        layoutDropChoice()
+    }
+
+    private func layoutChat() {
+        guard let card = chatWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if let focusCard = focusWindow, focusCard.isVisible {
+            origin.y = max(focusCard.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    private func installChatDismissMonitor() {
+        guard chatDismissMonitor == nil else { return }
+        chatDismissMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self, let card = self.chatWindow, card.isVisible else { return }
+            if !card.frame.contains(NSEvent.mouseLocation) {
+                self.hideChat()
+            }
+        }
+    }
+
+    // MARK: Selection translation
+
+    private func startSelectionWatcher() {
+        guard selectionUpMonitor == nil else { return }
+        selectionDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            self?.selectionDownPoint = NSEvent.mouseLocation
+            self?.hideTranslateButton()
+        }
+        selectionUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                self?.handleSelectionMouseUp()
+            }
+        }
+    }
+
+    private func handleSelectionMouseUp() {
+        let upPoint = NSEvent.mouseLocation
+        let downPoint = selectionDownPoint
+        selectionDownPoint = nil
+        // Only a drag looks like a selection; plain clicks should stay quiet.
+        guard let downPoint,
+              hypot(upPoint.x - downPoint.x, upPoint.y - downPoint.y) >= 3 else { return }
+        guard translationEngine.isAvailable else { return }
+        guard SelectionReader.isTrusted else {
+            if !translationTrustRequested {
+                translationTrustRequested = true
+                SelectionReader.requestTrust()
+            }
+            return
+        }
+        guard let text = SelectionReader.selectedText(), SelectionText.isEnglish(text) else { return }
+        pendingSelection = text
+        showTranslateButton(at: upPoint)
+    }
+
+    private func showTranslateButton(at point: NSPoint) {
+        let host = ReminderHostingView(rootView: TranslationButtonCard { [weak self] in
+            self?.beginTranslation()
+        })
+        fitCardHost(host, fallback: NSSize(width: 60, height: 30))
+        let panel = translateButtonWindow ?? makeReminderPanel()
+        panel.ignoresMouseEvents = false
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        translateButtonWindow = panel
+
+        let size = panel.frame.size
+        let screen = NSScreen.screens.first { $0.frame.contains(point) }?.visibleFrame
+            ?? NSScreen.main?.visibleFrame
+        var origin = NSPoint(x: point.x + 12, y: point.y - size.height - 8)
+        if let screen {
+            if origin.y < screen.minY + 6 { origin.y = point.y + 10 }
+            origin.x = min(max(origin.x, screen.minX + 6), screen.maxX - size.width - 6)
+        }
+        panel.setFrameOrigin(origin)
+        panel.orderFrontRegardless()
+    }
+
+    private func hideTranslateButton() {
+        translateButtonWindow?.orderOut(nil)
+    }
+
+    private func beginTranslation() {
+        guard let raw = pendingSelection else { return }
+        hideTranslateButton()
+        let (text, truncated) = SelectionText.prepare(raw)
+        currentTranslation = nil
+        showTranslation(.loading)
+        translationEngine.translate(text) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let translated = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if translated.isEmpty {
+                    self.showTranslation(.failure)
+                } else {
+                    self.currentTranslation = translated
+                    self.showTranslation(.result(original: raw, translated: translated, truncated: truncated))
+                }
+            }
+        }
+    }
+
+    private func showTranslation(_ state: TranslationCardState) {
+        let host = ReminderHostingView(rootView: TranslationCard(
+            state: state,
+            onCopy: { [weak self] in self?.copyTranslation() },
+            onOpenSettings: { [weak self] in self?.openAccessibilitySettings() },
+            onClose: { [weak self] in self?.hideTranslation() },
+            onHeightChange: { [weak self] height in self?.resizeTranslation(height: height) }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 286, height: 130))
+        let panel = translationWindow ?? makeReminderPanel()
+        panel.setContentSize(host.frame.size)
+        panel.contentView = host
+        translationWindow = panel
+        panel.orderFrontRegardless()
+        layoutTranslationBubble()
+        layoutChat()
+        layoutTrashToast()
+        layoutQuickBar()
+        layoutDropChoice()
+        installTranslationDismissMonitor()
+    }
+
+    private func resizeTranslation(height: CGFloat) {
+        guard let panel = translationWindow, height > 1 else { return }
+        guard abs(panel.frame.height - height) > 0.5 else { return }
+        panel.setContentSize(NSSize(width: 286, height: height))
+        layoutTranslationBubble()
+        layoutChat()
+        layoutTrashToast()
+        layoutQuickBar()
+        layoutDropChoice()
+    }
+
+    private func layoutTranslationBubble() {
+        guard let card = translationWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if let focusCard = focusWindow, focusCard.isVisible {
+            origin.y = max(focusCard.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    private func installTranslationDismissMonitor() {
+        guard translationDismissMonitor == nil else { return }
+        translationDismissMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self, let card = self.translationWindow, card.isVisible else { return }
+            if !card.frame.contains(NSEvent.mouseLocation) {
+                self.hideTranslation()
+            }
+        }
+    }
+
+    private func hideTranslation() {
+        translationWindow?.orderOut(nil)
+        currentTranslation = nil
+        if let translationDismissMonitor {
+            NSEvent.removeMonitor(translationDismissMonitor)
+            self.translationDismissMonitor = nil
+        }
+    }
+
+    private func copyTranslation() {
+        guard let text = currentTranslation, !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    // MARK: Clipboard
+
+    private func showClipboard() {
+        hideQuickBar()
+        let host = ReminderHostingView(rootView: ClipboardCard(
+            items: clipboard.items,
+            onCopy: { [weak self] item in
+                self?.clipboard.copy(item)
+            },
+            onClear: { [weak self] in
+                self?.clipboard.clear()
+                self?.hideClipboard()
+            },
+            onClose: { [weak self] in self?.hideClipboard() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 300, height: 380))
+        let card = clipboardWindow ?? makeReminderPanel()
+        card.setContentSize(host.frame.size)
+        card.contentView = host
+        clipboardWindow = card
+        // No activation here: activating the app triggers applicationShouldHandleReopen,
+        // which pulls the workbench forward.
+        card.makeKeyAndOrderFront(nil)
+        layoutClipboard()
+        installClipboardClickMonitor()
+    }
+
+    private func hideClipboard() {
+        clipboardWindow?.orderOut(nil)
+        if let clipboardClickMonitor {
+            NSEvent.removeMonitor(clipboardClickMonitor)
+            self.clipboardClickMonitor = nil
+        }
+    }
+
+    /// The panel stays non-activating, so a click in another app has to close it.
+    private func installClipboardClickMonitor() {
+        guard clipboardClickMonitor == nil else { return }
+        clipboardClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            guard let self, let card = self.clipboardWindow, card.isVisible else { return }
+            if !card.frame.contains(NSEvent.mouseLocation) {
+                self.hideClipboard()
+            }
+        }
+    }
+
+    private func layoutClipboard() {
+        guard let card = clipboardWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if let focusCard = focusWindow, focusCard.isVisible {
+            origin.y = max(focusCard.frame.maxY + 8, origin.y)
+        }
+        if let weatherCard = weatherWindow, weatherCard.isVisible {
+            origin.y = max(weatherCard.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    // MARK: Music
+
+    private func showMusicBadge(app: String) {
+        let host = ReminderHostingView(rootView: MusicBadge(appName: app))
+        fitCardHost(host, fallback: NSSize(width: 150, height: 30))
+        let card = musicWindow ?? makeReminderPanel()
+        card.ignoresMouseEvents = true
+        card.setContentSize(host.frame.size)
+        card.contentView = host
+        musicWindow = card
+        card.orderFrontRegardless()
+        layoutMusicBadge()
+    }
+
+    private func hideMusicBadge() {
+        musicWindow?.orderOut(nil)
+    }
+
+    private func layoutMusicBadge() {
+        guard let card = musicWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        // Beside the pet, not above it: the cards (weather, focus, reminders) all
+        // stack above the pet and would otherwise collide with this chip.
+        var origin = NSPoint(
+            x: panel.frame.minX - size.width - 8,
+            y: panel.frame.midY - size.height / 2
+        )
+        if origin.x < screen.minX + 8 {
+            origin.x = panel.frame.maxX + 8
+        }
+        if origin.x + size.width > screen.maxX - 8 {
+            origin.x = panel.frame.midX - size.width / 2
+            origin.y = panel.frame.maxY + 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    @objc private func openChat() {
+        showChat()
+    }
+
+    @objc private func openClipboard() {
+        showClipboard()
+    }
+
+    @objc private func toggleMusicWatch() {
+        music.enabled.toggle()
+        if !music.enabled {
+            hideMusicBadge()
+        } else if let app = music.activeApp {
+            showMusicBadge(app: app)
+        }
+        status.menu = makeMenu()
+    }
+
+    // MARK: Weather
+
+    private func startWeatherTimer() {
+        guard weatherTimer == nil else { return }
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            self?.weatherTick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        weatherTimer = timer
+        weatherTick()
+    }
+
+    private func weatherTick() {
+        guard weather.shouldRemind() else { return }
+        // Keep focus time quiet; the next minute retries once the session ends.
+        guard !focus.isActive else { return }
+        if let weatherRetryAt, Date() < weatherRetryAt { return }
+        fetchWeather(remind: true)
+    }
+
+    private func fetchWeather(remind: Bool) {
+        weather.refresh { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let snapshot):
+                    self.weatherRetryAt = nil
+                    self.showWeatherCard(snapshot: snapshot, failure: nil)
+                    if remind { self.weather.markShown() }
+                case .failure:
+                    if remind {
+                        self.weatherRetryAt = Date().addingTimeInterval(10 * 60)
+                    } else {
+                        self.showWeatherCard(snapshot: nil, failure: "暂时取不到天气，检查网络或稍后再试。")
+                    }
+                }
+            }
+        }
+    }
+
+    @objc private func checkWeatherNow() {
+        fetchWeather(remind: false)
+    }
+
+    @objc private func toggleWeatherReminder() {
+        weather.setEnabled(!weather.enabled)
+        if weather.enabled { fetchWeather(remind: false) }
+    }
+
+    @objc private func setWeatherReminderTime(_ sender: NSMenuItem) {
+        weather.setReminderMinutes(sender.tag)
+    }
+
+    @objc private func setWeatherCity() {
+        showWeatherCityInput()
+    }
+
     @objc private func startFocusFromMenu(_ sender: NSMenuItem) {
         focus.startFocus(minutes: sender.tag)
+    }
+
+    @objc private func startFocusCustom() {
+        showFocusMinutesInput()
+    }
+
+    private func showFocusMinutesInput() {
+        hideQuickBar()
+        focusMinutesInput.text = String(focus.focusMinutes)
+        let host = ReminderHostingView(rootView: FocusMinutesCard(
+            model: focusMinutesInput,
+            onStart: { [weak self] in self?.submitFocusMinutes() },
+            onCancel: { [weak self] in self?.hideFocusMinutesInput() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 252, height: 84))
+        let card = focusMinutesWindow ?? makeReminderPanel()
+        card.setContentSize(host.frame.size)
+        card.contentView = host
+        focusMinutesWindow = card
+        activateForPetUI()
+        card.makeKeyAndOrderFront(nil)
+        layoutFocusMinutes()
+    }
+
+    private func hideFocusMinutesInput() {
+        focusMinutesWindow?.orderOut(nil)
+    }
+
+    private func submitFocusMinutes() {
+        guard let minutes = focusMinutesInput.value else { return }
+        hideFocusMinutesInput()
+        focus.startFocus(minutes: minutes)
+    }
+
+    private func layoutFocusMinutes() {
+        guard let card = focusMinutesWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if let card = focusWindow, card.isVisible {
+            origin.y = max(card.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    private func showWeatherCard(snapshot: WeatherSnapshot?, failure: String?) {
+        let host = ReminderHostingView(rootView: WeatherCard(
+            snapshot: snapshot,
+            failure: failure,
+            onDismiss: { [weak self] in self?.hideWeatherCard() },
+            onOpenWeather: { [weak self] in self?.openWeatherApp() },
+            onRetry: { [weak self] in
+                self?.weatherRetryAt = nil
+                self?.fetchWeather(remind: false)
+            },
+            onHeightChange: { [weak self] height in self?.resizeWeatherCard(height: height) }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 252, height: 120))
+        let card = weatherWindow ?? makeReminderPanel()
+        card.setContentSize(host.frame.size)
+        card.contentView = host
+        weatherWindow = card
+        card.orderFrontRegardless()
+        layoutWeatherCard()
+    }
+
+    private func hideWeatherCard() {
+        weatherWindow?.orderOut(nil)
+    }
+
+    private func resizeWeatherCard(height: CGFloat) {
+        guard let card = weatherWindow, height > 1 else { return }
+        guard abs(card.frame.height - height) > 0.5 else { return }
+        card.setContentSize(NSSize(width: 252, height: height))
+        layoutWeatherCard()
+    }
+
+    private func layoutWeatherCard() {
+        guard let card = weatherWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if let focusCard = focusWindow, focusCard.isVisible {
+            origin.y = max(focusCard.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    private func openWeatherApp() {
+        let weatherApp = URL(fileURLWithPath: "/System/Applications/Weather.app")
+        if FileManager.default.fileExists(atPath: weatherApp.path) {
+            NSWorkspace.shared.openApplication(at: weatherApp, configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
+        if let url = URL(string: "https://www.weather.com.cn") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func showWeatherCityInput() {
+        hideQuickBar()
+        weatherCityInput.text = weather.cityOverride
+        let host = ReminderHostingView(rootView: WeatherCityCard(
+            model: weatherCityInput,
+            current: weather.cityText,
+            onSave: { [weak self] in self?.submitWeatherCity() },
+            onCancel: { [weak self] in self?.hideWeatherCityInput() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 252, height: 96))
+        let card = weatherCityWindow ?? makeReminderPanel()
+        card.setContentSize(host.frame.size)
+        card.contentView = host
+        weatherCityWindow = card
+        activateForPetUI()
+        card.makeKeyAndOrderFront(nil)
+        layoutWeatherCityInput()
+    }
+
+    private func hideWeatherCityInput() {
+        weatherCityWindow?.orderOut(nil)
+    }
+
+    private func submitWeatherCity() {
+        weather.setCityOverride(weatherCityInput.text)
+        hideWeatherCityInput()
+        fetchWeather(remind: false)
+    }
+
+    private func layoutWeatherCityInput() {
+        guard let card = weatherCityWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
+        if let weatherCard = weatherWindow, weatherCard.isVisible {
+            origin.y = max(weatherCard.frame.maxY + 8, origin.y)
+        }
+        if let reminder = reminderWindow, reminder.isVisible {
+            origin.y = max(reminder.frame.maxY + 8, origin.y)
+        }
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    @objc private func toggleFocusPin() {
+        focus.togglePin()
     }
 
     @objc private func toggleFocusPause() {
@@ -727,6 +2369,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showReminderInput() {
+        hideQuickBar()
         let host = ReminderHostingView(rootView: ReminderInputCard(
             model: reminderInput,
             onSubmit: { [weak self] in self?.submitReminder() },
@@ -823,6 +2466,16 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             input.setFrameOrigin(origin)
         }
         layoutFocusCard()
+        layoutFocusMinutes()
+        layoutTranslationBubble()
+        layoutChat()
+        layoutTrashToast()
+        layoutQuickBar()
+        layoutDropChoice()
+        layoutWeatherCard()
+        layoutWeatherCityInput()
+        layoutClipboard()
+        layoutMusicBadge()
     }
 
     private func matchingPreset(_ config: [String: Any]) -> String {
@@ -925,11 +2578,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             panel.orderFrontRegardless()
             if !reminderList.items.isEmpty { showReminders() }
             if focus.showsCard { showFocusCard() }
+            if let app = music.activeApp { showMusicBadge(app: app) }
         } else {
             panel.orderOut(nil)
             hideReminders()
             hideReminderInput()
+            focus.unpin()
             hideFocusCard()
+            hideMusicBadge()
+            hideQuickBar()
         }
     }
 
@@ -944,9 +2601,22 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     func applicationWillTerminate(_ notification: Notification) {
         typingRetry?.invalidate()
         gazeTimer?.invalidate()
+        weatherTimer?.invalidate()
+        music.stop()
+        clipboard.stop()
         stopListening()
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         if let reminderClickMonitor { NSEvent.removeMonitor(reminderClickMonitor) }
+        if let clipboardClickMonitor { NSEvent.removeMonitor(clipboardClickMonitor) }
+        if let selectionUpMonitor { NSEvent.removeMonitor(selectionUpMonitor) }
+        if let selectionDownMonitor { NSEvent.removeMonitor(selectionDownMonitor) }
+        if let translationDismissMonitor { NSEvent.removeMonitor(translationDismissMonitor) }
+        if let chatDismissMonitor { NSEvent.removeMonitor(chatDismissMonitor) }
+        LocalRuntime.shared.shutdown()
+        trashToastHide?.cancel()
+        quickBarTimer?.invalidate()
+        if let dropChoiceMonitor { NSEvent.removeMonitor(dropChoiceMonitor) }
+        if let dropChoiceLocalMonitor { NSEvent.removeMonitor(dropChoiceLocalMonitor) }
         if let reminderObserver { NotificationCenter.default.removeObserver(reminderObserver) }
     }
 
@@ -1067,6 +2737,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         menu.addItem(.separator())
         addFocusItems(to: menu)
         menu.addItem(.separator())
+        addWeatherItems(to: menu)
+        if let app = music.activeApp {
+            let now = NSMenuItem(title: "听歌中：\(app)", action: nil, keyEquivalent: "")
+            now.isEnabled = false
+            menu.addItem(now)
+        }
+        let listening = menu.addItem(withTitle: "听歌状态", action: #selector(toggleMusicWatch), keyEquivalent: "")
+        listening.target = self
+        listening.state = music.enabled ? .on : .off
+        menu.addItem(menuItem("剪贴板（\(clipboard.items.count)）", #selector(openClipboard)))
+        menu.addItem(menuItem("问问桌宠…", #selector(openChat)))
+        menu.addItem(.separator())
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
             ("打字同步设置…", #selector(enableTyping)),
@@ -1080,6 +2762,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func addFocusItems(to menu: NSMenu) {
+        if focus.pinned {
+            menu.addItem(menuItem("取消钉住", #selector(toggleFocusPin)))
+        }
         if focus.isActive && focus.cardHidden {
             menu.addItem(menuItem("显示计时", #selector(revealFocusCard)))
         }
@@ -1093,7 +2778,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         case .idle:
             let start = NSMenuItem(title: "开始专注", action: nil, keyEquivalent: "")
             let options = NSMenu()
-            for minutes in FocusModel.durations {
+            for minutes in FocusModel.presets {
                 let option = options.addItem(
                     withTitle: "\(minutes) 分钟",
                     action: #selector(startFocusFromMenu(_:)),
@@ -1103,12 +2788,59 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 option.tag = minutes
                 option.state = minutes == focus.focusMinutes ? .on : .off
             }
+            options.addItem(.separator())
+            let custom = options.addItem(
+                withTitle: "自定义…",
+                action: #selector(startFocusCustom),
+                keyEquivalent: ""
+            )
+            custom.target = self
+            custom.state = FocusModel.presets.contains(focus.focusMinutes) ? .off : .on
             start.submenu = options
             menu.addItem(start)
             if focus.result == .focusFinished {
                 menu.addItem(menuItem("休息 \(focus.breakMinutes) 分钟", #selector(startFocusBreak)))
             }
         }
+    }
+
+    private func addWeatherItems(to menu: NSMenu) {
+        // One top-level entry: looking at the weather and configuring the
+        // reminder both live inside it.
+        let parent = NSMenuItem(title: "天气", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        let check = sub.addItem(withTitle: "看看天气", action: #selector(checkWeatherNow), keyEquivalent: "")
+        check.target = self
+        sub.addItem(.separator())
+        let toggle = sub.addItem(
+            withTitle: weather.enabled ? "关闭提醒" : "开启提醒",
+            action: #selector(toggleWeatherReminder),
+            keyEquivalent: ""
+        )
+        toggle.target = self
+        let times = NSMenuItem(title: "提醒时间", action: nil, keyEquivalent: "")
+        let timeMenu = NSMenu()
+        for minutes in WeatherModel.reminderPresets {
+            let item = timeMenu.addItem(
+                withTitle: String(format: "%02d:%02d", minutes / 60, minutes % 60),
+                action: #selector(setWeatherReminderTime(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = minutes
+            item.state = weather.reminderMinutes == minutes ? .on : .off
+        }
+        times.submenu = timeMenu
+        sub.addItem(times)
+        sub.addItem(.separator())
+        let city = sub.addItem(
+            withTitle: "设置城市…（\(weather.cityText)）",
+            action: #selector(setWeatherCity),
+            keyEquivalent: ""
+        )
+        city.target = self
+        parent.submenu = sub
+        menu.addItem(parent)
     }
 
     private func menuItem(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -1131,7 +2863,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     @objc private func resetPosition() {
         guard let screen = NSScreen.main?.visibleFrame else { return }
-        panel.setFrameOrigin(NSPoint(x: screen.maxX - panel.frame.width - 24, y: screen.minY + 20))
+        // Leave room for the wider focus card so it is not clamped at rest and
+        // can keep a fixed offset while the pet is dragged.
+        let petWidth = panel.frame.width
+        let cardInset = max(24, (FocusCard.width - petWidth) / 2 + 8)
+        panel.setFrameOrigin(NSPoint(x: screen.maxX - petWidth - cardInset, y: screen.minY + 58))
     }
 
     @objc private func quit() { NSApp.terminate(nil) }

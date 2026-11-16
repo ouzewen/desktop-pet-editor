@@ -1,4 +1,4 @@
-import { catOptions, catPresets, readPetConfig } from './cat';
+import { catOptions, catPresets, orangeCatOptions, readPetConfig } from './cat';
 import { Motion } from './motion';
 import { render, type Action, type CatPose } from './render';
 
@@ -16,8 +16,7 @@ export function checkCatActions() {
     if (!condition) throw Error(message);
   };
 
-  const orange = catPresets.preset_cat_orange;
-  const calico = catPresets.preset_cat_calico;
+  const { preset_cat_orange: orange, preset_cat_calico: calico, preset_cat_black: black } = catPresets;
   const snapshot = (action: Action, frame: number, config: Parameters<typeof render>[1] = orange, poseOptions: CatPose = {}) => {
     render(canvas, config, action, frame, undefined, poseOptions);
     const pose = pixels();
@@ -52,7 +51,7 @@ export function checkCatActions() {
     for (let frame = 0; frame < frames; frame++) {
       for (const part of ['ear', 'muzzle', 'eye', 'accessory'] as const) {
         if (part === 'accessory' && (action === 'left' || action === 'right')) continue;
-        const ids = Object.keys(catOptions[part]);
+        const ids = Object.keys(orangeCatOptions[part]);
         const choices = part === 'ear' && (action === 'left' || action === 'right')
           ? ids.filter(id => id !== 'CE03' && id !== 'CE05') : ids;
         const poses = choices.map(id =>
@@ -67,7 +66,7 @@ export function checkCatActions() {
         }
       }
       for (const eye of ['Y05', 'Y06', 'Y07'] as const) {
-        const combined = { ...catPresets.preset_cat_black, ear: 'CE04', muzzle: 'CN03', eye } as const;
+        const combined = { ...black, ear: 'CE04', muzzle: 'CN03', eye } as const;
         const natural = snapshot(action, frame, combined);
         assert(!same(natural, snapshot(action, frame, { ...combined, eyeColor: 'blue' })),
           `Iris recolor missing for ${eye} in ${action}/${frame}`);
@@ -76,20 +75,49 @@ export function checkCatActions() {
   }
 
   const belowKeyboard = 211 * SIZE * 4;
-  const orangeLaptop = snapshot('typing', 0).subarray(belowKeyboard);
+  const laptop = snapshot('typing', 0, black);
   for (const preset of Object.values(catPresets)) {
-    const accessories = Object.keys(catOptions.accessory).map(accessory =>
-      snapshot('sit', 0, readPetConfig({ ...preset, accessory })),
-    );
-    assert(distinct(accessories), `Accessory missing for ${preset.name}`);
+    const choices = preset === orange ? orangeCatOptions : catOptions;
+    const accessories = Object.fromEntries(Object.keys(choices.accessory).map(accessory =>
+      [accessory, snapshot('sit', 0, readPetConfig({ ...preset, accessory }))],
+    ));
+    assert(distinct(Object.values(accessories)), `Accessory missing for ${preset.name}`);
+    const retiredAccessories = preset === orange ? ['A04', 'A05'] : ['A04', 'A05', 'A06'];
+    for (const accessory of retiredAccessories) {
+      const restored = readPetConfig({ ...preset, accessory, ear: 'CE02' });
+      assert(!Object.hasOwn(choices.accessory, accessory), `Retired accessory ${accessory} offered for ${preset.name}`);
+      assert(restored.frame === 'CAT' && restored.accessory === 'A00' && restored.ear === 'CE02',
+        `Saved accessory ${accessory} did not reset safely for ${preset.name}`);
+    }
+    const gentle = snapshot('typing', 0, preset);
+    if (preset !== orange) {
+      for (const part of ['ear', 'muzzle', 'eye', 'pattern'] as const) {
+        const variants = Object.keys(choices[part]).map(value =>
+          snapshot('sit', 0, readPetConfig({ ...preset, [part]: value })),
+        );
+        assert(distinct(variants), `Duplicate ${part} for ${preset.name}`);
+        if (part === 'ear') {
+          const belowEars = 108 * SIZE * 4;
+          assert(variants.every(variant => same(variant.subarray(belowEars), variants[0]!.subarray(belowEars))),
+            `Ear change reached below the ears for ${preset.name}`);
+        }
+      }
+      for (let y = 226; y < 265; y++) {
+        const start = (y * SIZE + 120) * 4;
+        const end = (y * SIZE + 198) * 4;
+        assert(same(gentle.subarray(start, end), laptop.subarray(start, end)),
+          `Laptop paint changed for ${preset.name}`);
+      }
+    } else {
+      assert(same(accessories.A06!, snapshot('sit', 0, readPetConfig({ ...preset, accessory: 'A07' }))),
+        'Orange cap alias changed');
+    }
     for (const typingMode of ['gentle', 'fast'] as const) {
       const poses = Array.from({ length: 4 }, (_, frame) => snapshot('typing', frame, preset, { typingMode }));
       const first = poses[0]!;
-      if (preset === orange) {
-        assert(distinct(poses), `Repeated orange cat ${typingMode} frame`);
-        assert(poses.every(pose => same(orangeLaptop, pose.subarray(belowKeyboard))),
-          `Orange ${typingMode} typing changed the laptop or tail below the keyboard`);
-      }
+      assert(distinct(poses), `Repeated ${preset.name} ${typingMode} frame`);
+      assert(poses.every(pose => same(gentle.subarray(belowKeyboard), pose.subarray(belowKeyboard))),
+        `${preset.name} ${typingMode} typing changed the laptop or tail below the keyboard`);
       for (let frame = 1; frame < 4; frame++) {
         const next = poses[frame]!;
         for (let y = 0; y < 154; y++) {
@@ -105,11 +133,18 @@ export function checkCatActions() {
   for (let frame = 0; frame < 4; frame++) {
     const left = snapshot('left', frame, calico);
     const right = snapshot('right', frame, calico);
+    let flankDiffers = false;
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
-        assert(rgba(left, (y * SIZE + x) * 4) === rgba(right, (y * SIZE + SIZE - 1 - x) * 4), 'Right walk is not mirrored');
+        const a = (y * SIZE + x) * 4;
+        const b = (y * SIZE + SIZE - 1 - x) * 4;
+        assert(left[a + 3] === right[b + 3], 'Right walk silhouette is not mirrored');
+        if (left[a + 3] && (left[a] !== right[b] || left[a + 1] !== right[b + 1] || left[a + 2] !== right[b + 2])) {
+          flankDiffers = true;
+        }
       }
     }
+    assert(flankDiffers, 'Calico walk reused the opposite flank markings');
   }
 
   const sit = snapshot('sit', 0, calico);

@@ -38,6 +38,15 @@ Object.assign(window, {
       preview = { config: readPetConfig(config), action,
         typingMode: requested === 'typing-gentle' ? 'gentle' : 'fast', started: performance.now() };
     },
+    previewPNG: async () => {
+      await desktopReady;
+      // Read the frame after the preview loop has drawn any pending appearance changes.
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const custom = document.querySelector<HTMLImageElement>('#custom-sprite');
+      if (custom?.style.display === 'block') return custom.src;
+      if (canvas.title) throw Error(canvas.title);
+      return canvas.toDataURL('image/png');
+    },
     configure: (config: unknown) => motion.setConfig(readPetConfig(config)),
     beginDrag: () => motion.beginDrag(),
     drag: (dx: number) => motion.drag(dx),

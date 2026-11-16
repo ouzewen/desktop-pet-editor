@@ -2,6 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+with_model=0
+for arg in "$@"; do
+  if [ "$arg" = "--with-model" ]; then with_model=1; fi
+done
+
 version="$(tr -d '[:space:]' < VERSION)"
 build_number="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 
@@ -29,15 +34,37 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>${version}</string>
 <key>CFBundleVersion</key><string>${build_number}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>NSLocationUsageDescription</key><string>用于获取所在城市，给出穿衣与天气提醒。</string>
 </dict></plist>
 PLIST
+
+if [ "$with_model" = "1" ]; then
+  runtime_dir="${OLLAMA_RUNTIME_DIR:-$HOME/ollama-cli}"
+  model_file="${PET_MODEL_GGUF:-/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
+  rm -rf "$app/Contents/Resources/ollama" "$app/Contents/Resources/model"
+  mkdir -p "$app/Contents/Resources/ollama" "$app/Contents/Resources/model"
+  cp -R "$runtime_dir"/. "$app/Contents/Resources/ollama/"
+  cp "$model_file" "$app/Contents/Resources/model/"
+  printf 'Bundled local model: %s\n' "$(basename "$model_file")"
+fi
 
 swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/main.swift \
   desktop/Sources/Workbench.swift \
   desktop/Sources/Reminder.swift \
   desktop/Sources/Focus.swift \
+  desktop/Sources/Weather.swift \
+  desktop/Sources/Music.swift \
+  desktop/Sources/Clipboard.swift \
+  desktop/Sources/Translation.swift \
+  desktop/Sources/Chat.swift \
+  desktop/Sources/LocalRuntime.swift \
+  desktop/Sources/Trash.swift \
+  desktop/Sources/QuickBar.swift \
+  desktop/Sources/FileActions.swift \
+  desktop/Sources/PixelEditor.swift \
   desktop/Sources/PixelUI.swift \
+  -lsqlite3 \
   -o "$app/Contents/MacOS/DesktopPet"
 
 sign_identity="${DESKTOP_PET_SIGN_IDENTITY:-}"

@@ -46,6 +46,9 @@ final class WorkbenchState: ObservableObject {
     @Published var message = ""
     @Published var applying = false
     @Published var typingStatus = TypingSyncStatus.checking
+    @Published var customPresets: [CustomPresetInfo] = []
+    @Published var customSelected: String?
+    @Published var openingPixelEditor = false
     var choosePreset: (String) -> Void = { _ in }
     var refresh: () -> Void = {}
     var apply: () -> Void = {}
@@ -54,6 +57,8 @@ final class WorkbenchState: ObservableObject {
     var setSize: (Double) -> Void = { _ in }
     var setVisibility: (Bool) -> Void = { _ in }
     var setEyeFollow: (Bool) -> Void = { _ in }
+    var openPixelEditor: () -> Void = {}
+    var chooseCustom: (CustomPresetInfo) -> Void = { _ in }
 
     func update(_ config: [String: Any]) {
         appearance = config.compactMapValues { $0 as? String }
@@ -62,7 +67,7 @@ final class WorkbenchState: ObservableObject {
     }
 
     func resetUnavailablePreview() {
-        if appearance["palette"] != "CC01" && action == "typing-gentle" { action = "typing" }
+        if appearance["frame"] != "CAT" && action == "typing-gentle" { action = "typing" }
     }
 }
 
@@ -186,7 +191,7 @@ struct WorkbenchView: View {
     // itself. Left/right drag animation stays on the desktop pet, so it is not
     // offered here.
     private var actionOptions: [(String, String)] {
-        if state.appearance["palette"] == "CC01" {
+        if state.appearance["frame"] == "CAT" {
             return [("sit", "待机"), ("typing-gentle", "温柔打字"), ("typing", "疯狂打字")]
         }
         return [
@@ -238,6 +243,7 @@ struct WorkbenchView: View {
 
             Spacer(minLength: 8)
         }
+        .overlay(WindowDragArea())
     }
 
     private var previewPanel: some View {
@@ -300,6 +306,7 @@ struct WorkbenchView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 12) {
                     breedPanel
+                    customPanel
                     appearancePanel
                     tipsPanel
                 }
@@ -333,6 +340,63 @@ struct WorkbenchView: View {
                 }
             }
         }
+    }
+
+    private var customPanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("自定义")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.inkSoft)
+                    Spacer()
+                    Button("像素编辑") { state.openPixelEditor() }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .disabled(state.openingPixelEditor)
+                }
+                if state.customPresets.isEmpty {
+                    Text("从左侧预览开始编辑，保存后会出现在这里。")
+                        .font(PixelFont.font(10))
+                        .foregroundStyle(palette.inkSoft)
+                } else {
+                    LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
+                        ForEach(state.customPresets) { preset in
+                            customChip(preset)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func customChip(_ preset: CustomPresetInfo) -> some View {
+        let selected = state.customSelected == preset.id
+        return Button {
+            state.chooseCustom(preset)
+        } label: {
+            HStack(spacing: 6) {
+                if let image = NSImage(contentsOf: preset.url) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.none)
+                        .frame(width: 22, height: 22)
+                }
+                Text(preset.name)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                if selected {
+                    PixelGlyph(kind: .check, color: palette.green, size: 10)
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PixelBox(corner: 2).fill(selected ? palette.accent.opacity(0.42) : palette.panelAlt))
+            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
     }
 
     private func breedChip(_ preset: AppearancePreset) -> some View {
@@ -448,6 +512,16 @@ struct WorkbenchView: View {
                 ForEach(options, id: \.id) { option in
                     let selected = state.appearance["palette"] == option.id
                     Button {
+                        let wasOrange = state.appearance["palette"] == "CC01"
+                        let isOrange = option.id == "CC01"
+                        if state.appearance["frame"] == "CAT" && wasOrange != isOrange {
+                            let accessory = state.appearance["accessory"]
+                            if wasOrange && accessory == "A06" {
+                                state.appearance["accessory"] = "A07"
+                            } else if isOrange && accessory == "A07" {
+                                state.appearance["accessory"] = "A06"
+                            }
+                        }
                         state.appearance["palette"] = option.id
                         state.resetUnavailablePreview()
                         state.refresh()
@@ -530,8 +604,8 @@ struct WorkbenchView: View {
                         .foregroundStyle(palette.inkSoft)
                     PixelSlider(
                         value: $state.petSize,
-                        range: 160...360,
-                        step: 20,
+                        range: 120...320,
+                        step: 10,
                         palette: palette
                     )
                     .frame(width: 140)

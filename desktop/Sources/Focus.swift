@@ -14,7 +14,8 @@ enum FocusResult {
 /// One focus/break cycle. The model owns the countdown so the card, the pet
 /// menu and the self-test all read the same state.
 final class FocusModel: ObservableObject {
-    static let durations = [25, 45, 60]
+    static let presets = [25, 45, 60]
+    static let minuteRange = 1...180
 
     @Published private(set) var phase: FocusPhase = .idle
     @Published private(set) var remaining: Int = 0
@@ -22,6 +23,7 @@ final class FocusModel: ObservableObject {
     @Published private(set) var result: FocusResult?
     @Published private(set) var focusMinutes: Int = 45
     @Published private(set) var cardHidden = false
+    @Published private(set) var pinned = false
     let breakMinutes = 5
 
     /// Called when the session changes shape (phase, result, pause). Countdown
@@ -29,10 +31,14 @@ final class FocusModel: ObservableObject {
     var onChange: (() -> Void)?
 
     private var timer: Timer?
+    private var lastTickAt: Date?
+    /// False under `--self-test`, where the test drives the countdown itself.
+    private let automaticTimer: Bool
 
-    init() {
+    init(automaticTimer: Bool = true) {
+        self.automaticTimer = automaticTimer
         let saved = UserDefaults.standard.integer(forKey: "shibaFocusMinutes")
-        focusMinutes = FocusModel.durations.contains(saved) ? saved : 45
+        focusMinutes = FocusModel.minuteRange.contains(saved) ? saved : 45
     }
 
     var isActive: Bool { phase != .idle }
@@ -43,10 +49,12 @@ final class FocusModel: ObservableObject {
         String(format: "%02d:%02d", remaining / 60, remaining % 60)
     }
 
+    /// Any length the user asks for; the model only guards the sane bounds the
+    /// menu and the input card both validate against.
     func setFocusMinutes(_ minutes: Int) {
-        guard FocusModel.durations.contains(minutes) else { return }
-        focusMinutes = minutes
-        UserDefaults.standard.set(minutes, forKey: "shibaFocusMinutes")
+        let clamped = min(max(minutes, FocusModel.minuteRange.lowerBound), FocusModel.minuteRange.upperBound)
+        focusMinutes = clamped
+        UserDefaults.standard.set(clamped, forKey: "shibaFocusMinutes")
     }
 
     func startFocus(minutes: Int? = nil) {
@@ -55,9 +63,17 @@ final class FocusModel: ObservableObject {
         phase = .focusing
         paused = false
         result = nil
+        pinned = false
         cardHidden = false
         remaining = focusMinutes * 60
         startTimer()
+        onChange?()
+    }
+
+    /// Pins the pet and its card in place: dragging no longer moves either.
+    func togglePin() {
+        guard phase != .idle || result != nil else { return }
+        pinned.toggle()
         onChange?()
     }
 
@@ -75,6 +91,7 @@ final class FocusModel: ObservableObject {
     func stop() {
         guard phase != .idle else { return }
         stopTimer()
+        pinned = false
         phase = .idle
         paused = false
         result = nil
@@ -98,6 +115,7 @@ final class FocusModel: ObservableObject {
     func skipBreak() {
         guard phase == .resting else { return }
         stopTimer()
+        pinned = false
         phase = .idle
         paused = false
         remaining = 0
@@ -106,10 +124,17 @@ final class FocusModel: ObservableObject {
         onChange?()
     }
 
+    func unpin() {
+        guard pinned else { return }
+        pinned = false
+        onChange?()
+    }
+
     /// Hides the card without touching the running session; the countdown keeps
     /// going and the card comes back when the phase changes.
     func hideCard() {
         guard isActive, !cardHidden else { return }
+        pinned = false
         cardHidden = true
         onChange?()
     }
@@ -124,6 +149,7 @@ final class FocusModel: ObservableObject {
     /// Acknowledges a finished phase so its card closes.
     func dismiss() {
         guard result != nil else { return }
+        pinned = false
         result = nil
         onChange?()
     }
@@ -148,34 +174,48 @@ final class FocusModel: ObservableObject {
     }
 
     private func startTimer() {
-        guard timer == nil else { return }
-        // Common mode keeps counting while a menu is open.
+        guard automaticTimer, timer == nil else { return }
+        lastTickAt = Date()
+        // Common mode keeps counting while a menu is open. The tick measures the
+        // wall time since the previous fire, so a delayed tick (sleep, load) still
+        // removes the seconds that really passed instead of one per callback.
         let next = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.tick()
+            self?.timerFired()
         }
         RunLoop.main.add(next, forMode: .common)
         timer = next
     }
 
+    private func timerFired() {
+        let now = Date()
+        let elapsed = max(1, Int(now.timeIntervalSince(lastTickAt ?? now).rounded()))
+        lastTickAt = now
+        tick(seconds: elapsed)
+    }
+
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        lastTickAt = nil
     }
 }
 
 // MARK: - Card
 
 struct FocusCard: View {
+    /// The card's fixed width, also used to keep it clear of the screen edge.
+    static let width: CGFloat = 252
+
     @ObservedObject var model: FocusModel
 
     var onTogglePause: () -> Void = {}
-    var onExtend: () -> Void = {}
     var onStop: () -> Void = {}
     var onStartBreak: () -> Void = {}
     var onStartFocus: () -> Void = {}
     var onSkipBreak: () -> Void = {}
     var onDismiss: () -> Void = {}
     var onHideCard: () -> Void = {}
+    var onTogglePin: () -> Void = {}
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -222,13 +262,24 @@ struct FocusCard: View {
                     .font(PixelFont.font(12))
                     .foregroundStyle(palette.ink)
                 Spacer(minLength: 6)
-                if model.isActive {
-                    Text(model.clockText)
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.ink)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                if model.isActive || model.pinned {
+                    Button(action: onTogglePin) {
+                        PixelGlyph(
+                            kind: .pin,
+                            color: model.pinned ? palette.accent : palette.inkSoft,
+                            size: 12
+                        )
+                        .frame(width: 17, height: 15)
+                        .background {
+                            if model.pinned {
+                                PixelBox(corner: 1).fill(palette.panelDeep)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(model.pinned ? "已钉住，点击恢复拖动" : "钉住：猫和卡片固定在当前位置")
+                    .accessibilityLabel(model.pinned ? "取消钉住" : "钉住")
                 }
                 Button(action: model.isActive ? onHideCard : onDismiss) {
                     PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
@@ -237,6 +288,15 @@ struct FocusCard: View {
                 }
                 .buttonStyle(.plain)
                 .help(model.isActive ? "收起卡片，计时继续" : "关闭")
+            }
+
+            if model.isActive {
+                Text(model.clockText)
+                    .font(PixelFont.font(36))
+                    .foregroundStyle(palette.ink)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 1)
+                    .accessibilityLabel("剩余 \(model.clockText)")
             }
 
             Text(detail)
@@ -249,7 +309,7 @@ struct FocusCard: View {
             actions
         }
         .padding(10)
-        .frame(width: 252, alignment: .leading)
+        .frame(width: Self.width, alignment: .leading)
         .background(PixelBox(corner: 3).fill(palette.panel))
         .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
         .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
@@ -281,13 +341,91 @@ struct FocusCard: View {
                 } else {
                     Button(model.paused ? "继续" : "暂停", action: onTogglePause)
                         .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-                    Button("延长 5 分钟", action: onExtend)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
                     Button("结束", action: onStop)
                         .buttonStyle(PixelButtonStyle(palette: palette))
                 }
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+// MARK: - Custom duration
+
+final class FocusMinutesModel: ObservableObject {
+    @Published var text = "45"
+
+    /// Nil while the field does not hold a whole number inside the allowed range.
+    var value: Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let minutes = Int(trimmed), FocusModel.minuteRange.contains(minutes) else { return nil }
+        return minutes
+    }
+}
+
+struct FocusMinutesCard: View {
+    @ObservedObject var model: FocusMinutesModel
+
+    var onStart: () -> Void = {}
+    var onCancel: () -> Void = {}
+
+    @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var focused: Bool
+
+    private var palette: PixelPalette { .of(colorScheme) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                PixelGlyph(kind: .bell, color: palette.accent, size: 12)
+                Text("专注时长")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+                Spacer(minLength: 6)
+                Button(action: onCancel) {
+                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                        .frame(width: 15, height: 15)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("取消")
+            }
+
+            HStack(spacing: 6) {
+                TextField("分钟", text: $model.text)
+                    .textFieldStyle(.plain)
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+                    .focused($focused)
+                    .onSubmit(onStart)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
+
+                Text("分钟")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+
+                Spacer(minLength: 4)
+
+                Button("开始", action: onStart)
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .disabled(model.value == nil)
+                    .opacity(model.value == nil ? 0.5 : 1)
+            }
+
+            Text("1–180 分钟。回车开始，Esc 取消。")
+                .font(PixelFont.font(11))
+                .foregroundStyle(palette.inkSoft)
+        }
+        .padding(10)
+        .frame(width: 252, alignment: .leading)
+        .background(PixelBox(corner: 3).fill(palette.panel))
+        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
+        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .onAppear {
+            DispatchQueue.main.async { focused = true }
+        }
+        .onExitCommand(perform: onCancel)
     }
 }

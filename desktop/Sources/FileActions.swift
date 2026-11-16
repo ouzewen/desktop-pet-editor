@@ -1,0 +1,282 @@
+import AppKit
+import Foundation
+import SwiftUI
+
+// MARK: - File kinds
+
+enum FileKind {
+    case image
+    case document
+    case unsupported
+
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "gif", "bmp", "webp"]
+    static let documentExtensions: Set<String> = ["txt", "md", "rtf", "html", "htm", "doc", "docx"]
+
+    static func of(_ url: URL) -> FileKind {
+        let ext = url.pathExtension.lowercased()
+        if imageExtensions.contains(ext) { return .image }
+        if documentExtensions.contains(ext) { return .document }
+        return .unsupported
+    }
+}
+
+enum ConvertFormat {
+    case png
+    case jpg
+    case pdf
+
+    var title: String {
+        switch self {
+        case .png: return "PNG"
+        case .jpg: return "JPG"
+        case .pdf: return "PDF"
+        }
+    }
+
+    var pathExtension: String {
+        switch self {
+        case .png: return "png"
+        case .jpg: return "jpg"
+        case .pdf: return "pdf"
+        }
+    }
+}
+
+// MARK: - Operations
+
+enum FileTools {
+    static func formats(for kind: FileKind) -> [ConvertFormat] {
+        switch kind {
+        case .image: return [.png, .jpg]
+        case .document: return [.pdf]
+        case .unsupported: return []
+        }
+    }
+
+    static func trash(_ url: URL) -> Bool {
+        TrashService.trash([url]).failed.isEmpty
+    }
+
+    /// Zips one file into the same folder; returns the archive URL.
+    static func zip(_ url: URL) -> URL? {
+        let folder = url.deletingLastPathComponent()
+        let base = url.deletingPathExtension().lastPathComponent
+        let output = availableURL(in: folder, base: base, pathExtension: "zip")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        task.arguments = ["-c", "-k", "--norsrc", url.path, output.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard task.terminationStatus == 0,
+              FileManager.default.fileExists(atPath: output.path) else { return nil }
+        return output
+    }
+
+    static func convert(_ url: URL, to format: ConvertFormat) -> URL? {
+        let folder = url.deletingLastPathComponent()
+        let base = url.deletingPathExtension().lastPathComponent
+        let output = availableURL(in: folder, base: base, pathExtension: format.pathExtension)
+        switch format {
+        case .png, .jpg:
+            guard let image = image(at: url) else { return nil }
+            guard write(image: image, to: output, as: format) else { return nil }
+        case .pdf:
+            guard let text = attributedString(at: url) else { return nil }
+            guard writePDF(text, to: output) else { return nil }
+        }
+        return FileManager.default.fileExists(atPath: output.path) ? output : nil
+    }
+
+    // MARK: Helpers
+
+    private static func availableURL(in folder: URL, base: String, pathExtension: String) -> URL {
+        var candidate = folder.appendingPathComponent("\(base).\(pathExtension)")
+        var index = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = folder.appendingPathComponent("\(base) \(index).\(pathExtension)")
+            index += 1
+        }
+        return candidate
+    }
+
+    private static func image(at url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    private static func write(image: CGImage, to output: URL, as format: ConvertFormat) -> Bool {
+        let data: Data?
+        if format == .png {
+            data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        } else {
+            // JPEG has no alpha; flatten onto white so transparent PNGs stay clean.
+            // CGContext keeps this working without an AppKit drawing context.
+            let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            guard let context = CGContext(
+                data: nil,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            ) else { return false }
+            context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            context.fill(bounds)
+            context.draw(image, in: bounds)
+            guard let flat = context.makeImage() else { return false }
+            data = NSBitmapImageRep(cgImage: flat).representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        }
+        guard let data else { return false }
+        do {
+            try data.write(to: output)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func attributedString(at url: URL) -> NSAttributedString? {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "rtf":
+            return try? NSAttributedString(url: url, options: [:], documentAttributes: nil)
+        case "html", "htm":
+            return try? NSAttributedString(
+                url: url,
+                options: [.documentType: NSAttributedString.DocumentType.html],
+                documentAttributes: nil
+            )
+        case "doc", "docx":
+            let temp = FileManager.default.temporaryDirectory
+                .appendingPathComponent("pet-doc-\(UUID().uuidString).rtf")
+            defer { try? FileManager.default.removeItem(at: temp) }
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/textutil")
+            task.arguments = ["-convert", "rtf", "-output", temp.path, url.path]
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            do {
+                try task.run()
+                task.waitUntilExit()
+            } catch {
+                return nil
+            }
+            guard task.terminationStatus == 0 else { return nil }
+            return try? NSAttributedString(url: temp, options: [:], documentAttributes: nil)
+        default:
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            return NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 12)])
+        }
+    }
+
+    private static func writePDF(_ text: NSAttributedString, to output: URL) -> Bool {
+        let page = NSRect(x: 0, y: 0, width: 595, height: 842)
+        let view = NSTextView(frame: page)
+        view.textStorage?.setAttributedString(text)
+        view.isEditable = false
+        let data = NSMutableData()
+        let operation = NSPrintOperation.pdfOperation(with: view, inside: page, to: data)
+        operation.showsPrintPanel = false
+        operation.showsProgressPanel = false
+        guard operation.run() else { return false }
+        do {
+            try (data as Data).write(to: output)
+            return true
+        } catch {
+            return false
+        }
+    }
+}
+
+// MARK: - Action bar
+
+struct DropActionBar: View {
+    let fileName: String
+
+    var onTrash: () -> Void = {}
+    var onZip: () -> Void = {}
+    var onConvert: () -> Void = {}
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: PixelPalette { .of(colorScheme) }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Text(fileName)
+                .font(PixelFont.font(10))
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(spacing: 6) {
+                button("删除", .close, onTrash)
+                button("压缩", .chevron, onZip)
+                button("转格式", .arrowRight, onConvert)
+            }
+        }
+        .padding(9)
+        .frame(width: 236)
+        .background(PixelBox(corner: 3).fill(palette.panel))
+        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
+        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+    }
+
+    private func button(_ title: String, _ icon: PixelIconKind, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                PixelGlyph(kind: icon, color: palette.ink, size: 10)
+                Text(title)
+                    .font(PixelFont.font(11))
+                    .foregroundStyle(palette.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(PixelBox(corner: 2).fill(palette.panelAlt))
+            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct DropFormatBar: View {
+    let formats: [ConvertFormat]
+    let fileName: String
+
+    var onPick: (ConvertFormat) -> Void = { _ in }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var palette: PixelPalette { .of(colorScheme) }
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Text("把 \(fileName) 转成")
+                .font(PixelFont.font(10))
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            HStack(spacing: 6) {
+                ForEach(formats, id: \.title) { format in
+                    Button(format.title) { onPick(format) }
+                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(9)
+        .frame(width: 220)
+        .background(PixelBox(corner: 3).fill(palette.panel))
+        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
+        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+    }
+}
