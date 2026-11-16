@@ -36,6 +36,7 @@ swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/main.swift \
   desktop/Sources/Workbench.swift \
   desktop/Sources/Reminder.swift \
+  desktop/Sources/Focus.swift \
   desktop/Sources/PixelUI.swift \
   -o "$app/Contents/MacOS/DesktopPet"
 

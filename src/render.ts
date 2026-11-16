@@ -117,15 +117,15 @@ const newCatLayers = [
 ];
 let catAssets: Promise<void> | undefined;
 const orangePath = 'cat/new_/CAT_';
-// Existing config IDs stay stable; the replacement art uses its own CE01–CE04 filenames.
-const orangeEars = { CE01: 'upright', CE02: 'CE01', CE03: 'CE02', CE04: 'CE03', CE05: 'CE04' } as const;
+const orangeEars = { CE01: 'upright', CE02: 'folded', CE03: 'round', CE04: 'droopy', CE05: 'curled' } as const;
 const orangeLayers = [
   'body', 'head_base', 'iris',
   ...Object.values(orangeEars).map(id => `ear_${id}`),
   ...['CN02', 'CN03', 'CN04'].map(id => `muzzle_${id}`),
   ...['P01', 'P02', 'P06'].map(id => `face_${id}`),
   ...Object.keys(catOptions.accessory).filter(id => id !== 'A00').map(id => `accessory_${id}`),
-  ...Array.from({ length: 4 }, (_, i) => [`typing_gentle_${i}`, `typing_fast_${i}`]).flat(),
+  'typing_body', 'typing_laptop',
+  ...Array.from({ length: 4 }, (_, i) => [`typing_arms_gentle_${i}`, `typing_arms_fast_${i}`]).flat(),
   ...[0, 1, 2].map(i => `typing_front_${i}`),
 ];
 export function prepareCatAssets() {
@@ -413,8 +413,12 @@ function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing:
   }
   const mode = pose.typingMode ?? 'gentle';
   const bodyAccessory = config.accessory === 'A04' || config.accessory === 'A05';
-  if (typing) draw(`typing_${mode}_${frame}`);
-  else draw('body');
+  if (typing) {
+    draw('typing_body');
+    draw(`typing_arms_${mode}_${frame}`);
+  } else {
+    draw('body');
+  }
   ctx.save();
   if (typing) {
     ctx.translate(24, 4);
@@ -440,7 +444,10 @@ function drawOrangeCat(ctx: CanvasRenderingContext2D, config: CatConfig, typing:
   }
   if (!bodyAccessory && config.accessory !== 'A00') draw(`accessory_${config.accessory}`);
   ctx.restore();
-  if (typing && mode === 'fast' && frame < 3) draw(`typing_front_${frame}`);
+  if (typing) {
+    if (mode === 'fast' && frame < 3) draw(`typing_front_${frame}`);
+    draw('typing_laptop');
+  }
   ctx.restore();
 }
 

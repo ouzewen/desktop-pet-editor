@@ -26,7 +26,57 @@ public/assets/
 
 新橘猫素材来自画布项目 `2576e72bf0f04924a4720136c4ddec8b` 的「橘猫」「不同耳朵」「嘴鼻」「面部花纹」「配饰」「敲键盘」节点。「图片节点 6」的两个输出是打字草稿；六件配饰取自画布上的「配饰」。原坐姿由身体、基础头部和独立耳朵合成；虹膜遮罩只覆盖深棕色眼仁。两组打字共用同一个头部、电脑和尾巴。
 
-用 LibTV MCP 以 `i-<节点 ID>-0.png` 保存这六张原图，再运行 `python scripts/extract-orange-cat.py ORIGINALS_DIR public/assets/cat/new_`（需要 Pillow、NumPy、SciPy）。脚本去掉原图里的棋盘底，按参考位置裁切和对齐，仅用最近邻取样。输出为 320×320 RGBA，alpha 仅为 0 或 255；保留原图颜色和原有描边宽度。配置中的旧耳朵编号保持不变：CE01 为立耳，CE02–CE05 依次映射到新素材的 CE01–CE04。
+用 LibTV MCP 以 `i-<节点 ID>-0.png` 保存这六张原图，再运行 `python scripts/extract-orange-cat.py ORIGINALS_DIR STAGING_DIR`（需要 Pillow、NumPy、SciPy）。脚本去掉原图里的棋盘底，按参考位置裁切和对齐，仅用最近邻取样。输出为 320×320 RGBA，alpha 仅为 0 或 255，保留原图颜色和描边宽度。将提取结果先保存到单独的中转目录，以免覆盖 Aseprite 重绘后导出的运行时图层。
+
+### 橘猫耳型
+
+每款有一份 320×320 源文件，统一存放在 `art/orange-cat/ears/`。`body` 和 `head` 已锁定。应用在橘猫正面待机和打字时读取下表中的 PNG，随头部一起定位。侧面走路使用自己的耳型素材和映射。
+
+| 配置 ID | 耳型 | Aseprite 源文件 | 运行时 PNG（`public/assets/cat/new_/`） |
+| --- | --- | --- | --- |
+| CE01 | 三角立耳 | `upright.aseprite` | `CAT_ear_upright.png` |
+| CE02 | 折耳 | `folded.aseprite` | `CAT_ear_folded.png` |
+| CE03 | 圆耳 | `round.aseprite` | `CAT_ear_round.png` |
+| CE04 | 垂耳 | `droopy.aseprite` | `CAT_ear_droopy.png` |
+| CE05 | 卷耳 | `curled.aseprite` | `CAT_ear_curled.png` |
+
+改稿后只导出 `ears` 层，保留透明底、320×320 画布和原坐标。以下命令在项目根目录导出圆耳，其他耳型替换对应文件名即可。
+
+```sh
+aseprite -b --layer ears art/orange-cat/ears/round.aseprite \
+  --save-as public/assets/cat/new_/CAT_ear_round.png
+```
+
+导出后运行 `./desktop/build.sh`，再用生成的桌宠 App 执行 `--self-test` 核对耳型切换和打字帧。
+
+### 橘猫嘴鼻、花纹与配饰
+
+源稿在 `art/orange-cat/`，每个配置 ID 对应一个独立的 `.aseprite`。三类素材都以同一个坐姿底子为基准，锁定 `body`、`head` 和 `ears`。运行时 PNG 同样通过 `aseprite -b --layer <图层名> <源稿> --save-as <PNG>` 导出。
+
+| 源稿目录及图层名 | ID | 运行时 PNG（`public/assets/cat/new_/`） |
+| --- | --- | --- |
+| `muzzle` | CN02–CN04 | `CAT_muzzle_<ID>.png` |
+| `face` | P01、P02、P06 | `CAT_face_<ID>.png` |
+| `accessory` | A01–A06 | `CAT_accessory_<ID>.png` |
+
+鼻子随嘴形一起替换。原小圆嘴 CN01 保存在基础头部。A04 小书包和 A05 围巾源稿的配饰层位于身体之上、头部之下，和运行时遮挡顺序一致。
+
+### 橘猫打字动画
+
+`art/orange-cat/typing/gentle.aseprite` 和 `fast.aseprite` 各有四帧，帧时长分别为 250 ms 和 90 ms。两组锁定同一份身体、尾巴、头部和电脑，胸前与前爪动作在 `torso_motion` 和 `paws_front` 层。应用使用可换装的头部图层，最后绘制电脑，遮住与键盘交叠的爪子下缘。
+
+在项目根目录导出两组运行图层：
+
+```sh
+for mode in gentle fast; do
+  aseprite -b "art/orange-cat/typing/$mode.aseprite" \
+    --script-param "mode=$mode" \
+    --script-param output=public/assets/cat/new_ \
+    --script scripts/export-orange-typing.lua
+done
+```
+
+导出后用桌宠 App 的 `--self-test` 检查八帧变化、头部定位和跨速度切换时的电脑与尾巴。
 
 ## 命名约定
 

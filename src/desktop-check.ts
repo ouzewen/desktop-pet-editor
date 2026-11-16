@@ -59,6 +59,12 @@ export function checkCatActions() {
           snapshot(action, frame, readPetConfig({ ...(part === 'eye' ? calico : orange), [part]: id })),
         );
         assert(distinct(poses), `Duplicate ${part} variant in ${action}/${frame}`);
+        if (part === 'ear' && (action === 'sit' || action === 'typing')) {
+          const belowEars = 108 * SIZE * 4;
+          const base = poses[0]!.subarray(belowEars);
+          assert(poses.every(pose => same(base, pose.subarray(belowEars))),
+            `Ear change modified pixels below the ears in ${action}/${frame}`);
+        }
       }
       for (const eye of ['Y05', 'Y06', 'Y07'] as const) {
         const combined = { ...catPresets.preset_cat_black, ear: 'CE04', muzzle: 'CN03', eye } as const;
@@ -69,6 +75,8 @@ export function checkCatActions() {
     }
   }
 
+  const belowKeyboard = 211 * SIZE * 4;
+  const orangeLaptop = snapshot('typing', 0).subarray(belowKeyboard);
   for (const preset of Object.values(catPresets)) {
     const accessories = Object.keys(catOptions.accessory).map(accessory =>
       snapshot('sit', 0, readPetConfig({ ...preset, accessory })),
@@ -77,21 +85,17 @@ export function checkCatActions() {
     for (const typingMode of ['gentle', 'fast'] as const) {
       const poses = Array.from({ length: 4 }, (_, frame) => snapshot('typing', frame, preset, { typingMode }));
       const first = poses[0]!;
-      if (preset === orange) assert(distinct(poses), `Repeated orange cat ${typingMode} frame`);
+      if (preset === orange) {
+        assert(distinct(poses), `Repeated orange cat ${typingMode} frame`);
+        assert(poses.every(pose => same(orangeLaptop, pose.subarray(belowKeyboard))),
+          `Orange ${typingMode} typing changed the laptop or tail below the keyboard`);
+      }
       for (let frame = 1; frame < 4; frame++) {
         const next = poses[frame]!;
         for (let y = 0; y < 154; y++) {
           for (let x = 147; x < 181; x++) {
             const i = (y * SIZE + x) * 4;
             assert(rgba(first, i) === rgba(next, i), `Typing moved the center of the cat's head`);
-          }
-        }
-        if (preset === orange) {
-          for (let y = 215; y < 320; y++) {
-            for (let x = 0; x < 320; x++) {
-              const i = (y * SIZE + x) * 4;
-              assert(rgba(first, i) === rgba(next, i), 'Orange typing moved the laptop');
-            }
           }
         }
       }
@@ -152,7 +156,7 @@ export function checkCatActions() {
     assert(same(pixels(), straight), `Gaze reset did not restore ${eye}`);
   }
   const orangeMotion = new Motion(canvas, orange);
-  const begin = performance.now();
+  const begin = Math.ceil(performance.now());
   orangeMotion.key(begin);
   orangeMotion.tick(begin);
   assert(same(pixels(), snapshot('typing', 0)), 'Orange typing did not start gentle');

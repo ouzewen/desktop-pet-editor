@@ -88,6 +88,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var reminderInputShiftedOrigin: NSPoint?
     private let reminderInput = ReminderInputModel()
     private var reminderObserver: NSObjectProtocol?
+    private let focus = FocusModel()
+    private var focusHost: ReminderHostingView<FocusCard>?
+    private var focusWindow: ReminderPanel?
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -119,6 +122,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         ) { [weak self] _ in
             self?.layoutReminder()
         }
+
+        focus.onChange = { [weak self] in self?.focusSessionChanged() }
 
         status.button?.title = "桌宠"
         status.menu = makeMenu()
@@ -330,7 +335,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         fputs("Reminder card failed to position above the pet\n", stderr)
                         exit(1)
                     }
-                    print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions")
+                    guard self.verifyFocusSession() else {
+                        fputs("Focus session did not run through focus, break and dismissal\n", stderr)
+                        exit(1)
+                    }
+                    print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions, focus and break session")
                     NSApp.terminate(nil)
                 }
             }
@@ -359,6 +368,42 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
               input.frame.width >= 200 else {
             return false
         }
+        return true
+    }
+
+    private func verifyFocusSession() -> Bool {
+        guard focus.phase == .idle else { return false }
+        guard makeMenu().items.contains(where: { $0.title == "开始专注" }) else { return false }
+        focus.startFocus()
+        guard focus.phase == .focusing,
+              focus.remaining == focus.focusMinutes * 60,
+              let card = focusWindow, card.isVisible,
+              card.frame.minY >= panel.frame.maxY - 1,
+              makeMenu().items.contains(where: { $0.title == "结束专注" }) else {
+            return false
+        }
+        focus.hideCard()
+        guard !card.isVisible else { return false }
+        focus.revealCard()
+        guard let shown = focusWindow, shown.isVisible else { return false }
+        let full = focus.remaining
+        focus.togglePause()
+        focus.tick(seconds: 60)
+        guard focus.remaining == full else { return false }
+        focus.togglePause()
+        focus.extend(minutes: 5)
+        guard focus.remaining == full + 5 * 60 else { return false }
+        focus.tick(seconds: focus.remaining)
+        guard focus.phase == .idle, focus.result == .focusFinished,
+              let finished = focusWindow, finished.isVisible else {
+            return false
+        }
+        focus.startBreak()
+        guard focus.phase == .resting, focus.remaining == focus.breakMinutes * 60 else { return false }
+        focus.tick(seconds: focus.remaining)
+        guard focus.phase == .idle, focus.result == .breakFinished else { return false }
+        focus.dismiss()
+        guard focus.result == nil, !(focusWindow?.isVisible ?? false) else { return false }
         return true
     }
 
@@ -581,6 +626,104 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func hideReminders() {
         reminderWindow?.orderOut(nil)
+        layoutFocusCard()
+    }
+
+    // MARK: Focus session
+
+    private func focusSessionChanged() {
+        status.menu = makeMenu()
+        if focus.showsCard {
+            showFocusCard()
+        } else {
+            hideFocusCard()
+        }
+    }
+
+    private func showFocusCard() {
+        let host: ReminderHostingView<FocusCard>
+        if let existing = focusHost {
+            host = existing
+        } else {
+            let created = ReminderHostingView(rootView: FocusCard(
+                model: focus,
+                onTogglePause: { [weak self] in self?.focus.togglePause() },
+                onExtend: { [weak self] in self?.focus.extend() },
+                onStop: { [weak self] in self?.focus.stop() },
+                onStartBreak: { [weak self] in self?.focus.startBreak() },
+                onStartFocus: { [weak self] in self?.focus.startFocus() },
+                onSkipBreak: { [weak self] in self?.focus.skipBreak() },
+                onDismiss: { [weak self] in self?.focus.dismiss() },
+                onHideCard: { [weak self] in self?.focus.hideCard() },
+                onHeightChange: { [weak self] height in self?.resizeFocusCard(height: height) }
+            ))
+            fitCardHost(created, fallback: NSSize(width: 252, height: 96))
+            focusHost = created
+            host = created
+        }
+        let card = focusWindow ?? makeReminderPanel()
+        if focusWindow == nil {
+            card.setContentSize(host.frame.size)
+            card.contentView = host
+            focusWindow = card
+        }
+        card.orderFrontRegardless()
+        layoutFocusCard()
+    }
+
+    private func hideFocusCard() {
+        focusWindow?.orderOut(nil)
+    }
+
+    private func resizeFocusCard(height: CGFloat) {
+        guard let card = focusWindow, height > 1 else { return }
+        guard abs(card.frame.height - height) > 0.5 else { return }
+        card.setContentSize(NSSize(width: 252, height: height))
+        layoutFocusCard()
+    }
+
+    private func layoutFocusCard() {
+        guard let card = focusWindow,
+              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let size = card.frame.size
+        let stackTop = (reminderWindow?.isVisible ?? false)
+            ? (reminderWindow?.frame.maxY ?? panel.frame.maxY)
+            : panel.frame.maxY
+        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: stackTop + 8)
+        if origin.y + size.height > screen.maxY {
+            origin.y = panel.frame.minY - size.height - 8
+        }
+        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
+        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
+        card.setFrameOrigin(origin)
+    }
+
+    @objc private func startFocusFromMenu(_ sender: NSMenuItem) {
+        focus.startFocus(minutes: sender.tag)
+    }
+
+    @objc private func toggleFocusPause() {
+        focus.togglePause()
+    }
+
+    @objc private func revealFocusCard() {
+        focus.revealCard()
+    }
+
+    @objc private func extendFocus() {
+        focus.extend()
+    }
+
+    @objc private func stopFocus() {
+        focus.stop()
+    }
+
+    @objc private func startFocusBreak() {
+        focus.startBreak()
+    }
+
+    @objc private func skipFocusBreak() {
+        focus.skipBreak()
     }
 
     private func showReminderInput() {
@@ -679,6 +822,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             origin.y = min(origin.y, screen.maxY - size.height - 8)
             input.setFrameOrigin(origin)
         }
+        layoutFocusCard()
     }
 
     private func matchingPreset(_ config: [String: Any]) -> String {
@@ -780,10 +924,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if visible {
             panel.orderFrontRegardless()
             if !reminderList.items.isEmpty { showReminders() }
+            if focus.showsCard { showFocusCard() }
         } else {
             panel.orderOut(nil)
             hideReminders()
             hideReminderInput()
+            hideFocusCard()
         }
     }
 
@@ -919,6 +1065,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             clearItem.target = self
         }
         menu.addItem(.separator())
+        addFocusItems(to: menu)
+        menu.addItem(.separator())
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
             ("打字同步设置…", #selector(enableTyping)),
@@ -929,6 +1077,44 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             item.target = self
         }
         return menu
+    }
+
+    private func addFocusItems(to menu: NSMenu) {
+        if focus.isActive && focus.cardHidden {
+            menu.addItem(menuItem("显示计时", #selector(revealFocusCard)))
+        }
+        switch focus.phase {
+        case .focusing:
+            menu.addItem(menuItem(focus.paused ? "继续专注" : "暂停专注", #selector(toggleFocusPause)))
+            menu.addItem(menuItem("延长 5 分钟", #selector(extendFocus)))
+            menu.addItem(menuItem("结束专注", #selector(stopFocus)))
+        case .resting:
+            menu.addItem(menuItem("跳过休息", #selector(skipFocusBreak)))
+        case .idle:
+            let start = NSMenuItem(title: "开始专注", action: nil, keyEquivalent: "")
+            let options = NSMenu()
+            for minutes in FocusModel.durations {
+                let option = options.addItem(
+                    withTitle: "\(minutes) 分钟",
+                    action: #selector(startFocusFromMenu(_:)),
+                    keyEquivalent: ""
+                )
+                option.target = self
+                option.tag = minutes
+                option.state = minutes == focus.focusMinutes ? .on : .off
+            }
+            start.submenu = options
+            menu.addItem(start)
+            if focus.result == .focusFinished {
+                menu.addItem(menuItem("休息 \(focus.breakMinutes) 分钟", #selector(startFocusBreak)))
+            }
+        }
+    }
+
+    private func menuItem(_ title: String, _ action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        return item
     }
 
     @objc private func enableTyping() {
