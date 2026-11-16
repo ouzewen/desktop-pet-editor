@@ -65,8 +65,18 @@ struct CustomPresetInfo: Identifiable {
     let url: URL
 }
 
+struct PixelEditSnapshot {
+    let png: Data
+    let source: Data?
+}
+
 enum PixelPresetStore {
     static let folderName = "custom"
+
+    static var runtimeFolder: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("DesktopPet/\(folderName)", isDirectory: true)
+    }
 
     /// The repo's public folder when running from a checkout; otherwise the
     /// app-support folder, so the editor still works in a packaged build.
@@ -76,8 +86,7 @@ enum PixelPresetStore {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             return folder
         }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("DesktopPet/\(folderName)", isDirectory: true)
+        let base = runtimeFolder
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -94,6 +103,25 @@ enum PixelPresetStore {
 
     static var manifestURL: URL { exportFolder.appendingPathComponent("presets.json") }
 
+    private static func sourceURL(for url: URL) -> URL {
+        url.deletingPathExtension().appendingPathExtension("source.json")
+    }
+
+    static func read(_ url: URL) throws -> PixelEditSnapshot {
+        PixelEditSnapshot(png: try Data(contentsOf: url), source: try? Data(contentsOf: sourceURL(for: url)))
+    }
+
+    static func write(_ snapshot: PixelEditSnapshot, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try snapshot.png.write(to: url, options: .atomic)
+        let sourceURL = sourceURL(for: url)
+        if let source = snapshot.source {
+            try source.write(to: sourceURL, options: .atomic)
+        } else if FileManager.default.fileExists(atPath: sourceURL.path) {
+            try FileManager.default.removeItem(at: sourceURL)
+        }
+    }
+
     static func load() -> [CustomPresetInfo] {
         guard let data = try? Data(contentsOf: manifestURL),
               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return [] }
@@ -106,14 +134,15 @@ enum PixelPresetStore {
     }
 
     @discardableResult
-    static func save(name: String, cells: [UInt32]) -> URL? {
+    static func save(name: String, cells: [UInt32], source: Data?) -> URL? {
         let slug = slugify(name)
         guard !slug.isEmpty else { return nil }
         let file = "\(slug).png"
         let url = exportFolder.appendingPathComponent(file)
         guard let png = renderPNG(cells: cells) else { return nil }
+        let snapshot = PixelEditSnapshot(png: png, source: source)
         do {
-            try png.write(to: url)
+            try write(snapshot, to: url)
         } catch {
             return nil
         }
@@ -124,11 +153,25 @@ enum PixelPresetStore {
             try? data.write(to: manifestURL)
         }
         // Keep a copy the running pet can read even outside the repo checkout.
-        let runtime = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("DesktopPet/\(folderName)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
-        try? png.write(to: runtime.appendingPathComponent(file))
+        let runtime = runtimeFolder.appendingPathComponent(file)
+        if url != runtime { try? write(snapshot, to: runtime) }
         return url
+    }
+
+    @discardableResult
+    static func delete(_ preset: CustomPresetInfo) -> Bool {
+        let fm = FileManager.default
+        try? fm.removeItem(at: preset.url)
+        try? fm.removeItem(at: sourceURL(for: preset.url))
+        let runtime = runtimeFolder.appendingPathComponent(preset.url.lastPathComponent)
+        try? fm.removeItem(at: runtime)
+        try? fm.removeItem(at: sourceURL(for: runtime))
+        var list = (try? JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [[String: String]]) ?? []
+        list.removeAll { ($0["id"] ?? "") == preset.id }
+        if let data = try? JSONSerialization.data(withJSONObject: list, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: manifestURL)
+        }
+        return true
     }
 
     // Premultiplied sRGB pixels, in 0xAARRGGBB order as UInt32 values.
@@ -218,10 +261,12 @@ final class PixelEditorModel: ObservableObject {
     private var undoStack: [[UInt32]] = []
     private var strokeOpen = false
     private var lastPoint: (column: Int, row: Int)?
+    private let source: Data?
 
-    init?(previewPNG: Data) {
+    init?(previewPNG: Data, source: Data? = nil) {
         guard let cells = PixelPresetStore.pixels(from: previewPNG) else { return nil }
         self.cells = cells
+        self.source = source
     }
 
     func chooseColor(_ hex: UInt32) {
@@ -305,7 +350,7 @@ final class PixelEditorModel: ObservableObject {
             message = "至少画一个格子再保存"
             return nil
         }
-        guard let url = PixelPresetStore.save(name: trimmed, cells: cells) else {
+        guard let url = PixelPresetStore.save(name: trimmed, cells: cells, source: source) else {
             message = "保存失败"
             return nil
         }

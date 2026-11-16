@@ -10,8 +10,10 @@ done
 version="$(tr -d '[:space:]' < VERSION)"
 build_number="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 
-npm run build
-./node_modules/.bin/vite build --config desktop/vite.config.ts
+if [ "${SKIP_NPM_BUILD:-0}" != "1" ]; then
+  npm run build
+  ./node_modules/.bin/vite build --config desktop/vite.config.ts
+fi
 
 app="build/desktop/桌宠.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -37,6 +39,10 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>NSLocationUsageDescription</key><string>用于获取所在城市，给出穿衣与天气提醒。</string>
 </dict></plist>
 PLIST
+
+if [ "$with_model" = "0" ]; then
+  printf 'Note: 这个构建不含本地模型，加 --with-model 生成完整版\n'
+fi
 
 if [ "$with_model" = "1" ]; then
   runtime_dir="${OLLAMA_RUNTIME_DIR:-$HOME/ollama-cli}"

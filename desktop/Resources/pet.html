@@ -8,26 +8,5 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 </style>
 </head>
 <body><canvas width="160" height="160"></canvas>
-<script>
-window.petShowCustom = function (src) {
-  var img = document.getElementById('custom-sprite');
-  if (!img) {
-    img = document.createElement('img');
-    img.id = 'custom-sprite';
-    img.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;image-rendering:pixelated;pointer-events:none;';
-    document.body.appendChild(img);
-  }
-  var canvas = document.querySelector('canvas');
-  if (src) {
-    img.src = src;
-    img.style.display = 'block';
-    if (canvas) canvas.style.visibility = 'hidden';
-  } else {
-    img.removeAttribute('src');
-    img.style.display = 'none';
-    if (canvas) canvas.style.visibility = 'visible';
-  }
-};
-</script>
 <script src="./pet.js"></script></body>
 </html>

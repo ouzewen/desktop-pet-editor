@@ -5,6 +5,7 @@ import WebKit
 struct AppearanceOption: Decodable {
     let id: String
     let name: String
+    let colors: [String]?
 }
 
 struct AppearancePreset: Decodable {
@@ -48,6 +49,21 @@ final class WorkbenchState: ObservableObject {
     @Published var typingStatus = TypingSyncStatus.checking
     @Published var customPresets: [CustomPresetInfo] = []
     @Published var customSelected: String?
+    /// Purely descriptive; it never reaches the renderer or the pet config.
+    @Published var gender: String {
+        didSet { UserDefaults.standard.set(gender, forKey: "petGender") }
+    }
+    /// Descriptive only, like the name and gender; never reaches the renderer.
+    @Published var birthDate: Date? {
+        didSet {
+            if let birthDate {
+                UserDefaults.standard.set(birthDate.timeIntervalSince1970, forKey: "petBirthDate")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "petBirthDate")
+            }
+        }
+    }
+    @Published var loadingCustom = false
     @Published var openingPixelEditor = false
     var choosePreset: (String) -> Void = { _ in }
     var refresh: () -> Void = {}
@@ -59,15 +75,38 @@ final class WorkbenchState: ObservableObject {
     var setEyeFollow: (Bool) -> Void = { _ in }
     var openPixelEditor: () -> Void = {}
     var chooseCustom: (CustomPresetInfo) -> Void = { _ in }
+    var deleteCustom: (CustomPresetInfo) -> Void = { _ in }
+
+    /// Draft of the name field; only 确认修改 writes it into the appearance.
+    @Published var nameText: String = ""
+    var nameDirty = false
+
+    static let genders = ["none", "♂", "♀"]
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: "petGender") ?? "none"
+        gender = Self.genders.contains(saved) ? saved : "none"
+        let stamp = UserDefaults.standard.double(forKey: "petBirthDate")
+        birthDate = stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+    }
 
     func update(_ config: [String: Any]) {
         appearance = config.compactMapValues { $0 as? String }
+        if !nameDirty { nameText = appearance["name", default: ""] }
         resetUnavailablePreview()
         refresh()
     }
 
+    func commitName() {
+        let trimmed = String(nameText.prefix(8))
+        nameText = trimmed
+        appearance["name"] = trimmed
+        nameDirty = false
+        refresh()
+    }
+
     func resetUnavailablePreview() {
-        if appearance["frame"] != "CAT" && action == "typing-gentle" { action = "typing" }
+        if appearance["frame"] != "CAT" && (action == "typing-gentle" || action == "typing-fast") { action = "typing" }
     }
 }
 
@@ -82,6 +121,10 @@ private enum WBTheme {
         case "preset_cat_black": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
         case "preset_cat_siamese": return paletteColors("CC04")
         case "preset_cat_calico": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
+        case "preset_cat_british_blue": return paletteColors("CC05")
+        case "preset_cat_american_shorthair": return paletteColors("CC06")
+        case "preset_cat_li_hua": return paletteColors("CC07")
+        case "preset_cat_ragdoll": return paletteColors("CC08")
         default: return [Color(pixelHex: 0xE9A53C)]
         }
     }
@@ -96,10 +139,14 @@ private enum WBTheme {
         case "C06": return [Color(pixelHex: 0x8E949A), Color(pixelHex: 0xFFFFFF)]
         case "C07": return [Color(pixelHex: 0xC85A28), Color(pixelHex: 0xFFF3E6)]
         case "C08": return [Color(pixelHex: 0x232326), Color(pixelHex: 0x3D3D41)]
-        case "CC01": return [Color(pixelHex: 0xE08A4A), Color(pixelHex: 0xFFF6E8)]
-        case "CC02": return [Color(pixelHex: 0x2B2930), Color(pixelHex: 0x4A4750)]
-        case "CC04": return [Color(pixelHex: 0xF6E3CA), Color(pixelHex: 0x704932), Color(pixelHex: 0x6794B5)]
+        case "CC01": return [Color(pixelHex: 0xF2AD6C), Color(pixelHex: 0xCA7E4D), Color(pixelHex: 0xFFF6E8)]
+        case "CC02": return [Color(pixelHex: 0x4D4856), Color(pixelHex: 0x3F3A45), Color(pixelHex: 0x625D67)]
+        case "CC04": return [Color(pixelHex: 0xF6E3CA), Color(pixelHex: 0x704932), Color(pixelHex: 0xFCF5EB)]
         case "CC03": return [Color(pixelHex: 0xD98E4A), Color(pixelHex: 0x2B2930), Color(pixelHex: 0xFFFFFF)]
+        case "CC05": return [Color(pixelHex: 0x95999F), Color(pixelHex: 0x73757A), Color(pixelHex: 0xF8F7F4)]
+        case "CC06": return [Color(pixelHex: 0xC4C5C8), Color(pixelHex: 0x919398), Color(pixelHex: 0xFAF9F5)]
+        case "CC07": return [Color(pixelHex: 0xB97E4C), Color(pixelHex: 0x7B4F35), Color(pixelHex: 0xFFF7EB)]
+        case "CC08": return [Color(pixelHex: 0xFAE8CB), Color(pixelHex: 0xC18B60), Color(pixelHex: 0xFFFDF8)]
         default: return [Color(pixelHex: 0x9E9E9E)]
         }
     }
@@ -170,8 +217,8 @@ struct WorkbenchView: View {
     private var palette: PixelPalette { .of(colorScheme) }
 
     private let fields = [
-        ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
-        ("eyeColor", "瞳色"), ("pattern", "面部花纹"), ("accessory", "配饰"),
+        ("ear", "耳朵"), ("nose", "鼻子"), ("mouth", "嘴巴"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
+        ("pattern", "面部花纹"), ("bodyPattern", "毛皮花纹"), ("accessory", "配饰"),
     ]
     private let fieldColumns = [
         GridItem(.flexible(), spacing: 10, alignment: .top),
@@ -192,7 +239,7 @@ struct WorkbenchView: View {
     // offered here.
     private var actionOptions: [(String, String)] {
         if state.appearance["frame"] == "CAT" {
-            return [("sit", "待机"), ("typing-gentle", "温柔打字"), ("typing", "疯狂打字")]
+            return [("sit", "待机"), ("typing-gentle", "慢敲键盘"), ("typing-fast", "比较快"), ("typing", "特别快")]
         }
         return [
             ("sit", "待机"),
@@ -305,9 +352,10 @@ struct WorkbenchView: View {
         if state.catalog != nil {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 12) {
+                    namePanel
                     breedPanel
-                    customPanel
                     appearancePanel
+                    customPanel
                     tipsPanel
                 }
                 .frame(maxWidth: .infinity)
@@ -326,6 +374,237 @@ struct WorkbenchView: View {
         }
     }
 
+    @State private var editingName = false
+    @State private var editingBirth = false
+    @State private var draftYear = Calendar.current.component(.year, from: Date())
+    @State private var draftMonth = 1
+    @State private var draftDay = 1
+
+    private var draftDays: Int {
+        let calendar = Calendar.current
+        guard let date = calendar.date(from: DateComponents(year: draftYear, month: draftMonth, day: 1)),
+              let range = calendar.range(of: .day, in: .month, for: date) else { return 31 }
+        return range.count
+    }
+
+    private var yearOptions: [Int] {
+        let current = Calendar.current.component(.year, from: Date())
+        let stored = state.birthDate.map { Calendar.current.component(.year, from: $0) } ?? current
+        return Array(min(stored, current - 20)...max(current, stored))
+    }
+
+    private func beginBirthEdit() {
+        let calendar = Calendar.current
+        let base = state.birthDate ?? Date()
+        draftYear = calendar.component(.year, from: base)
+        draftMonth = calendar.component(.month, from: base)
+        draftDay = calendar.component(.day, from: base)
+        editingBirth = true
+    }
+
+    private func commitBirthEdit() {
+        var components = DateComponents()
+        components.year = draftYear
+        components.month = draftMonth
+        components.day = min(draftDay, draftDays)
+        if let date = Calendar.current.date(from: components) {
+            state.birthDate = date
+        }
+        editingBirth = false
+    }
+
+    private static let birthdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter
+    }()
+
+    private var ageText: String {
+        guard let birth = state.birthDate else { return "未知" }
+        let now = Date()
+        guard birth <= now else { return "未知" }
+        let years = Calendar.current.dateComponents([.year], from: birth, to: now).year ?? 0
+        return "\(years) 岁"
+    }
+
+    private var birthText: String {
+        guard let birth = state.birthDate else { return "未设置" }
+        return Self.birthdayFormatter.string(from: birth)
+    }
+
+    private var namePanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                profileLabel("档案卡")
+
+                nameField
+
+                Rectangle()
+                    .fill(palette.borderSoft.opacity(0.7))
+                    .frame(height: 1)
+
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        profileLabel("性别")
+                        PixelSelect(
+                            options: [("none", "未选择"), ("♂", "♂ 男孩"), ("♀", "♀ 女孩")],
+                            selection: $state.gender,
+                            palette: palette
+                        )
+                        .accessibilityLabel("性别")
+                        .accessibilityIdentifier("profile-gender")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            profileLabel("出生日期")
+                            Spacer(minLength: 0)
+                            Text("年龄 \(ageText)")
+                                .font(PixelFont.font(10))
+                                .foregroundStyle(palette.inkSoft)
+                                .help("年龄根据出生日期自动计算")
+                                .accessibilityIdentifier("profile-age")
+                        }
+                        HStack(spacing: 8) {
+                            Text(birthText)
+                                .font(PixelFont.font(13))
+                                .monospacedDigit()
+                                .foregroundStyle(state.birthDate == nil ? palette.inkSoft : palette.ink)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                            Spacer(minLength: 0)
+                            Button(editingBirth ? "收起" : state.birthDate == nil ? "设置" : "修改") {
+                                if editingBirth { editingBirth = false } else { beginBirthEdit() }
+                            }
+                            .buttonStyle(PixelButtonStyle(palette: palette))
+                            .accessibilityLabel(editingBirth ? "收起出生日期编辑" : "修改出生日期")
+                            .accessibilityIdentifier("profile-edit-birth")
+                        }
+                        .frame(height: 34)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if editingBirth { birthEditor }
+            }
+        }
+    }
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if editingName {
+                HStack(spacing: 8) {
+                    profileLabel("姓名")
+                    PixelTextField(
+                        text: Binding(
+                            get: { state.nameText },
+                            set: { state.nameText = $0; state.nameDirty = true }
+                        ),
+                        placeholder: "给桌宠起个名字",
+                        palette: palette
+                    )
+                    .accessibilityLabel("桌宠姓名")
+                    .accessibilityIdentifier("profile-name-input")
+                    .onSubmit {
+                        state.commitName()
+                        editingName = false
+                    }
+                    Text("\(state.nameText.count)/8")
+                        .font(PixelFont.font(11))
+                        .foregroundStyle(state.nameText.count > 8 ? palette.red : palette.inkSoft)
+                        .fixedSize()
+                }
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Button("取消") { cancelNameEdit() }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                    Button("确认修改") {
+                        state.commitName()
+                        editingName = false
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .accessibilityIdentifier("profile-save-name")
+                }
+            } else {
+                HStack(spacing: 12) {
+                    profileLabel("姓名")
+                    Text(state.appearance["name", default: ""].isEmpty
+                         ? "未命名" : state.appearance["name", default: ""])
+                        .font(PixelFont.font(16))
+                        .foregroundStyle(state.appearance["name", default: ""].isEmpty ? palette.inkSoft : palette.ink)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Spacer(minLength: 8)
+                    Button("修改姓名") {
+                        state.nameText = state.appearance["name", default: ""]
+                        state.nameDirty = false
+                        editingName = true
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                    .accessibilityIdentifier("profile-edit-name")
+                }
+                .frame(minHeight: 28)
+            }
+        }
+        .onExitCommand { cancelNameEdit() }
+    }
+
+    private func cancelNameEdit() {
+        state.nameText = state.appearance["name", default: ""]
+        state.nameDirty = false
+        editingName = false
+    }
+
+    private var birthEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                birthSelect("年", values: yearOptions, selection: $draftYear)
+                birthSelect("月", values: Array(1...12), selection: $draftMonth)
+                birthSelect("日", values: Array(1...draftDays), selection: $draftDay)
+            }
+            HStack(spacing: 8) {
+                if state.birthDate != nil {
+                    Button("清除日期") {
+                        state.birthDate = nil
+                        editingBirth = false
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                }
+                Spacer(minLength: 0)
+                Button("取消") { editingBirth = false }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                Button("确认修改") { commitBirthEdit() }
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .accessibilityIdentifier("profile-save-birth")
+            }
+        }
+        .padding(10)
+        .background(PixelBox(corner: 2).fill(palette.panelDeep.opacity(0.6)))
+        .onChange(of: draftYear) { _ in draftDay = min(draftDay, draftDays) }
+        .onChange(of: draftMonth) { _ in draftDay = min(draftDay, draftDays) }
+        .onExitCommand { editingBirth = false }
+    }
+
+    private func birthSelect(_ label: String, values: [Int], selection: Binding<Int>) -> some View {
+        PixelSelect(
+            options: values.map { (String($0), "\($0) \(label)") },
+            selection: Binding(
+                get: { String(selection.wrappedValue) },
+                set: { if let value = Int($0) { selection.wrappedValue = value } }
+            ),
+            palette: palette
+        )
+        .accessibilityLabel("出生\(label)")
+    }
+
+    private func profileLabel(_ text: String) -> some View {
+        Text(text)
+            .font(PixelFont.font(12))
+            .foregroundStyle(palette.inkSoft)
+            .fixedSize()
+    }
+
     private var breedPanel: some View {
         PixelPanel(palette: palette, padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
@@ -333,11 +612,16 @@ struct WorkbenchView: View {
                     .font(PixelFont.font(12))
                     .foregroundStyle(palette.inkSoft)
 
-                LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
-                    ForEach(visiblePresets, id: \.id) { preset in
-                        breedChip(preset)
-                    }
-                }
+                PixelSelect(
+                    options: visiblePresets.map { (id: $0.id, name: $0.name) },
+                    selection: Binding(
+                        get: { state.preset },
+                        set: { state.choosePreset($0) }
+                    ),
+                    palette: palette
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("品种")
             }
         }
     }
@@ -352,7 +636,7 @@ struct WorkbenchView: View {
                     Spacer()
                     Button("像素编辑") { state.openPixelEditor() }
                         .buttonStyle(PixelButtonStyle(palette: palette))
-                        .disabled(state.openingPixelEditor)
+                        .disabled(state.openingPixelEditor || state.loadingCustom)
                 }
                 if state.customPresets.isEmpty {
                     Text("从左侧预览开始编辑，保存后会出现在这里。")
@@ -371,9 +655,10 @@ struct WorkbenchView: View {
 
     private func customChip(_ preset: CustomPresetInfo) -> some View {
         let selected = state.customSelected == preset.id
-        return Button {
-            state.chooseCustom(preset)
-        } label: {
+        return ZStack(alignment: .topTrailing) {
+            Button {
+                state.chooseCustom(preset)
+            } label: {
             HStack(spacing: 6) {
                 if let image = NSImage(contentsOf: preset.url) {
                     Image(nsImage: image)
@@ -393,36 +678,27 @@ struct WorkbenchView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(PixelBox(corner: 2).fill(selected ? palette.accent.opacity(0.42) : palette.panelAlt))
-            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+                .background(PixelBox(corner: 2).fill(selected ? palette.accent.opacity(0.42) : palette.panelAlt))
+                .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+            }
+            .buttonStyle(.plain)
+            .disabled(state.applying)
+            .help(selected ? "取消叠加这个自定义形象" : "叠加这个自定义形象")
+
+            Button {
+                state.deleteCustom(preset)
+            } label: {
+                PixelGlyph(kind: .close, color: palette.inkSoft, size: 8)
+                    .frame(width: 13, height: 13)
+                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .offset(x: 3, y: -3)
+            .help("删除这个自定义形象")
         }
-        .buttonStyle(.plain)
     }
 
-    private func breedChip(_ preset: AppearancePreset) -> some View {
-        let selected = preset.id == state.preset
-        return Button {
-            state.choosePreset(preset.id)
-        } label: {
-            HStack(spacing: 6) {
-                PixelSwatch(colors: WBTheme.presetColors(preset.id), palette: palette, size: 12)
-                Text(preset.name)
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 2)
-                if selected {
-                    PixelGlyph(kind: .check, color: palette.green, size: 10)
-                }
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(PixelBox(corner: 2).fill(selected ? palette.accent.opacity(0.42) : palette.panelAlt))
-            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
-        }
-        .buttonStyle(.plain)
-    }
 
     @ViewBuilder
     private var appearancePanel: some View {
@@ -430,7 +706,6 @@ struct WorkbenchView: View {
             let frame = state.appearance["frame", default: "M1"]
             let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
             let fieldsForFrame = catalog.fieldsByFrame[optionGroup] ?? [:]
-            let palettes = fieldsForFrame["palette"] ?? []
 
             PixelPanel(palette: palette, padding: 12) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -438,41 +713,30 @@ struct WorkbenchView: View {
                         .font(PixelFont.font(12))
                         .foregroundStyle(palette.inkSoft)
 
-                    nameRow
-
-                    PixelDivider(palette: palette)
-
                     LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
                         ForEach(fields, id: \.0) { key, title in
-                            fieldPicker(title: title, key: key, options: fieldsForFrame[key] ?? [])
+                            if let options = fieldsForFrame[key] {
+                                fieldPicker(title: key == "pattern" && frame == "CAT" ? "额头花纹" : title,
+                                            key: key, options: options)
+                            }
                         }
                     }
 
-                    paletteRow(options: palettes)
+                    if frame == "CAT" {
+                        Text("额头单独搭配；毛皮花纹同时改变脸部、身体和尾巴")
+                            .font(PixelFont.font(12))
+                            .foregroundStyle(palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                        pupilControls(options: fieldsForFrame)
+                        coatPicker(options: fieldsForFrame["coat"] ?? [])
+                    } else {
+                        paletteRow(options: fieldsForFrame["palette"] ?? [])
+                    }
                 }
             }
         }
     }
 
-    private var nameRow: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("宠物名")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Spacer()
-                Text("\(state.appearance["name", default: ""].count)/8")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(nameCountColor)
-            }
-            PixelTextField(
-                text: appearanceBinding("name"),
-                placeholder: "给桌宠起个名字",
-                palette: palette
-            )
-            .onSubmit { state.refresh() }
-        }
-    }
 
     private var nameCountColor: Color {
         let count = state.appearance["name", default: ""].count
@@ -480,8 +744,7 @@ struct WorkbenchView: View {
     }
 
     private func fieldPicker(title: String, key: String, options: [AppearanceOption]) -> some View {
-        let disabled = key == "eyeColor" && state.appearance["eye"] == "Y02"
-        return VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(PixelFont.font(12))
                 .foregroundStyle(palette.inkSoft)
@@ -490,14 +753,94 @@ struct WorkbenchView: View {
                 selection: appearanceBinding(key),
                 palette: palette
             )
-            .disabled(disabled)
-            .opacity(disabled ? 0.45 : 1)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier(key == "eyeColor" ? "eye-color-picker" : "\(key)-picker")
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private func pupilControls(options: [String: [AppearanceOption]]) -> some View {
+        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+            combinedPupilPicker(
+                title: "单瞳孔颜色",
+                options: options["eyeColor"] ?? [],
+                allowNone: false
+            )
+            combinedPupilPicker(
+                title: "双瞳孔颜色",
+                options: options["eyeColor"] ?? [],
+                allowNone: true
+            )
+        }
+    }
+
+    /// One dropdown per pupil: picking a colour implies the pupil exists; the
+    /// double pupil can also be switched off with 无.
+    private func combinedPupilPicker(title: String, options: [AppearanceOption], allowNone: Bool) -> some View {
+        let current: String = {
+            if allowNone, state.appearance["innerPupil"] == "none" { return "none" }
+            let key = allowNone ? "innerEyeColor" : "eyeColor"
+            return state.appearance[key] ?? "natural"
+        }()
+        var choices: [(id: String, name: String)] = allowNone ? [("none", "无")] : []
+        choices += options.map { (id: $0.id, name: $0.name) }
+
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            PixelSelect(
+                options: choices,
+                selection: Binding(
+                    get: { current },
+                    set: { value in
+                        if allowNone {
+                            if value == "none" {
+                                state.appearance["innerPupil"] = "none"
+                            } else {
+                                state.appearance["innerPupil"] = "round"
+                                state.appearance["innerEyeColor"] = value
+                            }
+                        } else {
+                            state.appearance["eyeColor"] = value
+                        }
+                        state.refresh()
+                    }
+                ),
+                palette: palette
+            )
+            .accessibilityLabel(title)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func coatPicker(options: [AppearanceOption]) -> some View {
+        let selected = options.first { $0.id == state.appearance["coat"] }
+        let colors = (selected?.colors ?? []).compactMap { hex in
+            UInt32(hex.dropFirst(), radix: 16).map { Color(pixelHex: $0) }
+        }
+        let swatch = colors.isEmpty ? WBTheme.paletteColors(state.appearance["palette", default: "CC01"]) : colors
+        return VStack(alignment: .leading, spacing: 3) {
+            Text("毛色搭配")
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            HStack(spacing: 8) {
+                PixelSelect(
+                    options: options.map { (id: $0.id, name: $0.name) },
+                    selection: appearanceBinding("coat"),
+                    palette: palette
+                )
+                .accessibilityLabel("毛色搭配")
+                .accessibilityIdentifier("coat-picker")
+                .frame(maxWidth: .infinity)
+                PixelSwatch(colors: swatch, palette: palette, size: 20)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
     private func paletteRow(options: [AppearanceOption]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("毛色")
                     .font(PixelFont.font(12))
@@ -512,18 +855,7 @@ struct WorkbenchView: View {
                 ForEach(options, id: \.id) { option in
                     let selected = state.appearance["palette"] == option.id
                     Button {
-                        let wasOrange = state.appearance["palette"] == "CC01"
-                        let isOrange = option.id == "CC01"
-                        if state.appearance["frame"] == "CAT" && wasOrange != isOrange {
-                            let accessory = state.appearance["accessory"]
-                            if wasOrange && accessory == "A06" {
-                                state.appearance["accessory"] = "A07"
-                            } else if isOrange && accessory == "A07" {
-                                state.appearance["accessory"] = "A06"
-                            }
-                        }
                         state.appearance["palette"] = option.id
-                        state.resetUnavailablePreview()
                         state.refresh()
                     } label: {
                         ZStack {
@@ -538,6 +870,8 @@ struct WorkbenchView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(option.name)
+                    .accessibilityIdentifier("palette-\(option.id)")
                     .help(option.name)
                 }
                 Spacer(minLength: 0)
@@ -594,7 +928,7 @@ struct WorkbenchView: View {
                     Toggle("眼神跟随", isOn: $state.eyeFollow)
                         .toggleStyle(PixelToggleStyle(palette: palette))
                         .accessibilityIdentifier("eye-follow-toggle")
-                        .help("让猫咪瞳孔跟随鼠标移动")
+                        .help("让猫咪眼睛的小高光跟随鼠标方向")
                         .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
 
                     Rectangle().fill(palette.borderSoft).frame(width: 2, height: 14)
@@ -627,7 +961,7 @@ struct WorkbenchView: View {
     }
 
     private var applyButton: some View {
-        let disabled = state.catalog == nil || state.applying
+        let disabled = state.catalog == nil || state.applying || state.loadingCustom
         return Button {
             state.apply()
         } label: {

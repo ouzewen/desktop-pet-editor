@@ -94,6 +94,12 @@ final class ClipboardStore {
         onChange?()
     }
 
+    func remove(_ item: ClipboardItem) {
+        guard items.contains(where: { $0.id == item.id }) else { return }
+        items.removeAll { $0.id == item.id }
+        onChange?()
+    }
+
     func clear() {
         items.removeAll()
         onChange?()
@@ -106,6 +112,7 @@ struct ClipboardCard: View {
     let items: [ClipboardItem]
 
     var onCopy: (ClipboardItem) -> Void = { _ in }
+    var onDelete: (ClipboardItem) -> Void = { _ in }
     var onClear: () -> Void = {}
     var onClose: () -> Void = {}
 
@@ -171,6 +178,15 @@ struct ClipboardCard: View {
                                     prominent: copiedID == item.id
                                 ))
                                 .help("复制到剪贴板")
+                                Button {
+                                    onDelete(item)
+                                } label: {
+                                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                                        .frame(width: 16, height: 16)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help("从剪贴板删除这一条")
                             }
                             .padding(.horizontal, 6)
                             .padding(.vertical, 5)

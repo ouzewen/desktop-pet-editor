@@ -11,6 +11,8 @@ final class LocalRuntime {
 
     private(set) var baseURL = URL(string: "http://127.0.0.1:11434")!
     private(set) var isEmbedded = false
+    /// Set when `prepare` fails, so the chat card can explain why.
+    private(set) var failureReason: String?
 
     private var process: Process?
     private let session: URLSession = {
@@ -52,12 +54,15 @@ final class LocalRuntime {
             }
             guard let runtimeDirectory = self.runtimeDirectory,
                   FileManager.default.fileExists(atPath: runtimeDirectory.appendingPathComponent("ollama").path) else {
+                self.failureReason = "这个构建没带本地模型运行时，用 --with-model 重新构建。"
                 completion(false)
                 return
             }
+            self.failureReason = nil
             progress("正在启动本地模型…")
             self.startEmbedded(runtimeDirectory) { started in
                 guard started else {
+                    self.failureReason = "本地模型服务启动失败。"
                     completion(false)
                     return
                 }

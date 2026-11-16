@@ -164,10 +164,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     )
     private let web: PetView = {
         let config = WKWebViewConfiguration()
-        if CommandLine.arguments.contains("--self-test") {
-            // WebKit otherwise taints pixel readback from bundled file URLs.
-            config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        }
+        // The bundled renderer compares custom edits to its local sprite layers.
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         return PetView(frame: .zero, configuration: config)
     }()
     private let preview: WKWebView = {
@@ -181,6 +179,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var previewReady = false
     private var appliedConfig: [String: Any]?
     private var draftTemplate: [String: Any] = [:]
+    private var activeCustomOverlay: PixelEditSnapshot?
+    private var customSelectionRequest = 0
     private var presetRequest = 0
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var keyboardTap: CFMachPort?
@@ -388,7 +388,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         } else if webView === web {
             ready = true
             if let appliedConfig { configurePet(appliedConfig) }
-            restoreCustomOverlay()
+            if let activeCustomOverlay { applyCustomOverlay(activeCustomOverlay, in: web) }
             if !isTest && workbenchState.visible {
                 panel.orderFrontRegardless()
                 if !reminderList.items.isEmpty { showReminders() }
@@ -404,11 +404,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func configureWorkbench() {
         workbenchState.choosePreset = { [weak self] id in
-            self?.clearCustomOverlay()
             self?.choosePreset(id)
         }
         workbenchState.openPixelEditor = { [weak self] in self?.showPixelEditor() }
         workbenchState.chooseCustom = { [weak self] preset in self?.applyCustom(preset) }
+        workbenchState.deleteCustom = { [weak self] preset in self?.confirmDeleteCustom(preset) }
         reloadCustomPresets()
         workbenchState.refresh = { [weak self] in self?.refreshPreview() }
         workbenchState.apply = { [weak self] in self?.applyDraft() }
@@ -502,6 +502,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.setDraft(config)
             self.appliedConfig = config
             self.configurePet(config)
+            self.restoreCustomOverlay()
             self.runSelfTestIfReady()
         }
     }
@@ -533,11 +534,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 exit(1)
             }
             self.workbenchState.appearance["palette"] = "CC02"
+            self.workbenchState.appearance["coat"] = "honey"
+            self.workbenchState.appearance["bodyPattern"] = "classic"
             self.workbenchState.appearance["eye"] = "Y03"
+            self.workbenchState.appearance["innerPupil"] = "round"
+            self.workbenchState.appearance["innerEyeColor"] = "amber"
+            self.workbenchState.appearance["eyeColor"] = "violet"
             self.workbenchState.appearance["pattern"] = "P06"
             self.applyDraft { applied in
                 guard applied, self.appliedConfig?["palette"] as? String == "CC02",
+                      self.appliedConfig?["coat"] as? String == "honey",
+                      self.appliedConfig?["bodyPattern"] as? String == "classic",
                       self.appliedConfig?["eye"] as? String == "Y03",
+                      self.appliedConfig?["innerPupil"] as? String == "round",
+                      self.appliedConfig?["innerEyeColor"] as? String == "amber",
+                      self.appliedConfig?["eyeColor"] as? String == "violet",
                       self.appliedConfig?["pattern"] as? String == "P06" else {
                     fputs("Workbench could not apply the configured cat\n", stderr)
                     exit(1)
@@ -551,6 +562,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         exit(1)
                     }
                     self.checkWorkbenchReopen()
+                    guard self.verifyGazeTracking() else {
+                        fputs("Mouse movement did not produce the expected gaze offsets\n", stderr)
+                        exit(1)
+                    }
                     guard self.verifyReminderPanel() else {
                         fputs("Reminder card failed to position above the pet\n", stderr)
                         exit(1)
@@ -592,8 +607,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         exit(1)
                     }
                     self.refreshPreview()
-                    self.capturePixelPreview { png in
-                        guard let png, self.verifyPixelEditor(png: png) else {
+                    self.capturePixelPreview { snapshot in
+                        guard let snapshot, snapshot.source != nil, self.verifyPixelEditor(png: snapshot.png) else {
                             fputs("Pixel editor failed to load or edit the workbench preview\n", stderr)
                             exit(1)
                         }
@@ -627,6 +642,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
               input.frame.width >= 200 else {
             return false
         }
+        return true
+    }
+
+    private func verifyCustomPresetDelete() -> Bool {
+        var cells = [UInt32](repeating: 0, count: PixelEditorModel.side * PixelEditorModel.side)
+        cells[0] = 0xFFEFB373
+        guard let url = PixelPresetStore.save(name: "自检删除", cells: cells, source: nil),
+              FileManager.default.fileExists(atPath: url.path),
+              let saved = PixelPresetStore.load().first(where: { $0.name == "自检删除" }) else { return false }
+        PixelPresetStore.delete(saved)
+        guard !FileManager.default.fileExists(atPath: url.path),
+              !PixelPresetStore.load().contains(where: { $0.id == saved.id }) else { return false }
         return true
     }
 
@@ -850,6 +877,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         for index in 0..<20 { store.add("item \(index)") }
         guard store.items.count == ClipboardStore.limit else { return false }
 
+        guard let removable = store.items.first else { return false }
+        let beforeRemove = store.items.count
+        store.remove(removable)
+        guard store.items.count == beforeRemove - 1,
+              !store.items.contains(where: { $0.id == removable.id }) else { return false }
+
         board.clearContents()
         board.setString("secret", forType: .string)
         board.setString("1", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
@@ -1047,11 +1080,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func setEyeFollow(_ enabled: Bool) {
         eyeFollow = enabled
         UserDefaults.standard.set(enabled, forKey: "shibaEyeFollow")
+        // Tracking mode can change even when the pointer is at the neutral position.
+        petGaze = nil
+        previewGaze = nil
         if enabled {
             pollGaze()
         } else {
-            petGaze = (0, 0)
-            previewGaze = (0, 0)
             if ready { web.evaluateJavaScript("window.pet.gaze(0, 0)") }
             if previewReady { preview.evaluateJavaScript("window.pet.gaze(0, 0)") }
         }
@@ -1059,8 +1093,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func startGazeTimer() {
         guard gazeTimer == nil else { return }
-        // Common mode keeps the pupils tracking while windows are being dragged.
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        // Common mode keeps the glints tracking while windows are being dragged.
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             self?.pollGaze()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -1069,35 +1103,53 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func pollGaze() {
         guard eyeFollow else { return }
+        let mouse = NSEvent.mouseLocation
         if ready, panel.isVisible {
-            sendGaze(gazeOffset(for: web), to: web, last: &petGaze)
+            sendGaze(gazeOffset(for: web, mouse: mouse), to: web, last: &petGaze)
         }
         if previewReady, preview.window?.isVisible == true {
-            sendGaze(gazeOffset(for: preview), to: preview, last: &previewGaze)
+            sendGaze(gazeOffset(for: preview, mouse: mouse), to: preview, last: &previewGaze)
         }
     }
 
     private func sendGaze(_ offset: (x: Int, y: Int), to view: WKWebView, last: inout (x: Int, y: Int)?) {
         guard last?.x != offset.x || last?.y != offset.y else { return }
         last = offset
-        view.evaluateJavaScript("window.pet.gaze(\(offset.x), \(offset.y))")
+        view.evaluateJavaScript("window.pet.trackPointer(\(offset.x), \(offset.y))")
     }
 
-    private func gazeOffset(for view: NSView) -> (x: Int, y: Int) {
+    private func gazeOffset(for view: NSView, mouse: NSPoint) -> (x: Int, y: Int) {
         guard let window = view.window else { return (0, 0) }
         let frameOnScreen = window.convertToScreen(view.convert(view.bounds, to: nil))
+        return Self.gazeOffset(for: mouse, in: frameOnScreen)
+    }
+
+    private static func gazeOffset(for mouse: NSPoint, in frameOnScreen: NSRect) -> (x: Int, y: Int) {
         guard frameOnScreen.width > 0, frameOnScreen.height > 0 else { return (0, 0) }
-        let mouse = NSEvent.mouseLocation
         let normalizedX = (mouse.x - frameOnScreen.minX) / frameOnScreen.width
         let normalizedY = (mouse.y - frameOnScreen.minY) / frameOnScreen.height
-        // The canvas is 160 x 160; the cat's eyes sit around (80, 58).
-        let dx = normalizedX * 160 - 80
+        // Keep the angle from the eyes and cap only the length of that vector.
+        let dx = normalizedX * 160 - 75
         let dy = (1 - normalizedY) * 160 - 58
-        let distance = (dx * dx + dy * dy).squareRoot()
-        guard distance > 6 else { return (0, 0) }
-        let gx = Int((dx / distance * 2.0).rounded())
-        let gy = Int((dy / distance * 1.4).rounded())
-        return (max(-2, min(2, gx)), max(-2, min(1, gy)))
+        let distance = hypot(dx, dy)
+        guard distance > 3 else { return (0, 0) }
+        let factor = 100 * min(1, (distance - 3) / 32) / distance
+        return (Int((dx * factor).rounded()), Int((dy * factor).rounded()))
+    }
+
+    private func verifyGazeTracking() -> Bool {
+        let frame = NSRect(x: 0, y: 0, width: 160, height: 160)
+        let center = Self.gazeOffset(for: NSPoint(x: 75, y: 102), in: frame)
+        let nearLeft = Self.gazeOffset(for: NSPoint(x: 68, y: 102), in: frame)
+        let shallow = Self.gazeOffset(for: NSPoint(x: 120, y: 115), in: frame)
+        let steep = Self.gazeOffset(for: NSPoint(x: 88, y: 147), in: frame)
+        let farLeft = Self.gazeOffset(for: NSPoint(x: 28, y: 102), in: frame)
+        let nearRight = Self.gazeOffset(for: NSPoint(x: 82, y: 102), in: frame)
+        return center.x == 0 && center.y == 0
+            && nearLeft.x < 0 && nearLeft.y == 0
+            && shallow.x > -shallow.y && shallow.y < 0
+            && steep.x > 0 && steep.x < -steep.y
+            && farLeft.x == -100 && farLeft.y == 0 && nearRight.x > 0
     }
 
     // MARK: Reminder
@@ -1378,14 +1430,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     // MARK: Pixel editor
 
-    private func capturePixelPreview(completion: @escaping (Data?) -> Void) {
-        preview.callAsyncJavaScript("return await window.pet.previewPNG()", arguments: [:], in: nil, in: .page) { result in
+    private func capturePixelPreview(completion: @escaping (PixelEditSnapshot?) -> Void) {
+        preview.callAsyncJavaScript("return await window.pet.previewSnapshot()", arguments: [:], in: nil, in: .page) { result in
             let prefix = "data:image/png;base64,"
-            guard case .success(let value) = result, let url = value as? String, url.hasPrefix(prefix) else {
+            guard case .success(let value) = result, let snapshot = value as? [String: Any],
+                  let url = snapshot["png"] as? String, url.hasPrefix(prefix),
+                  let png = Data(base64Encoded: String(url.dropFirst(prefix.count))) else {
                 completion(nil)
                 return
             }
-            completion(Data(base64Encoded: String(url.dropFirst(prefix.count))))
+            let source = (snapshot["source"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            completion(PixelEditSnapshot(png: png, source: source))
         }
     }
 
@@ -1395,13 +1450,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        guard previewReady, !draftTemplate.isEmpty, !workbenchState.openingPixelEditor else { return }
+        guard previewReady, !draftTemplate.isEmpty, !workbenchState.openingPixelEditor,
+              !workbenchState.loadingCustom else { return }
         workbenchState.openingPixelEditor = true
-        capturePixelPreview { [weak self] png in
+        capturePixelPreview { [weak self] snapshot in
             guard let self else { return }
             self.workbenchState.openingPixelEditor = false
             guard self.workbenchWindow?.isVisible == true else { return }
-            guard let png, let model = PixelEditorModel(previewPNG: png) else {
+            guard let snapshot, let model = PixelEditorModel(previewPNG: snapshot.png, source: snapshot.source) else {
                 self.workbenchState.message = "无法读取左侧预览，请重试"
                 return
             }
@@ -1429,53 +1485,145 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         window.makeKeyAndOrderFront(nil)
     }
 
+    private var savedCustomAppearances: [String: [String: Any]] {
+        get { UserDefaults.standard.dictionary(forKey: "customSpriteAppearances") as? [String: [String: Any]] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "customSpriteAppearances") }
+    }
+
     private func reloadCustomPresets() {
         workbenchState.customPresets = PixelPresetStore.load()
-        if let saved = UserDefaults.standard.string(forKey: "customSpriteName"),
-           workbenchState.customPresets.contains(where: { $0.id == saved }) {
-            workbenchState.customSelected = saved
-        } else {
-            workbenchState.customSelected = nil
+        if let selected = workbenchState.customSelected,
+           !workbenchState.customPresets.contains(where: { $0.id == selected }) {
+            clearCustomOverlay()
         }
+    }
+
+    private func confirmDeleteCustom(_ preset: CustomPresetInfo) {
+        let alert = NSAlert()
+        alert.messageText = "删除自定义形象「\(preset.name)」？"
+        alert.informativeText = "会一起删掉导出的 PNG 和预设记录，删除后无法恢复。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "删除")
+        alert.addButton(withTitle: "取消")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        PixelPresetStore.delete(preset)
+        savedCustomAppearances.removeValue(forKey: preset.id)
+        if UserDefaults.standard.string(forKey: "customSpriteName") == preset.id {
+            clearCustomOverlay()
+        }
+        reloadCustomPresets()
     }
 
     private func applyCustom(_ preset: CustomPresetInfo) {
-        guard let data = try? Data(contentsOf: preset.url) else {
+        guard previewReady, !workbenchState.applying else { return }
+        if workbenchState.customSelected == preset.id {
+            clearCustomOverlay()
+            return
+        }
+        guard let snapshot = try? PixelPresetStore.read(preset.url) else {
             workbenchState.message = "读取自定义形象失败"
             return
         }
-        let runtime = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("DesktopPet/custom", isDirectory: true)
-        try? FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
-        let copy = runtime.appendingPathComponent(preset.url.lastPathComponent)
-        try? data.write(to: copy)
-        UserDefaults.standard.set(copy.path, forKey: "customSpritePath")
-        UserDefaults.standard.set(preset.id, forKey: "customSpriteName")
-        workbenchState.customSelected = preset.id
-        workbenchState.message = "已启用自定义形象：\(preset.name)"
-        applyCustomOverlay(data: data)
+        let copy = PixelPresetStore.runtimeFolder.appendingPathComponent(preset.url.lastPathComponent)
+        // Keep the inferred reference for PNG-only presets even after changing their base.
+        let cached = snapshot.source == nil ? try? PixelPresetStore.read(copy) : nil
+        let source = snapshot.source ?? (cached?.png == snapshot.png ? cached?.source : nil)
+        selectCustom(PixelEditSnapshot(png: snapshot.png, source: source), id: preset.id, url: copy, label: preset.name)
     }
 
-    private func applyCustomOverlay(data: Data) {
-        let js = "window.petShowCustom && window.petShowCustom('data:image/png;base64,\(data.base64EncodedString())')"
-        web.evaluateJavaScript(js)
-        preview.evaluateJavaScript(js)
+    private func selectCustom(_ snapshot: PixelEditSnapshot, id: String, url: URL, label: String? = nil) {
+        customSelectionRequest += 1
+        let request = customSelectionRequest
+        let saved = savedCustomAppearances[id]
+        workbenchState.loadingCustom = true
+        applyCustomOverlay(snapshot, in: preview, savedAppearance: saved) { [weak self] selection in
+            guard let self, request == self.customSelectionRequest else { return }
+            self.workbenchState.loadingCustom = false
+            guard let reference = selection?["source"] as? [String: Any],
+                  var config = selection?["appearance"] as? [String: Any],
+                  let data = try? JSONSerialization.data(withJSONObject: reference) else {
+                self.workbenchState.message = "无法显示自定义形象"
+                return
+            }
+            let resolved = PixelEditSnapshot(png: snapshot.png, source: data)
+            do {
+                if label != nil || snapshot.source == nil { try PixelPresetStore.write(resolved, to: url) }
+            } catch {
+                self.applyCustomOverlay(self.activeCustomOverlay, in: self.preview)
+                self.workbenchState.message = "保存自定义形象失败"
+                return
+            }
+            if saved == nil,
+               let legacy = UserDefaults.standard.dictionary(forKey: "customSpriteEyeColors")?[id] as? String {
+                config["eyeColor"] = legacy
+            }
+            let breed = saved?["breed"] as? String ?? self.matchingPreset(config)
+            config["breed"] = breed
+            config["name"] = self.appliedConfig?["name"] ?? config["name"]
+            self.activeCustomOverlay = resolved
+            UserDefaults.standard.set(url.path, forKey: "customSpritePath")
+            UserDefaults.standard.set(id, forKey: "customSpriteName")
+            self.workbenchState.customSelected = id
+            self.workbenchState.preset = breed
+            self.setDraft(config)
+            self.storeAppliedAppearance(config, customID: id)
+            self.configurePet(config)
+            if self.ready { self.applyCustomOverlay(resolved, in: self.web) }
+            if let label { self.workbenchState.message = "已启用自定义形象：\(label)" }
+        }
+    }
+
+    private func applyCustomOverlay(
+        _ snapshot: PixelEditSnapshot?, in view: WKWebView,
+        savedAppearance: [String: Any]? = nil,
+        completion: (([String: Any]?) -> Void)? = nil
+    ) {
+        let png = snapshot.map { "data:image/png;base64,\($0.png.base64EncodedString())" }
+        let source = snapshot?.source.flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? NSNull()
+        view.callAsyncJavaScript(
+            """
+            const reference = await window.pet.setCustom(png, source);
+            if (!reference) return null;
+            let appearance = reference.config;
+            if (savedAppearance) {
+                try {
+                    const saved = window.pet.normalize(savedAppearance);
+                    if (saved.frame === 'CAT') appearance = saved;
+                } catch {}
+            }
+            return {source: reference, appearance};
+            """,
+            arguments: ["png": png as Any? ?? NSNull(), "source": source,
+                        "savedAppearance": savedAppearance as Any? ?? NSNull()],
+            in: nil, in: .page
+        ) { [weak self] result in
+            switch result {
+            case .success(let value): completion?(value as? [String: Any])
+            case .failure:
+                if let completion { completion(nil) }
+                else { self?.workbenchState.message = "无法显示自定义形象" }
+            }
+        }
     }
 
     private func clearCustomOverlay() {
+        customSelectionRequest += 1
+        activeCustomOverlay = nil
         UserDefaults.standard.removeObject(forKey: "customSpritePath")
         UserDefaults.standard.removeObject(forKey: "customSpriteName")
         workbenchState.customSelected = nil
-        let js = "window.petShowCustom && window.petShowCustom(null)"
-        web.evaluateJavaScript(js)
-        preview.evaluateJavaScript(js)
+        workbenchState.loadingCustom = false
+        if ready { applyCustomOverlay(nil, in: web) }
+        if previewReady { applyCustomOverlay(nil, in: preview) }
     }
 
     private func restoreCustomOverlay() {
-        guard let path = UserDefaults.standard.string(forKey: "customSpritePath"),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
-        applyCustomOverlay(data: data)
-        workbenchState.customSelected = UserDefaults.standard.string(forKey: "customSpriteName")
+        guard !isTest, let path = UserDefaults.standard.string(forKey: "customSpritePath"),
+              let id = UserDefaults.standard.string(forKey: "customSpriteName") else { return }
+        let url = URL(fileURLWithPath: path)
+        guard let snapshot = try? PixelPresetStore.read(url) else { return }
+        selectCustom(snapshot, id: id, url: url)
     }
 
     // MARK: Quick bar
@@ -1999,6 +2147,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             onCopy: { [weak self] item in
                 self?.clipboard.copy(item)
             },
+            onDelete: { [weak self] item in
+                guard let self else { return }
+                self.clipboard.remove(item)
+                self.showClipboard()
+            },
             onClear: { [weak self] in
                 self?.clipboard.clear()
                 self?.hideClipboard()
@@ -2480,13 +2633,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func matchingPreset(_ config: [String: Any]) -> String {
         if config["frame"] as? String == "CAT" {
+            let palette = config["palette"] as? String
+            switch palette {
+            case "CC05": return "preset_cat_british_blue"
+            case "CC06": return "preset_cat_american_shorthair"
+            case "CC07": return "preset_cat_li_hua"
+            case "CC08": return "preset_cat_ragdoll"
+            default: break
+            }
             switch config["name"] as? String {
             case "三花猫": return "preset_cat_calico"
             case "暹罗猫": return "preset_cat_siamese"
             case "黑猫": return "preset_cat_black"
             case "橘猫": return "preset_cat_orange"
             default:
-                switch config["palette"] as? String {
+                switch palette {
                 case "CC02": return "preset_cat_black"
                 case "CC03": return "preset_cat_calico"
                 case "CC04": return "preset_cat_siamese"
@@ -2506,7 +2667,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let request = presetRequest
         preview.callAsyncJavaScript("return window.pet.preset(id)", arguments: ["id": id], in: nil, in: .page) { [weak self] result in
             guard let self, request == self.presetRequest, case .success(let value) = result,
-                  let config = value as? [String: Any] else { completion?(false); return }
+                  var config = value as? [String: Any] else { completion?(false); return }
+            if config["frame"] as? String == "CAT", let coat = self.workbenchState.appearance["coat"] {
+                config["coat"] = coat
+            }
             self.workbenchState.preset = id
             self.setDraft(config)
             completion?(true)
@@ -2514,8 +2678,19 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func setDraft(_ config: [String: Any]) {
+        let previousName = workbenchState.appearance["name"]
+        let previousDraft = workbenchState.nameText
         draftTemplate = config
         workbenchState.update(config)
+        // A breed change must not touch the pet's name.
+        if let previousName, !previousName.isEmpty {
+            workbenchState.appearance["name"] = previousName
+        }
+        if workbenchState.nameDirty {
+            workbenchState.nameText = previousDraft
+        } else if let previousName, !previousName.isEmpty {
+            workbenchState.nameText = previousName
+        }
     }
 
     private func draftConfig() -> [String: Any] {
@@ -2536,12 +2711,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func applyDraft(completion: @escaping (Bool) -> Void = { _ in }) {
-        guard ready, !workbenchState.applying else { completion(false); return }
+        guard ready, !workbenchState.applying, !workbenchState.loadingCustom else { completion(false); return }
         var draft = draftConfig()
         draft["breed"] = workbenchState.preset
+        let customID = workbenchState.customSelected
         workbenchState.applying = true
         web.callAsyncJavaScript(
-            "const valid = window.pet.normalize(config); window.pet.configure(valid); return valid;",
+            """
+            const valid = window.pet.normalize(config);
+            window.pet.configure(valid);
+            return valid;
+            """,
             arguments: ["config": draft], in: nil, in: .page
         ) { [weak self] result in
             guard let self else { return }
@@ -2550,10 +2730,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             case .success(let value):
                 guard var config = value as? [String: Any] else { completion(false); return }
                 config["breed"] = draft["breed"]
-                self.appliedConfig = config
-                if !self.isTest, let saved = try? JSONSerialization.data(withJSONObject: config) {
-                    UserDefaults.standard.set(String(decoding: saved, as: UTF8.self), forKey: "shibaConfig")
-                }
+                self.storeAppliedAppearance(config, customID: customID)
                 if !self.isTest {
                     self.workbenchState.visible = true
                     self.showPet(true)
@@ -2565,6 +2742,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 completion(false)
             }
         }
+    }
+
+    private func storeAppliedAppearance(_ config: [String: Any], customID: String?) {
+        appliedConfig = config
+        guard !isTest else { return }
+        if let saved = try? JSONSerialization.data(withJSONObject: config) {
+            UserDefaults.standard.set(String(decoding: saved, as: UTF8.self), forKey: "shibaConfig")
+        }
+        if let customID { savedCustomAppearances[customID] = config }
     }
 
     private func configurePet(_ config: [String: Any]) {

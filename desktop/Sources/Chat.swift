@@ -502,7 +502,7 @@ final class ChatModel: ObservableObject {
         }, completion: { ok in
             DispatchQueue.main.async {
                 guard ok else {
-                    self.status = "这台电脑没有可用的本地模型。"
+                    self.status = LocalRuntime.shared.failureReason ?? "这台电脑没有可用的本地模型。"
                     return
                 }
                 OllamaClient.shared.check { running, model in

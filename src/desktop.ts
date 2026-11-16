@@ -1,18 +1,33 @@
 import { checkCatActions } from './desktop-check';
 import { Motion } from './motion';
 import { options, presets } from './model';
-import { catOptions, catPresets, orangeCatOptions, readPetConfig, type PetConfig } from './cat';
-import { actions, assetsReady, frameCount, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
+import { catCoatSchemes, catOptions, catPresets, orangeCatOptions, readPetConfig, type PetConfig } from './cat';
+import { prepareCatCustomization, type CatCustomization, type CatEditSource } from './cat-custom';
+import { catTypingFrameDuration } from './cat-typing';
+import { actions, assetsReady, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
 let preview: { config: PetConfig; action: Action; typingMode: TypingMode; started: number } | undefined;
+let visibleSource: CatEditSource | undefined;
+let custom: CatCustomization | undefined;
+let customRequest = 0;
 let gaze: Gaze = { x: 0, y: 0 };
 const allPresets = { ...catPresets, ...presets };
-const motion = new Motion(canvas, catPresets.preset_cat_orange);
+let configured: PetConfig = catPresets.preset_cat_orange;
+const motion = new Motion(canvas, configured);
 const desktopReady = Promise.all([assetsReady, prepareCatAssets()]);
+
+function setGaze(next: Gaze) {
+  if (gaze.x === next.x && gaze.y === next.y && gaze.space === next.space) return;
+  gaze = next;
+  motion.setGaze(next);
+}
+
 const fields = (choices: typeof options | typeof catOptions | typeof orangeCatOptions) =>
   Object.fromEntries(Object.entries(choices).map(([key, values]) => [
-    key, Object.entries(values).map(([id, name]) => ({ id, name })),
+    key, key === 'coat'
+      ? Object.entries(catCoatSchemes).map(([id, { name, colors }]) => ({ id, name, colors }))
+      : Object.entries(values).map(([id, name]) => ({ id, name })),
   ]));
 
 Object.assign(window, {
@@ -25,29 +40,49 @@ Object.assign(window, {
     }),
     preset: (id: keyof typeof allPresets) => allPresets[id],
     normalize: (config: unknown) => readPetConfig(config),
-    gaze: (x: number, y: number) => {
-      gaze = {
-        x: Math.max(-2, Math.min(2, Math.round(x))),
-        y: Math.max(-2, Math.min(1, Math.round(y))),
-      };
-      motion.setGaze(gaze.x, gaze.y);
-    },
-    preview: (config: unknown, requested: Action | 'typing-gentle') => {
-      const action = requested === 'typing-gentle' ? 'typing' : requested;
+    gaze: (x: number, y: number) => setGaze({
+      x: Math.max(horizontalGazeRange.min, Math.min(horizontalGazeRange.max, Math.round(x))),
+      y: Math.max(-2, Math.min(1, Math.round(y))),
+    }),
+    trackPointer: (x: number, y: number) => setGaze({
+      x: Math.max(-pointerGazeLimit, Math.min(pointerGazeLimit, Math.round(x))),
+      y: Math.max(-pointerGazeLimit, Math.min(pointerGazeLimit, Math.round(y))),
+      space: 'pointer',
+    }),
+    preview: (config: unknown, requested: Action | 'typing-gentle' | 'typing-fast') => {
+      const action = requested === 'typing-gentle' || requested === 'typing-fast' ? 'typing' : requested;
       if (!Object.hasOwn(actions, action)) throw Error('未知动作');
       preview = { config: readPetConfig(config), action,
-        typingMode: requested === 'typing-gentle' ? 'gentle' : 'fast', started: performance.now() };
+        typingMode: requested === 'typing' ? 'frenzy' : requested === 'typing-fast' ? 'fast' : 'gentle',
+        started: performance.now() };
     },
-    previewPNG: async () => {
+    previewSnapshot: async () => {
       await desktopReady;
       // Read the frame after the preview loop has drawn any pending appearance changes.
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      const custom = document.querySelector<HTMLImageElement>('#custom-sprite');
-      if (custom?.style.display === 'block') return custom.src;
       if (canvas.title) throw Error(canvas.title);
-      return canvas.toDataURL('image/png');
+      return { png: canvas.toDataURL('image/png'), source: visibleSource ?? null };
     },
-    configure: (config: unknown) => motion.setConfig(readPetConfig(config)),
+    setCustom: async (png: string | null, reference: unknown = null) => {
+      const request = ++customRequest;
+      if (png === null) {
+        custom = undefined;
+        motion.setCustom(undefined);
+        return;
+      }
+      await desktopReady;
+      const image = new Image();
+      image.src = png;
+      await image.decode();
+      if (request !== customRequest) return;
+      custom = prepareCatCustomization(image, reference, preview?.config ?? configured);
+      motion.setCustom(custom);
+      return custom.source;
+    },
+    configure: (config: unknown) => {
+      configured = readPetConfig(config);
+      motion.setConfig(configured);
+    },
     beginDrag: () => motion.beginDrag(),
     drag: (dx: number) => motion.drag(dx),
     release: () => motion.release(),
@@ -59,19 +94,30 @@ void desktopReady.then(() => {
   let previous = -1;
   let previousPreview = preview;
   let previousGaze = gaze;
+  let previousCustom = custom;
   function tick(now: number) {
     if (preview) {
-      const isCatWalk = preview.config.frame === 'CAT' && (preview.action === 'left' || preview.action === 'right');
+      const config = preview.config;
+      const isCatWalk = config.frame === 'CAT' && (preview.action === 'left' || preview.action === 'right');
       const interval = isCatWalk ? 165 : preview.action === 'typing'
-        ? (preview.config.frame === 'CAT' ? (preview.typingMode === 'gentle' ? 250 : 90) : 145) : 90;
-      const frame = Math.floor((now - preview.started) / interval) % frameCount(preview.config, preview.action);
-      if (frame !== previous || previousPreview !== preview || previousGaze !== gaze) {
+        ? (config.frame === 'CAT' ? catTypingFrameDuration(preview.typingMode) : 145) : 90;
+      const frame = Math.floor((now - preview.started) / interval) % frameCount(config, preview.action);
+      if (frame !== previous || previousPreview !== preview || previousGaze !== gaze || previousCustom !== custom) {
         const stretch = isCatWalk ? Math.sin(frame * Math.PI / 2) * (preview.action === 'left' ? -1 : 1) : 0;
-        render(canvas, preview.config, isCatWalk ? 'sit' : preview.action, isCatWalk ? 0 : frame, gaze,
-          { typingMode: preview.typingMode, stretch });
+        const action = isCatWalk ? 'sit' : preview.action;
+        const renderedFrame = isCatWalk ? 0 : frame;
+        render(canvas, config, action, renderedFrame, gaze, {
+          typingMode: preview.typingMode, typingAnimation: 'reference', laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
+        });
+        visibleSource = config.frame === 'CAT' && (action === 'sit' || action === 'typing')
+          ? { config, action, frame: renderedFrame, gaze, typingMode: preview.typingMode,
+            typingAnimation: 'reference', laptopVersion: 'clean', outlineVersion: 'adaptive',
+            typingLayout: 'aligned', earLayout: 'shared', markingLayout: 'shared' }
+          : undefined;
         previous = frame;
         previousPreview = preview;
         previousGaze = gaze;
+        previousCustom = custom;
       }
     } else {
       motion.tick(now);
