@@ -1,7 +1,8 @@
-import { catPresets, readPetConfig, type CatConfig, type PetConfig } from './cat';
+import { catPresets, readPetConfig, usesOrangeCatArt, type CatConfig, type PetConfig } from './cat';
 import { catTypingFrameCountFor, currentTypingAnimation, type TypingAnimation } from './cat-typing';
 import { captureCatInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
-import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catTypingLaptop, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, type Gaze, type LaptopVersion, type OutlineVersion, type TypingLayout, type TypingMode } from './render';
+import { atlasNoseTips, faceTiles, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
+import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
 
 const size = 320;
 const straight: Gaze = { x: 0, y: 0 };
@@ -12,11 +13,14 @@ export type CatEditSource = {
   frame: number;
   typingMode: TypingMode;
   typingAnimation: TypingAnimation;
+  typingInkVersion?: TypingInkVersion;
+  typingMouthVersion?: TypingMouthVersion;
+  tailArtVersion?: TailArtVersion;
   laptopVersion: LaptopVersion;
   outlineVersion: OutlineVersion;
   typingLayout: TypingLayout;
   earLayout: 'shared' | 'legacy';
-  markingLayout: 'shared' | 'legacy';
+  markingLayout: MarkingLayout;
   legacyNoseOutline: boolean;
   gaze: Gaze;
 };
@@ -41,9 +45,12 @@ function readSource(value: unknown): CatEditSource | undefined {
   if (!value || typeof value !== 'object') return;
   const record = value as Partial<CatEditSource>;
   try {
-    const config = readPetConfig(record.config);
+    const config = readPetConfig(record.config, { preserveLegacyNose: true, preserveLegacyMouth: true, preserveLegacyTail: true });
     const { action, frame, typingMode, gaze } = record;
     const typingAnimation = record.typingAnimation ?? (action === 'typing' ? 'legacy' : 'shared');
+    const typingInkVersion = record.typingInkVersion ?? 'original';
+    const typingMouthVersion = record.typingMouthVersion ?? 'legacy';
+    const tailArtVersion = record.tailArtVersion ?? 'initial';
     const referenceAnimation = typingAnimation === 'reference' || typingAnimation === 'reference-v2';
     const typingLayout = record.typingLayout ?? (action === 'typing' && !referenceAnimation ? 'legacy' : 'aligned');
     // Even the first reference-animation saves used the original laptop.
@@ -58,13 +65,16 @@ function readSource(value: unknown): CatEditSource | undefined {
       || (typingMode !== 'gentle' && typingMode !== 'fast' && typingMode !== 'frenzy') || !gaze
       || (typingLayout !== 'aligned' && typingLayout !== 'legacy')
       || (laptopVersion !== 'clean' && laptopVersion !== 'original')
+      || (typingInkVersion !== currentTypingInkVersion && typingInkVersion !== 'clean' && typingInkVersion !== 'original')
+      || (typingMouthVersion !== 'shared' && typingMouthVersion !== 'legacy')
+      || !Object.hasOwn(tailArtPaths, tailArtVersion)
       || (outlineVersion !== 'adaptive' && outlineVersion !== 'original')
       || (laptopVersion === 'clean' && typingLayout === 'legacy')
       || (!referenceAnimation && typingAnimation !== 'shared' && typingAnimation !== 'legacy')
       || (typingMode === 'frenzy' && !referenceAnimation)
       || (action === 'typing' && referenceAnimation && typingLayout !== 'aligned')
       || (earLayout !== 'shared' && earLayout !== 'legacy')
-      || (markingLayout !== 'shared' && markingLayout !== 'legacy')
+      || (markingLayout !== 'clean-forehead' && markingLayout !== 'shared' && markingLayout !== 'legacy')
       || !Number.isInteger(gaze.x) || !Number.isInteger(gaze.y)) return;
     if (gaze.space === 'pointer') {
       if (Math.abs(gaze.x) > pointerGazeLimit || Math.abs(gaze.y) > pointerGazeLimit) return;
@@ -72,7 +82,7 @@ function readSource(value: unknown): CatEditSource | undefined {
       || Math.abs(gaze.y) > 2) return;
     // Saves from before the nose cleanup have no flag and used the outlined art.
     const legacyNoseOutline = hasLegacyNoseOutline(config) && record.legacyNoseOutline !== false;
-    return { config, action, frame, typingMode, typingAnimation, laptopVersion, outlineVersion, typingLayout,
+    return { config, action, frame, typingMode, typingAnimation, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
       earLayout, markingLayout, legacyNoseOutline, gaze };
   } catch {
     return;
@@ -93,8 +103,8 @@ export function prepareStructuredCatCustomization(reference: unknown): CatCustom
   // to play any per-part ink, even if one is no longer supported.
   const source = readSource(reference) ?? {
     config, action: 'sit', frame: 0, gaze: straight, typingMode: 'gentle',
-    typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean',
-    outlineVersion: 'adaptive', earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false,
+    typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
+    outlineVersion: 'adaptive', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(config.pattern), legacyNoseOutline: false,
   };
   return { source, ink, scratch: makeLayer(size), fixedGlints: [false, false], paint: {} };
 }
@@ -133,6 +143,7 @@ function savedGlints(edited: Uint32Array, original: Uint32Array, aperture: Uint3
 function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource) {
   render(layer.canvas, source.config, source.action, source.frame, source.gaze, {
     typingMode: source.typingMode, typingAnimation: source.typingAnimation, typingLayout: source.typingLayout,
+    typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion, tailArtVersion: source.tailArtVersion,
     laptopVersion: source.laptopVersion, outlineVersion: source.outlineVersion,
     earLayout: source.earLayout, markingLayout: source.markingLayout,
     legacyNoseOutline: source.legacyNoseOutline,
@@ -187,8 +198,8 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
   }
   let source: CatEditSource = {
     config: configs[0]!, action: 'sit', frame: 0, typingMode: 'gentle', typingLayout: 'aligned',
-    typingAnimation: 'reference-v2', laptopVersion: 'clean', outlineVersion: 'adaptive',
-    earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false, gaze: straight,
+    typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
+    tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(configs[0]!.pattern), legacyNoseOutline: false, gaze: straight,
   };
   const idlePoses = [0, 17].map(frame =>
     ({ frame, typingMode: 'gentle', typingLayout: 'aligned', typingAnimation: 'reference-v2' } as const));
@@ -207,18 +218,32 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
       Array.from({ length: catTypingFrameCountFor(typingAnimation) }, (_, frame) =>
         ({ frame, typingMode, typingLayout: 'aligned', typingAnimation } as const))));
   const currentTypingPoses = [...referenceTypingPoses, ...oldTypingPoses];
+  // Rank pose matches before details such as a retired tail or mouth, which
+  // can differ at more pixels than two adjacent frames. Include the face
+  // tile's old typing placement in the detail region.
+  const detailRegion = new Uint8Array(edited.length);
+  for (let y = 136; y < size; y++) detailRegion.fill(1, y * size + 210, (y + 1) * size);
+  if (configs.some(config => config.pattern === 'P03')) {
+    for (let y = 52; y <= 58; y++) detailRegion.fill(1, y * size + 115, y * size + 187);
+  }
+  const { left, top, width, height } = faceTiles;
+  const legacyHead = catHeadPlacement(true, 0, 'legacy');
+  const detailTop = Math.floor(legacyHead.y + top * legacyHead.scale);
+  const detailRight = Math.ceil(legacyHead.x + (left + width) * legacyHead.scale);
+  for (let y = detailTop; y < top + height; y++) detailRegion.fill(1, y * size + left, y * size + detailRight);
   let best = Infinity;
   for (const config of configs) {
     // Native coats retain their original pixels in either version.
     const outlineVersions: readonly OutlineVersion[] = config.coat === 'native' ? ['adaptive'] : ['adaptive', 'original'];
     for (const action of ['sit', 'typing'] as const) {
+      const currentMarkings = catMarkingLayout(config.pattern);
       const markingLayouts = ['P03', 'P04', 'P05'].includes(config.pattern)
-        ? ['shared'] as const : ['shared', 'legacy'] as const;
+        ? [currentMarkings] as const : [currentMarkings, 'legacy'] as const;
       for (const markingLayout of markingLayouts) {
         // New references only existed after independent forehead/fur layers.
         // Idle has no animation difference, so try each idle pose just once.
         const poses = action === 'sit' ? idlePoses
-          : markingLayout === 'shared' ? currentTypingPoses : oldTypingPoses;
+          : markingLayout === 'legacy' ? oldTypingPoses : currentTypingPoses;
         for (const pose of poses) {
           const versions: readonly LaptopVersion[] = action === 'sit' ? ['clean']
             : pose.typingAnimation === 'reference-v2' ? ['clean']
@@ -226,16 +251,20 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
           for (const laptopVersion of versions) {
             for (const outlineVersion of outlineVersions) {
               const candidate = { config, action, gaze: straight, earLayout: 'shared', markingLayout,
-                laptopVersion, outlineVersion, legacyNoseOutline: false, ...pose } as const;
+                laptopVersion, outlineVersion, typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
+                tailArtVersion: 'clean', legacyNoseOutline: false, ...pose } as const;
               const reference = drawSource(layer, candidate);
-              let difference = 0;
+              let difference = 0, detailDifference = 0;
               for (let index = 0; index < edited.length; index += 5) {
-                if (reference[index] !== edited[index]) difference++;
+                if (reference[index] === edited[index]) continue;
+                if (detailRegion[index]) detailDifference++;
+                else difference++;
               }
-              if (difference < best) {
-                best = difference;
+              const score = difference * edited.length + detailDifference;
+              if (score < best) {
+                best = score;
                 source = candidate;
-                if (difference === 0) return source;
+                if (score === 0) return inferHistoricalDetails(edited, layer, source);
               }
             }
           }
@@ -243,19 +272,56 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
       }
     }
   }
-  if (hasLegacyNoseOutline(source.config)) {
-    // Once the pose is identified, use the closer of the two nose versions
-    // for PNGs without source metadata.
-    const outlined = { ...source, legacyNoseOutline: true };
-    const current = drawSource(layer, source);
-    const original = drawSource(layer, outlined);
-    let outlineMatches = 0, borderlessMatches = 0;
+  return inferHistoricalDetails(edited, layer, source);
+}
+
+function inferHistoricalDetails(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, source: CatEditSource) {
+  let baseline = drawSource(layer, source);
+  if (edited.every((pixel, index) => baseline[index] === pixel)) return source;
+  // After matching the pose, use just the changed pixels to recognize
+  // historical nose and mouth cels, tail variants and typing cleanup in PNG-only saves.
+  function consider(candidate: CatEditSource) {
+    const alternative = drawSource(layer, candidate);
+    let alternativeMatches = 0, baselineMatches = 0;
     for (let i = 0; i < edited.length; i++) {
-      if (current[i] === original[i]) continue;
-      if (edited[i] === original[i]) outlineMatches++;
-      if (edited[i] === current[i]) borderlessMatches++;
+      if (baseline[i] === alternative[i]) continue;
+      if (edited[i] === alternative[i]) alternativeMatches++;
+      if (edited[i] === baseline[i]) baselineMatches++;
     }
-    if (outlineMatches > borderlessMatches) return outlined;
+    if (alternativeMatches > baselineMatches) {
+      source = candidate;
+      baseline = alternative;
+    }
+  }
+  if (source.markingLayout === 'clean-forehead') consider({ ...source, markingLayout: 'shared' });
+  for (const nose of Object.keys(atlasNoseTips) as (keyof typeof atlasNoseTips)[]) {
+    const config = { ...source.config, nose, noseColor: 'natural' } as const;
+    consider({ ...source, config, legacyNoseOutline: false });
+    if (hasLegacyNoseOutline(config)) consider({ ...source, config, legacyNoseOutline: true });
+  }
+  const currentMouthIds = Object.keys(sharedMouthStyles) as (keyof typeof sharedMouthStyles)[];
+  // Older typing frames either used the selected mouth or one of the
+  // separate expressions. Try those as a unit so their pixels stay out of ink.
+  const typingMouthVersion = source.action === 'typing' ? 'legacy' : source.typingMouthVersion;
+  for (const mouth of [...legacyMouthIds, ...currentMouthIds]) {
+    if (mouth !== source.config.mouth || typingMouthVersion !== source.typingMouthVersion) {
+      consider({ ...source, typingMouthVersion, config: { ...source.config, mouth } });
+    }
+  }
+  // The shared mouth can cover older cleanup pixels, so resolve it before
+  // matching a historical typing baseline.
+  if (source.action === 'typing' && source.typingAnimation === currentTypingAnimation) {
+    if (usesOrangeCatArt(source.config)) consider({ ...source, typingInkVersion: 'original' });
+    else if (source.typingMode === 'frenzy') consider({ ...source, typingInkVersion: 'clean' });
+  }
+  for (const tail of Object.keys(retiredTailStyles) as (keyof typeof retiredTailStyles)[]) {
+    if (tail !== source.config.tail) consider({ ...source, config: { ...source.config, tail } });
+  }
+  for (const tail of Object.keys(sharedTailStyles) as (keyof typeof sharedTailStyles)[]) {
+    for (const tailArtVersion of Object.keys(tailArtPaths) as TailArtVersion[]) {
+      if (tail === source.config.tail && tailArtVersion === source.tailArtVersion) continue;
+      consider({ ...source, tailArtVersion, config: { ...source.config, tail } });
+    }
   }
   return source;
 }
@@ -316,7 +382,8 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   drawCatHead(layer.ctx, source.config, typing, source.frame, source.gaze,
     { scale: placement.scale, earLayout: source.earLayout, markingLayout: source.markingLayout,
       outlineVersion: source.outlineVersion, legacyNoseOutline: source.legacyNoseOutline,
-      typingMode: source.typingMode, typingAnimation: source.typingAnimation });
+      typingMode: source.typingMode, typingAnimation: source.typingAnimation,
+      typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion });
   const headPixels = pixels(layer.ctx);
   const aperture = catGlintAperture(source.config, typing, source.frame, {
     typingMode: source.typingMode, typingAnimation: source.typingAnimation,

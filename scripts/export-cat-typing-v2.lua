@@ -30,6 +30,8 @@ if mode == "shared" then
   atlas({"torso_base", "forearm_texture_restore", "forearm_edge_cleanup",
          "paw_left", "paw_right", "paw_upper_outline"}, app.params.arms or "arms")
   atlas({"paws_mask"}, app.params.paws or "paws_mask")
+  save(frame({"forearm_ink_cleanup"}, 1), "forearm_ink_cleanup")
+  save(frame({"mouth_ink_cleanup"}, 1), "mouth_ink_cleanup")
 else
   atlas({"sweat"}, "sweat_"..mode)
 end

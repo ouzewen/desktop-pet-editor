@@ -1,5 +1,5 @@
 import { irisColors, nameLength, options, readConfig, type Config } from './model';
-import { catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns } from './pet-assets';
+import { catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles } from './pet-assets';
 import { colorCatBreed, colorCatBreeds, type CatArtPalette, type CatFurColors, type ColorCatBreedId } from './cat-breeds';
 
 export const catIrisColors = {
@@ -15,6 +15,19 @@ const catPupilColors = {
   natural: '原色', amber: '琥珀色', blue: '蓝色', green: '绿色',
   violet: '紫色', rose: '玫瑰色', gray: '灰色',
 } as const satisfies Record<CatIrisColor | 'natural', string>;
+
+export const catFeatureColors = {
+  natural: { name: '品种原色' },
+  lightPink: { name: '浅粉', color: '#EAA9B2' },
+  rose: { name: '玫瑰粉', color: '#D77792' },
+  coral: { name: '珊瑚粉', color: '#E98E7B' },
+  cocoa: { name: '可可棕', color: '#96685E' },
+  charcoal: { name: '炭灰', color: '#55505B' },
+  plum: { name: '梅子紫', color: '#A779A7' },
+} as const;
+type CatFeatureColor = keyof typeof catFeatureColors;
+const featureColorOptions = Object.fromEntries(Object.entries(catFeatureColors)
+  .map(([id, option]) => [id, option.name])) as Record<CatFeatureColor, string>;
 
 // Base fur, markings, and pale fur. Shadows and highlights follow these three colors.
 export const catCoatSchemes = {
@@ -40,7 +53,9 @@ const paletteOptions = { ...catAssetOptions.palette, ...Object.fromEntries(color
 
 export const catOptions = {
   ear: catAssetOptions.ear,
+  earColor: featureColorOptions,
   nose: catAssetOptions.nose,
+  noseColor: featureColorOptions,
   mouth: catAssetOptions.mouth,
   tail: catAssetOptions.tail,
   eye: { ...options.eye, ...catExtraEyes },
@@ -62,11 +77,29 @@ export const orangeCatOptions = {
 type CatParts = {
   [Key in keyof typeof catOptions]: keyof typeof catOptions[Key] | keyof typeof orangeCatOptions[Key];
 };
-export type CatConfig = CatParts & { version: 1; name: string; frame: 'CAT' };
+export type CatPupilStyle = Pick<CatParts, 'eyeColor' | 'innerPupil' | 'innerEyeColor'>;
+type EyeSide = 'left' | 'right';
+type CatPupilOverrides = Partial<{
+  [Field in keyof CatPupilStyle as `${EyeSide}${Capitalize<Field>}`]: CatPupilStyle[Field];
+}>;
+export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail'> & CatPupilOverrides & {
+  version: 1; name: string; frame: 'CAT';
+  nose: CatParts['nose'] | keyof typeof retiredNoseStyles;
+  mouth: CatParts['mouth'] | keyof typeof retiredMouthStyles;
+  tail: CatParts['tail'] | keyof typeof retiredTailStyles;
+};
 export type PetConfig = Config | CatConfig;
 type BreedCoat = `breed:${ColorCatBreedId}`;
 export type CatRenderCoat = CatCoatScheme | BreedCoat;
 export type CatRenderConfig = Omit<CatConfig, 'palette' | 'coat'> & { palette: CatArtPalette; coat: CatRenderCoat };
+
+export function catPupilStyle(config: CatPupilStyle & CatPupilOverrides, side: EyeSide): CatPupilStyle {
+  return {
+    eyeColor: config[`${side}EyeColor`] ?? config.eyeColor,
+    innerPupil: config[`${side}InnerPupil`] ?? config.innerPupil,
+    innerEyeColor: config[`${side}InnerEyeColor`] ?? config.innerEyeColor,
+  };
+}
 
 // Base fur, markings, and pale fur from each breed's original coloring.
 export const nativeCatFur = {
@@ -81,11 +114,12 @@ export const nativeCatFur = {
 } as const satisfies Record<CatArtPalette, CatFurColors>;
 
 const standardCat = {
-  version: 1, frame: 'CAT', accessory: 'A00', ear: 'CE01', nose: 'NO01', mouth: 'CN01', tail: 'CT01',
+  version: 1, frame: 'CAT', accessory: 'A00', ear: 'CE01', earColor: 'natural',
+  nose: 'NO05', noseColor: 'natural', mouth: 'CN08', tail: 'CT05',
   eye: 'Y01', innerPupil: 'round', innerEyeColor: 'natural', coat: 'native', bodyPattern: 'native',
 } as const;
 const legacyNose = { CN01: 'NO01', CN02: 'NO02', CN03: 'NO03', CN04: 'NO04' } as const satisfies
-  Record<CatConfig['mouth'], CatConfig['nose']>;
+  Record<keyof typeof retiredMouthStyles, CatConfig['nose']>;
 const drawnCatPresets = {
   preset_cat_orange: { ...standardCat, name: '橘猫', innerPupil: 'none', eyeColor: 'natural', palette: 'CC01', pattern: 'P00' },
   preset_cat_black: { ...standardCat, name: '黑猫', eyeColor: 'natural', palette: 'CC02', pattern: 'P00' },
@@ -130,7 +164,13 @@ export function usesOrangeCatArt(config: PetConfig): boolean {
 // Fur base, shadow, highlight, pale coat, pale coat shadow.
 export const blackCatCoat = ['#3B3941', '#2B2930', '#625D67', '#45424D', '#342F39'] as const;
 
-export function readPetConfig(input: unknown): PetConfig {
+const sidePupilChoices = {
+  EyeColor: catOptions.eyeColor,
+  InnerPupil: catOptions.innerPupil,
+  InnerEyeColor: catOptions.innerEyeColor,
+} as const;
+
+export function readPetConfig(input: unknown, { preserveLegacyNose = false, preserveLegacyMouth = false, preserveLegacyTail = false } = {}): PetConfig {
   if (typeof input !== 'object' || input === null || !('frame' in input) || input.frame !== 'CAT') {
     return readConfig(input);
   }
@@ -150,7 +190,8 @@ export function readPetConfig(input: unknown): PetConfig {
   const choices: Record<string, unknown> = {
     ...data,
     accessory,
-    tail: data.tail ?? 'CT01',
+    earColor: data.earColor ?? 'natural',
+    tail: data.tail ?? (preserveLegacyTail ? 'CT01' : 'CT05'),
     innerPupil: data.innerPupil ?? (data.pupil === 'double' ? 'round'
       : data.pupil === 'single' || defaultsToSinglePupil ? 'none' : 'round'),
     innerEyeColor: data.innerEyeColor ?? 'natural',
@@ -158,19 +199,40 @@ export function readPetConfig(input: unknown): PetConfig {
     coat: data.coat ?? 'native',
     bodyPattern: data.bodyPattern ?? 'native',
     // A legacy muzzle selected the two matching cels.
-    mouth: data.mouth ?? data.muzzle ?? 'CN01',
+    mouth: data.mouth ?? data.muzzle ?? (preserveLegacyMouth ? 'CN01' : standardCat.mouth),
     nose: data.nose ?? (typeof data.muzzle === 'string' && Object.hasOwn(legacyNose, data.muzzle)
-      ? legacyNose[data.muzzle as keyof typeof legacyNose] : 'NO01'),
+      ? legacyNose[data.muzzle as keyof typeof legacyNose] : preserveLegacyNose ? 'NO01' : 'NO05'),
+    noseColor: data.noseColor ?? 'natural',
   };
   if (typeof choices.pattern === 'string' && Object.hasOwn(retiredForeheadDesigns, choices.pattern)) {
     choices.pattern = retiredForeheadDesigns[choices.pattern as keyof typeof retiredForeheadDesigns];
   }
+  const retiredNose = typeof choices.nose === 'string' && Object.hasOwn(retiredNoseStyles, choices.nose);
+  if (retiredNose && !preserveLegacyNose) choices.nose = retiredNoseStyles[choices.nose as keyof typeof retiredNoseStyles];
+  const retiredMouth = typeof choices.mouth === 'string' && Object.hasOwn(retiredMouthStyles, choices.mouth);
+  if (retiredMouth && !preserveLegacyMouth) choices.mouth = retiredMouthStyles[choices.mouth as keyof typeof retiredMouthStyles];
+  const retiredTail = typeof choices.tail === 'string' && Object.hasOwn(retiredTailStyles, choices.tail);
+  if (retiredTail && !preserveLegacyTail) choices.tail = retiredTailStyles[choices.tail as keyof typeof retiredTailStyles];
   for (const [field, values] of Object.entries(catalog)) {
+    if (field === 'nose' && retiredNose && preserveLegacyNose) continue;
+    if (field === 'mouth' && retiredMouth && preserveLegacyMouth) continue;
+    if (field === 'tail' && retiredTail && preserveLegacyTail) continue;
     const value = choices[field];
     if (typeof value !== 'string' || !Object.hasOwn(values, value)) throw Error(`${field} 缺失或编号无效`);
   }
+  const pupilOverrides: Record<string, string> = {};
+  for (const side of ['left', 'right']) {
+    for (const [suffix, values] of Object.entries(sidePupilChoices)) {
+      const field = side + suffix;
+      const value = data[field];
+      if (value === undefined) continue;
+      if (typeof value !== 'string' || !Object.hasOwn(values, value)) throw Error(`${field} 编号无效`);
+      pupilOverrides[field] = value;
+    }
+  }
   return {
     ...Object.fromEntries(Object.keys(catalog).map(field => [field, choices[field]])),
+    ...pupilOverrides,
     version: 1, name: data.name.trim(), frame: 'CAT',
   } as CatConfig;
 }

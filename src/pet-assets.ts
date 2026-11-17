@@ -8,12 +8,24 @@ const earStyles = {
   CE01: ['三角立耳', 'upright'], CE02: ['折耳', 'folded'], CE03: ['圆耳', 'round'],
   CE04: ['垂耳', 'droopy'], CE05: ['卷耳', 'curled'],
 } as const;
-const noseStyles = {
-  NO01: ['原款方鼻', 131], NO02: ['圆角鼻', 131], NO03: ['短尖鼻', 130], NO04: ['三角鼻', 133],
+// The four columns in the original face atlas also reconstruct old pixel saves.
+export const atlasNoseTips = { NO01: 131, NO02: 131, NO03: 130, NO04: 133 } as const;
+export const sharedNoseStyles = {
+  NO05: ['小方鼻', 125], NO06: ['中鼻', 130], NO07: ['大鼻', 135], NO08: ['长鼻', 136],
 } as const;
-const mouthStyles = {
-  CN01: ['小圆嘴', 132], CN02: ['吐舌', 132], CN03: ['张嘴喵', 131], CN04: ['扁嘴', 134],
+export const retiredNoseStyles = { NO01: 'NO05', NO03: 'NO06', NO04: 'NO07' } as const;
+export const sharedTailStyles = {
+  CT05: '直尾', CT06: '短尾', CT07: 'L字型弯尾', CT08: 'Z字型弯尾', CT09: '卷环型尾',
 } as const;
+export const retiredTailStyles = { CT01: 'CT05', CT02: 'CT06', CT03: 'CT05', CT04: 'CT07' } as const;
+const atlasMouthStems = { CN01: 132, CN02: 132, CN03: 131, CN04: 134 } as const;
+export const legacyMouthIds = Object.keys(atlasMouthStems) as (keyof typeof atlasMouthStems)[];
+export const mouthStems = Object.values(atlasMouthStems);
+export const sharedMouthStyles = {
+  CN08: '微笑', CN09: '吐舌', CN05: '凸凸嘴', CN06: '严肃嘴', CN07: '奔驰嘴',
+} as const;
+export const retiredMouthStyles = { CN01: 'CN05', CN02: 'CN09', CN03: 'CN09', CN04: 'CN06' } as const satisfies
+  Record<(typeof legacyMouthIds)[number], keyof typeof sharedMouthStyles>;
 export const breedArt = {
   CC01: ['橘白', 'orange'],
   CC02: ['纯黑', 'black'],
@@ -36,9 +48,9 @@ function labels<T extends Record<string, readonly [string, unknown]>>(items: T) 
 
 export const catAssetOptions = {
   ear: labels(earStyles),
-  nose: labels(noseStyles),
-  mouth: labels(mouthStyles),
-  tail: { CT01: '细长尾', CT02: '短尾', CT03: '蓬松尾', CT04: '弯钩尾' },
+  nose: { NO02: '圆角鼻', ...labels(sharedNoseStyles) },
+  mouth: sharedMouthStyles,
+  tail: sharedTailStyles,
   pattern: { P00: '品种原额纹', P03: '无额纹', P01: '白额线', P02: '双眉斑', P05: '小菱纹', P06: '眉斑 + 额线' },
   palette: labels(breedArt),
 } as const;
@@ -48,9 +60,7 @@ export const catFrontEars = Object.fromEntries(Object.entries(earStyles).map(([i
 };
 export const foreheadParts = Object.keys(catAssetOptions.pattern).filter(id => id !== 'P00' && id !== 'P03');
 export const faceTiles = { left: 128, top: 119, width: 48, height: 44 } as const;
-const faceExportArgs = { ...faceTiles, columns: Object.keys(noseStyles).length };
-export const noseTips = Object.values(noseStyles).map(([, tip]) => tip);
-export const mouthStems = Object.values(mouthStyles).map(([, stem]) => stem);
+const faceExportArgs = { ...faceTiles, columns: Object.keys(atlasNoseTips).length };
 
 const sharedCatAccessories = {
   A00: '无配饰', A01: '红蝴蝶结', A02: '蓝色小鱼帽', A03: '黄色星星发卡',
@@ -68,11 +78,17 @@ export const sharedBreedParts: Record<FrontBreed, LegacyFrontBreed> = {
 export const breedLaptop = 'cat/hd/breeds/typing_laptop';
 export const breedEyeGlints = 'cat/hd/breeds/eye_glints';
 export const facePartsPath = 'cat/hd/face-parts/';
+export const catNosePath = facePartsPath + 'noses/';
+export const catMouthPath = facePartsPath + 'mouths/';
+export const mouthSkinPath = catMouthPath + 'skin_cleanup';
+export const mouthSkinColumns = 4;
 export const legacyNoseOutlinePath = facePartsPath + 'legacy_nose_outline';
 export const bodyPatternPath = 'cat/hd/body-patterns/';
 export const headPatternPath = 'cat/hd/head-patterns/';
 export const earMaskPath = 'cat/hd/ear-masks/';
 export const tailPath = 'cat/hd/tails/';
+export const initialTailPath = tailPath + 'initial/';
+export const referenceTailPath = tailPath + 'reference/';
 export const typingEffectPath = 'cat/hd/typing-effects/';
 export const typingAtlases = {
   reference: { path: 'cat/hd/typing-reference/', frames: 12 },
@@ -80,6 +96,7 @@ export const typingAtlases = {
 } as const;
 const typingModes = ['gentle', 'fast', 'frenzy'] as const;
 const sharedTypingGeometry = { arms: 'arms', paws: 'paws_mask' } as const;
+export const typingInkPatches = { forearm: 'forearm_ink_cleanup', mouth: 'mouth_ink_cleanup' } as const;
 export function typingGeometryPart(
   part: keyof typeof sharedTypingGeometry, animation: keyof typeof typingAtlases, mode: typeof typingModes[number],
 ) {
@@ -128,7 +145,7 @@ export const catWalkBodies = indices(catWalkFrames).map(i => 'walk_body_' + i);
 const catWalkFurLayers = [
   ...catWalkBodies, 'walk_head', 'walk_head_alt', 'walk_ears', 'walk_tail', 'walk_muzzle',
   'walk_ear_CE02', 'walk_ear_CE04',
-  ...Object.keys(catAssetOptions.mouth).filter(id => id !== 'CN01').map(id => 'walk_muzzle_' + id),
+  ...legacyMouthIds.filter(id => id !== 'CN01').map(id => 'walk_muzzle_' + id),
 ];
 export const catCalicoLayers = new Set([...catWalkBodies, 'walk_head', 'walk_head_alt', 'walk_tail']);
 export const catFurSlots = ['g', 's', 'l', 'w', 'd'] as const;
@@ -202,8 +219,12 @@ function scriptGroup(id: string, usage: Usage, source: string, script: string, o
 const mappedBreeds = (Object.keys(breedArt) as Breed[]).filter((id): id is FrontBreed => id !== 'CC01');
 const currentTypingAtlas = typingAtlases['reference-v2'];
 const oldModes = ['gentle', 'fast'] as const;
-const tailIds = Object.keys(catAssetOptions.tail).filter(id => id !== 'CT01');
+const legacyTailIds = Object.keys(retiredTailStyles).filter(id => id !== 'CT01');
+const newTailIds = Object.keys(sharedTailStyles);
 const tailPoses = ['idle', 'typing'];
+const tailFiles = (pose: string, ids: string[], path = tailPath) => ids.flatMap(id => [
+  path + pose + '_' + id, path + pose + '_' + id + '_patterns',
+]);
 const archived = { sources: [] } as const;
 
 const oldCatFur = [
@@ -261,13 +282,30 @@ export const assetGroups: readonly AssetGroup[] = [
     bodyPatternPath, pngs(withPrefix(bodyPatternPath, bodyPatternLayers))),
   group('cat.tails', 'current', pngs(tailPoses.flatMap(pose => [
     tailPath + pose + '_remove',
-    ...tailIds.flatMap(id => [tailPath + pose + '_' + id, tailPath + pose + '_' + id + '_patterns']),
-  ])), tailIds.map(id => ({
+    ...tailFiles(pose, legacyTailIds),
+  ])), legacyTailIds.map(id => ({
     source: 'art/cat-shared/tails/' + id + '.aseprite', script: 'scripts/export-cat-tails.lua',
     outputDir: tailPath, args: { id },
-  })), cat),
+  })), { ...cat, note: 'Original tail removal masks and retired tail art used by saved pixel edits.' }),
+  scriptGroup('cat.tails.shared', 'current', 'art/cat-shared/front-tails.aseprite', 'export-cat-front-tails',
+    tailPath, pngs(tailPoses.flatMap(pose => tailFiles(pose, newTailIds)))),
+  scriptGroup('cat.tails.initial', 'compatibility', 'art/cat-shared/tails/front-tails-initial.aseprite', 'export-cat-front-tails',
+    initialTailPath, pngs(tailPoses.flatMap(pose => tailFiles(pose, newTailIds, initialTailPath)))),
+  scriptGroup('cat.tails.reference', 'compatibility', 'art/cat-shared/front-tails.aseprite', 'export-cat-front-tails',
+    referenceTailPath, pngs(tailPoses.flatMap(pose => tailFiles(pose, newTailIds, referenceTailPath))), { previousEdges: 1 }),
   scriptGroup('cat.face-parts', 'current', 'art/cat-shared/front-face-parts.aseprite', 'export-cat-face-parts',
     facePartsPath, pngs(withPrefix(facePartsPath, ['CC01', 'CC02', 'CC03', 'CC04'])), faceExportArgs),
+  group('cat.noses', 'current', pngs(withPrefix(catNosePath, Object.keys(sharedNoseStyles))),
+    Object.keys(sharedNoseStyles).map((layer, index) => ({
+      source: 'art/cat-shared/front-noses.aseprite', layer, frame: index + 1, output: catNosePath + layer,
+    })), cat),
+  group('cat.mouths', 'current', pngs([...withPrefix(catMouthPath, Object.keys(sharedMouthStyles)), mouthSkinPath]), [
+    // The Aseprite frames run from CN05 to CN09 independently of menu order.
+    ...Object.keys(sharedMouthStyles).sort().map((id, index) => ({
+      source: 'art/cat-shared/front-mouths.aseprite', layer: 'mouth', frame: index + 1, output: catMouthPath + id,
+    })),
+    { source: 'art/cat-shared/front-mouths.aseprite', layer: 'skin_cleanup', frame: 1, output: mouthSkinPath },
+  ], cat),
   group('cat.legacy-nose-outline', 'compatibility', pngs([legacyNoseOutlinePath]), [], {
     ...cat, note: 'Preserved outline removed from the original CC05–CC08 NO01 cels.',
   }),
@@ -305,8 +343,10 @@ export const assetGroups: readonly AssetGroup[] = [
         mode === 'fast' ? ['mouth_flat', 'mouth_smile', 'mouth_region'] : mode === 'frenzy' ? ['effort_eyes'] : [])),
     ], { mode, frames: typingAtlases.reference.frames })),
   scriptGroup('cat.typing.reference-v2.shared', 'current', 'art/cat-shared/typing-v2/gentle.aseprite',
-    'export-cat-typing-v2', currentTypingAtlas.path,
-    pngs(withPrefix(currentTypingAtlas.path, Object.values(sharedTypingGeometry)), CAT_SIZE, currentTypingAtlas.frames),
+    'export-cat-typing-v2', currentTypingAtlas.path, [
+      ...pngs(withPrefix(currentTypingAtlas.path, Object.values(sharedTypingGeometry)), CAT_SIZE, currentTypingAtlas.frames),
+      ...pngs(withPrefix(currentTypingAtlas.path, Object.values(typingInkPatches))),
+    ],
     { mode: 'shared', frames: currentTypingAtlas.frames, ...sharedTypingGeometry }),
   ...(['fast', 'frenzy'] as const).map(mode => scriptGroup('cat.typing.reference-v2.' + mode, 'current',
     'art/cat-shared/typing-v2/' + mode + '.aseprite', 'export-cat-typing-v2', currentTypingAtlas.path, [
@@ -327,7 +367,7 @@ export const assetGroups: readonly AssetGroup[] = [
     'walk_eye_Y01_glints', walkEyeGlints, cat, PET_SIZE),
   ...['A04', 'A05'].map(id => layerGroup('archive.accessory.' + id, 'archive',
     'art/orange-cat/accessory/' + id + '.aseprite', 'accessory', orangePath + 'accessory_' + id, archived)),
-  ...Object.keys(catAssetOptions.mouth).filter(id => id !== 'CN01').map(id =>
+  ...legacyMouthIds.filter(id => id !== 'CN01').map(id =>
     layerGroup('archive.orange.muzzle.' + id, 'archive', 'art/orange-cat/muzzle/' + id + '.aseprite',
       'muzzle', orangePath + 'muzzle_' + id, archived)),
   group('archive.forehead.P03', 'archive', [], [], {
@@ -339,7 +379,7 @@ export const assetGroups: readonly AssetGroup[] = [
     ...[1, 2, 3, 4].map(i => orangePath + 'ear_CE0' + i), 'cat/new_/ear_folded_320',
   ])),
   ...(['CC02', 'CC03', 'CC04'] as const).map(palette => group('archive.cat.' + palette, 'archive',
-    pngs(withPrefix(breedPath(palette), ['eye_Y07_aperture', ...Object.keys(catAssetOptions.mouth).map(id => 'muzzle_' + id)])),
+    pngs(withPrefix(breedPath(palette), ['eye_Y07_aperture', ...legacyMouthIds.map(id => 'muzzle_' + id)])),
     [], { sources: ['art/cat-breeds/' + breedArt[palette][1] + '-front.aseprite'] })),
   group('archive.dog.patterns', 'archive', pngs([
     'masks/M1_pattern_P03_s', 'parts/M1_pattern_P02', 'parts/M1_pattern_P03',

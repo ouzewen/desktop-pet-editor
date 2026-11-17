@@ -4,6 +4,10 @@ export type OutlineVersion = 'adaptive' | 'original';
 
 const outlineColors = new Map<string, readonly number[]>();
 
+function isOutline(guide: Uint8ClampedArray, offset: number) {
+  return guide[offset + 3] && guide[offset]! <= 140 && guide[offset + 1]! <= 78 && guide[offset + 2]! <= 74;
+}
+
 function outlineColor(coat: Exclude<CatRenderConfig['coat'], 'native'>) {
   const cached = outlineColors.get(coat);
   if (cached) return cached;
@@ -22,11 +26,9 @@ export function recolorCatOutline(
   const color = outlineColor(config.coat);
   const { data, width } = image;
   for (let offset = 0; offset < data.length; offset += 4) {
-    if (!data[offset + 3] || !guide[offset + 3]) continue;
     // Classify the original orange drawing, never the recolored result:
     // a dark fur patch or pupil is not an outline just because it is dark.
-    const red = guide[offset]!, green = guide[offset + 1]!, blue = guide[offset + 2]!;
-    if (red > 140 || green > 78 || blue > 74) continue;
+    if (!data[offset + 3] || !isOutline(guide, offset)) continue;
     if (head) {
       const x = offset / 4 % width, y = Math.floor(offset / 4 / width);
       // The face keeps its own ink and independent pupil colors. The
@@ -35,5 +37,26 @@ export function recolorCatOutline(
       if (x >= 126 && x <= 178 && y >= 117 && y <= 164) continue;
     }
     data.set(color, offset);
+  }
+}
+
+export function clearForeheadOutlineSpots(image: ImageData, guide: Uint8ClampedArray) {
+  const { data, width } = image;
+  const offset = (x: number, y: number) => (y * width + x) * 4;
+  // The two valleys where the ears reach the crown have extra ink below
+  // the outer contour. Preserve three rows at the silhouette on every ear.
+  for (const [left, right] of [[115, 131], [170, 186]] as const) {
+    for (let x = left; x <= right; x++) {
+      for (let y = 52; y <= 58; y++) {
+        const pixel = offset(x, y);
+        if (!isOutline(guide, pixel) || !data[pixel + 3] || !data[offset(x, y - 3) + 3]
+          || !data[offset(x - 2, y - 1) + 3] || !data[offset(x + 2, y - 1) + 3]) continue;
+        // Copy the coat under this column so split and point-color coats
+        // retain their local pigment at the ear seam.
+        let sample = offset(x, y + 1);
+        while (sample <= offset(x, 61) && isOutline(guide, sample)) sample += width * 4;
+        if (data[sample + 3]) data.set(data.subarray(sample, sample + 3), pixel);
+      }
+    }
   }
 }

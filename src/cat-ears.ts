@@ -79,3 +79,30 @@ export function paintBreedEars(
   }
   context.putImageData(composed, 0, 0);
 }
+
+export function paintInnerEarColor(
+  image: ImageData, original: ImageData, color: RGB,
+) {
+  const { data, width, height } = original;
+  // The original ear layer also includes the crown and fur along the sides
+  // of the face. The lining is pink on the two ears, above the eyes.
+  for (const [start, end] of [[0, 125], [176, width]] as const) {
+    const lining: number[] = [];
+    let greenTotal = 0;
+    for (let y = 0; y < Math.min(104, height); y++) {
+      for (let x = start; x < end; x++) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset]!, green = data[offset + 1]!, blue = data[offset + 2]!;
+        if (!data[offset + 3] || red < 145 || red - green < 31 || blue < green - 5) continue;
+        lining.push(offset);
+        greenTotal += green;
+      }
+    }
+    if (!lining.length) continue;
+    const average = greenTotal / lining.length;
+    for (const offset of lining) {
+      const shade = data[offset + 1]! - average;
+      for (let channel = 0; channel < 3; channel++) image.data[offset + channel] = color[channel]! + shade;
+    }
+  }
+}

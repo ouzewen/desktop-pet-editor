@@ -92,7 +92,11 @@ public/assets/
 
 ### 正面鼻子与嘴巴
 
-`art/cat-shared/front-face-parts.aseprite` 按毛色编号分组，每组有四帧。鼻子 `NO01–NO04` 和嘴巴 `CN01–CN04` 分别在 `nose` 与 `mouth` 图层。头底参考已锁定，橘猫还有一层补齐旧嘴鼻下方毛色的 `base_patch`。两件零件共用 320×320 正面坐标，鼻尖接到嘴线的位置统一在脸部中心。旧 `muzzle` 配置会转成原来的一对嘴形和鼻形。
+`art/cat-shared/front-noses.aseprite` 保存小方鼻、中鼻、大鼻和长鼻的独立图层与帧标签，编号为 `NO05–NO08`。导出命令为 `npm run assets:export -- cat.noses`。工作台在同一行提供鼻形和鼻色，圆角鼻 `NO02` 沿用原稿。鼻色按品种原色或独立色板着色，保留鼻尖的色阶。所有鼻形共用 320×320 正面坐标，鼻尖按高度接到所选嘴形的中心线，待机与三档打字共用。
+
+`art/cat-shared/front-mouths.aseprite` 的 `mouth` 图层按编号 `CN05–CN09` 保存五种正面嘴形。工作台依次显示微笑、吐舌、凸凸嘴、严肃嘴、奔驰嘴，各品种默认微笑。用 `npm run assets:export -- cat.mouths` 导出五张 320×320 的透明嘴形 PNG，以及 `skin_cleanup.png`，到 `public/assets/cat/hd/face-parts/mouths/`。补色图按品种顺序使用四列 `faceTiles`，覆盖旧嘴残线与暗点。待机采用外观选中的嘴形，三档打字从同一套素材取用动作对应的嘴形，鼻形和鼻色独立。
+
+`art/cat-shared/front-face-parts.aseprite` 中的旧四列图集继续提供圆角鼻、橘猫补色底层，以及供旧像素存档还原底稿的鼻形和嘴形。工作台将 `NO01`、`NO03`、`NO04` 分别映射到小方鼻、中鼻、大鼻，将 `CN01–CN04` 依次映射到凸凸嘴、吐舌、吐舌、严肃嘴。旧 `muzzle` 字段会同时恢复对应的鼻形和嘴形；还原历史底稿时保留原始编号。
 
 
 ### 共用低抬爪打字动画
@@ -101,18 +105,20 @@ public/assets/
 
 | 工作台动作 | 模式 / 源文件 | 循环时长 | 表情与汗水 |
 | --- | --- | --- | --- |
-| 慢敲键盘 | `gentle` / `gentle.aseprite` | 2240 ms（70 ms/帧） | 保留当前表情 |
-| 比较快 | `fast` / `fast.aseprite` | 1280 ms（40 ms/帧） | 沿用睁眼、微笑/平嘴、汗水 |
-| 特别快 | `frenzy` / `frenzy.aseprite` | 640 ms（20 ms/帧） | 沿用挤眼、微笑、大汗珠与甩汗 |
+| 慢敲键盘 | `gentle` / `gentle.aseprite` | 2240 ms（70 ms/帧） | 微笑 `CN08` |
+| 比较快 | `fast` / `fast.aseprite` | 1280 ms（40 ms/帧） | 睁眼、严肃嘴 `CN06`、汗水 |
+| 特别快 | `frenzy` / `frenzy.aseprite` | 640 ms（20 ms/帧） | 挤眼、奔驰嘴 `CN07`、大汗珠与甩汗 |
 
-三份 320×320 源文件保存在 `art/cat-shared/typing-v2/`，每份 32 帧。`body_reference`、`head_reference`、`laptop_reference` 是锁定参考；`torso_base`、`forearm_texture_restore`、`forearm_edge_cleanup` 保存固定前臂，`paw_left`、`paw_right`、`paw_upper_outline` 保存动作，`paws_mask` 从新爪形派生。现有 `effort_eyes`、`mouth_expression`、`mouth_region` 像素保持不变，旧 12 帧汗水按相位映射到 32 帧。表情不修改保存的瞳色、鼻子和嘴形；自选其他嘴形时保留该选项。挤眼隐藏原眼睛与高光。
+三份 320×320 源文件保存在 `art/cat-shared/typing-v2/`，每份 32 帧。`body_reference`、`head_reference`、`laptop_reference` 是锁定参考。`torso_base`、`forearm_texture_restore`、`forearm_edge_cleanup` 保存固定前臂，`paw_left`、`paw_right`、`paw_upper_outline` 保存动作，`paws_mask` 从新爪形派生。旧 12 帧汗水按相位映射到 32 帧，挤眼时隐藏眼睛与高光。嘴形由动作档位在渲染时选取，打字结束恢复外观选中的嘴形。
 
 真实键盘按最近一秒的输入频率选择档位：达到 5 次进入比较快，达到 9 次进入特别快；特别快降到 6 次退出，比较快降到 2 次退出，避免在阈值附近来回跳动。切换档位保留动作进度，停止打字沿用原有待机超时。
 
-共用手臂和爪子遮罩从慢打源稿导出，素材组为 `cat.typing.reference-v2.shared`。`cat.typing.reference-v2.fast` 和 `cat.typing.reference-v2.frenzy` 分别导出各档的表情和汗水。
+共用手臂和爪子遮罩从慢打源稿导出，素材组为 `cat.typing.reference-v2.shared`。`cat.typing.reference-v2.fast` 和 `cat.typing.reference-v2.frenzy` 分别导出各档的表情和汗水。旧分档嘴形 `mouth_smile.png`、`mouth_flat.png`、`mouth_region.png` 用于重建历史打字存档，新预览记录 `typingMouthVersion: shared`。
 
 
-共导出 8 张透明 PNG。`arms.png` 和 `paws_mask.png` 供三档共用，和独立的 `sweat_fast.png`、`sweat_frenzy.png` 同为 320×10240 的 32 帧纵向图集。另有 `mouth_smile.png`、`mouth_flat.png`、`mouth_region.png` 和 `effort_eyes.png` 四张 320×320 单帧图层。前臂图集包含固定胸口与肩部；头部、尾巴和电脑继续使用既有可组合图层。
+共导出 10 张透明 PNG。`arms.png` 和 `paws_mask.png` 供三档共用，和独立的 `sweat_fast.png`、`sweat_frenzy.png` 同为 320×10240 的 32 帧纵向图集。表情零件 `mouth_smile.png`、`mouth_flat.png`、`mouth_region.png` 和 `effort_eyes.png` 均为 320×320 单帧图层。前臂图集包含固定胸口与肩部；头部、尾巴和电脑继续使用既有可组合图层。
+
+`gentle.aseprite` 中的 `forearm_ink_cleanup` 和 `mouth_ink_cleanup` 分别保存胸口与前臂、嘴边的局部补色。两张静态补片由三档共用，分别放在活动前爪与独立嘴鼻下方。特别快档按完整睁眼图层清除旧头图残留的眼圈，再叠加挤眼图层。新预览记录 `typingInkVersion: clean-eyes`，旧存档按对应版本的底图提取笔迹。
 
 工作台预览记录 `typingAnimation: reference-v2` 并使用 `aligned` 坐标。旧 `reference` 存档继续从 `typing-reference/` 读取原 12 帧图集，旧 `shared` 存档使用原 12 帧轨迹，缺字段的历史打字档按 `legacy` 四帧重建。加载这些旧档时，先还原对应版本底稿，再提取笔迹并叠加当前动作。`--self-test` 检查 32 帧循环、三档同手轨迹、固定纹理、速度切换、表情换装，以及历史帧笔迹迁移。
 
@@ -178,16 +184,22 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 
 正面待机与三档打字共用同一套 320×320 耳型坐标。每个品种提供一份 `ear_upright.png`，建立默认立耳、额头色块和脸侧接缝。从中保留固定额头，再用橘猫已验收的四份替换耳型作轮廓。新增同一坐标体系的品种时，在 `src/cat-ears.ts` 配置画面左、右耳的描边、阴影、毛色和浅色。三花的左右耳可使用不同配色，暹罗可为双耳指定重点色。旧品种的四份替换耳朵 PNG 用于识别早期像素编辑存档里的底稿。
 
+工作台的耳形和内耳色在同一行，内耳和鼻子共用一套色板，可以独立选择。`earColor` 默认使用品种原色。指定颜色时，渲染器按原耳层的粉色区域着色，沿用原有透明度和明暗。
+
 `art/cat-shared/front-ear-masks.aseprite` 对应四款替换耳型。每个标签对应一帧，`head_reference`、`upright_reference` 和 `shape_reference` 是锁定的对位参考。画面左、右耳各有独立遮罩。遮罩中的实心白色使用完整耳朵色，灰色用于耳根过渡，未覆盖的区域保留品种底稿的像素。耳型轮廓有增减的位置也用实心白色标记，让合成器能擦除旧耳尖或加上新轮廓。侧面使用自己的像素形状和锚点。
 
 
 ### 共用尾巴
 
-外观中的尾巴提供 `CT01 细长尾`、`CT02 短尾`、`CT03 蓬松尾`、`CT04 弯钩尾`。短尾取日本短尾猫的绒球形态，蓬松尾参考缅因猫宽厚并逐渐收尖的长毛尾，弯钩尾采用猫尾尖向内弯的姿态。[CFA 日本短尾猫](https://cfa.org/breed/japanese-bobtail/)、[CFA 缅因猫](https://cfa.org/breed/maine-coon-cat/)、[Cats Protection 猫尾姿态](https://www.cats.org.uk/cats-blog/why-do-cats-have-tails)
+工作台提供 `CT05 直尾`（默认）、`CT06 短尾`、`CT07 L字型弯尾`、`CT08 Z字型弯尾`、`CT09 卷环型尾`，形状从用户提供的 LibTV 尾巴参考图绘制。
 
-新增三款源稿位于 `art/cat-shared/tails/CT02.aseprite` 至 `CT04.aseprite`。每份含 `idle`、`typing` 两帧，`tail` 是独立形状，`mackerel`、`classic`、`spotted` 分别保存三种尾纹。身体、头部、电脑和原尾遮罩是锁定参考层。打字帧采用现有原始动作坐标，由工作台与其他身体层共同对齐。
+五款尾巴共用源稿 `art/cat-shared/front-tails.aseprite`，用 `npm run assets:export -- cat.tails.shared` 导出待机、打字两组 320×320 形状与花纹 PNG。新打字尾巴在已对齐的正面画布上绘制，三档打字共用同一组尾巴；原打字尾巴和移除遮罩仍使用各自的旧动作坐标。
 
-`public/assets/cat/hd/tails/` 中的形状 PNG 使用共用橘色阶，花纹 PNG 的红、绿、蓝通道分别对应三种尾纹。`src/cat-tail.ts` 按品种、毛色搭配与毛皮花纹上色。原尾遮罩沿右后腿外侧的描边分割，替换尾巴合成在身体、前爪和电脑后方。旧配置缺少尾巴字段时使用 `CT01`。
+`public/assets/cat/hd/tails/` 中的形状 PNG 使用共用橘色阶，花纹 PNG 的红、绿、蓝通道分别对应细虎斑、经典虎斑和点状虎斑。`src/cat-tail.ts` 按品种、毛色搭配与毛皮花纹上色。原尾遮罩沿右后腿外侧的描边分割，替换尾巴合成在身体、前爪和电脑后方。卷环中心留透明孔。
+
+旧选项映射到最接近的新尾型：`CT01 → CT05`、`CT02 → CT06`、`CT03 → CT05`、`CT04 → CT07`。旧外观没有尾巴字段时也使用直尾。旧像素存档的底图匹配保留原编号，缺少尾巴字段的旧底图按 `CT01` 还原；`cat.tails` 保留旧尾形和共用移除遮罩。这样旧底图的尾巴不会被识别为用户笔迹，已有分部位笔迹仍直接读取。
+
+当前预览记录 `tailArtVersion: clean`。`cat.tails.reference` 用同一份源稿中隐藏的 `previous_tail_edges` 图层还原补描边前的尾型；重画前的 `CT05–CT09` 底图由 `cat.tails.initial` 还原，源稿保存在 `art/cat-shared/tails/front-tails-initial.aseprite`。无元数据的旧 PNG 会在提取笔迹时比较各版尾巴。
 
 
 ### 毛色搭配
@@ -223,6 +235,12 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 | 配饰和道具 | 后层、前层、需要遮挡的独立片 | 用耳根、颈部或前爪锚点定位，按动作控制遮挡 |
 
 源稿先把需要独立替换、移动或遮挡的部位拆开。各层用同尺寸透明画布和统一坐标导出。已经画进底稿的旧五官须先移出，并补齐下面的干净底色。共享骨架的新品种可以提供配色和花色遮罩，同组的外形与动作模板可以直接复用。外轮廓、比例或遮挡明显不同的品种需要自己的对应零件。
+
+### 左右眼瞳色
+
+工作台按预览画面的左、右分别提供瞳色菜单。每只眼可选单瞳或双瞳；单瞳使用基础瞳色，双瞳可以另选内层颜色。渲染按画布中线拆分现有双眼遮罩，打字和待机共用。特别快打字时仍绘制挤眼表情。
+
+配置用 `leftEyeColor`、`leftInnerPupil`、`leftInnerEyeColor` 和对应右眼字段保存各项选择。每个缺失字段沿用旧版的 `eyeColor`、`innerPupil` 或 `innerEyeColor`，旧像素存档可按原始瞳色重建底图。
 
 ### 自定义笔迹
 

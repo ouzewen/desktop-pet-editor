@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { assetGroups, assetFiles, catAssetOptions, faceTiles, CAT_SIZE, type AssetFile } from '../src/pet-assets.ts';
+import { assetGroups, assetFiles, atlasNoseTips, faceTiles, legacyMouthIds, CAT_SIZE, type AssetFile } from '../src/pet-assets.ts';
 
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -53,9 +53,9 @@ export function checkPetAssets(root: string, publicDir: string) {
   for (const key of pngKeys(assetDir)) {
     if (!assetFiles.has(key)) errors.add('PNG 未登记 · ' + key + '.png');
   }
-  const columns = Object.keys(catAssetOptions.nose).length;
-  if (columns !== Object.keys(catAssetOptions.mouth).length || columns * faceTiles.width > CAT_SIZE) {
-    errors.add('鼻子和嘴巴的选项数量与正面图集列数不匹配');
+  const columns = Object.keys(atlasNoseTips).length;
+  if (columns !== legacyMouthIds.length || columns * faceTiles.width > CAT_SIZE) {
+    errors.add('旧鼻形和嘴形的数量与正面图集列数不匹配');
   }
   if (errors.size) throw Error('素材清单校验失败\n' + [...errors].join('\n'));
   return { groups: ids.size, files: seen.size, sources: sourcePaths.size };

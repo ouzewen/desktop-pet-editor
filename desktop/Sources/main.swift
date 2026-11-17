@@ -546,6 +546,20 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func checkCatWorkbench() {
         guard let catalog = workbenchState.catalog else { exit(1) }
+        for group in ["CAT", "CAT_ORANGE"] {
+            let fields = catalog.fieldsByFrame[group]
+            guard fields?["nose"]?.map(\.id) == ["NO02", "NO05", "NO06", "NO07", "NO08"],
+                  fields?["mouth"]?.map(\.id) == ["CN08", "CN09", "CN05", "CN06", "CN07"],
+                  let noseColors = fields?["noseColor"],
+                  fields?["ear"]?.count == 5,
+                  fields?["earColor"]?.map(\.id) == noseColors.map(\.id),
+                  fields?["earColor"]?.first(where: { $0.id == "charcoal" })?.colors?.count == 1,
+                  noseColors.contains(where: { $0.id == "natural" }),
+                  noseColors.contains(where: { $0.id == "plum" && $0.colors?.count == 1 }) else {
+                fputs("Workbench could not load the ear, nose and mouth appearance menus\n", stderr)
+                exit(1)
+            }
+        }
         let breeds = catalog.presets.filter { $0.frame == "CAT" }
         guard !breeds.isEmpty, breeds.allSatisfy({ breed in
             guard let palette = breed.palette,
@@ -558,13 +572,19 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         // Switching a breed restores its complete default appearance, even
         // after the previous selection used a different coat combination.
+        let pupilChoices = [
+            "leftEyeColor": "blue", "leftInnerPupil": "none", "leftInnerEyeColor": "amber",
+            "rightEyeColor": "green", "rightInnerPupil": "round", "rightInnerEyeColor": "rose"
+        ]
         workbenchState.appearance["coat"] = "honey"
+        workbenchState.appearance["leftEyeColor"] = "violet"
         choosePreset("preset_cat_calico") { [weak self] selected in
             guard let self, selected, self.workbenchState.appearance["frame"] == "CAT",
                   self.workbenchState.appearance["palette"] == "CC03",
                   self.workbenchState.appearance["coat"] == "native",
                   self.workbenchState.appearance["bodyPattern"] == "native",
-                  self.workbenchState.appearance["pattern"] == "P00" else {
+                  self.workbenchState.appearance["pattern"] == "P00",
+                  self.workbenchState.appearance["leftEyeColor"] == nil else {
                 fputs("Workbench did not restore the cat breed's default appearance\n", stderr)
                 exit(1)
             }
@@ -575,6 +595,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.workbenchState.appearance["innerPupil"] = "round"
             self.workbenchState.appearance["innerEyeColor"] = "amber"
             self.workbenchState.appearance["eyeColor"] = "violet"
+            for (key, value) in pupilChoices { self.workbenchState.appearance[key] = value }
+            self.workbenchState.appearance["ear"] = "CE05"
+            self.workbenchState.appearance["earColor"] = "charcoal"
+            self.workbenchState.appearance["nose"] = "NO08"
+            self.workbenchState.appearance["noseColor"] = "plum"
+            self.workbenchState.appearance["mouth"] = "CN09"
             self.workbenchState.appearance["pattern"] = "P06"
             self.applyDraft { applied in
                 guard applied, self.appliedConfig?["palette"] as? String == "CC02",
@@ -584,7 +610,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                       self.appliedConfig?["innerPupil"] as? String == "round",
                       self.appliedConfig?["innerEyeColor"] as? String == "amber",
                       self.appliedConfig?["eyeColor"] as? String == "violet",
-                      self.appliedConfig?["pattern"] as? String == "P06" else {
+                      self.appliedConfig?["ear"] as? String == "CE05",
+                      self.appliedConfig?["earColor"] as? String == "charcoal",
+                      self.appliedConfig?["nose"] as? String == "NO08",
+                      self.appliedConfig?["noseColor"] as? String == "plum",
+                      self.appliedConfig?["mouth"] as? String == "CN09",
+                      self.appliedConfig?["pattern"] as? String == "P06",
+                      pupilChoices.allSatisfy({ self.appliedConfig?[$0.key] as? String == $0.value }) else {
                     fputs("Workbench could not apply the configured cat\n", stderr)
                     exit(1)
                 }
@@ -597,6 +629,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         exit(1)
                     }
                     self.checkWorkbenchReopen()
+                    guard pupilChoices.allSatisfy({ self.workbenchState.appearance[$0.key] == $0.value }) else {
+                        fputs("Independent pupil settings did not survive reopening the workbench\n", stderr)
+                        exit(1)
+                    }
                     guard self.verifyGazeTracking() else {
                         fputs("Mouse movement did not produce the expected gaze offsets\n", stderr)
                         exit(1)
@@ -1735,7 +1771,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             try { decoded = source ? JSON.parse(source) : null; } catch { decoded = null; }
             const reference = await window.pet.setCustom(png, decoded);
             if (!reference) return null;
-            let appearance = reference.config;
+            let appearance = window.pet.normalize(reference.config);
             if (savedAppearance) {
                 try {
                     const saved = window.pet.normalize(savedAppearance);
@@ -1826,6 +1862,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func showQuickBar() {
         let host = ReminderHostingView(rootView: QuickBar(
+            name: (appliedConfig?["name"] as? String) ?? "",
             onChat: { [weak self] in
                 self?.hideQuickBar()
                 self?.showChat()

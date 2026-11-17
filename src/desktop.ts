@@ -1,11 +1,12 @@
 import { checkCatActions } from './desktop-check';
 import { Motion } from './motion';
 import { options, presets } from './model';
-import { catCoatSchemes, catOptions, catPaletteColors, catPresets, orangeCatOptions, readPetConfig, type CatConfig, type PetConfig } from './cat';
+import { catCoatSchemes, catFeatureColors, catIrisColors, catOptions, catPaletteColors, catPresets,
+  orangeCatOptions, readPetConfig, type CatConfig, type CatIrisColor, type PetConfig } from './cat';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor,
   type CatCustomization, type CatEditSource } from './cat-custom';
 import { catTypingFrameDuration, currentTypingAnimation } from './cat-typing';
-import { actions, assetsReady, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
+import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
 let preview: { config: PetConfig; action: Action; typingMode: TypingMode; started: number } | undefined;
@@ -29,9 +30,16 @@ const fields = (choices: typeof options | typeof catOptions | typeof orangeCatOp
   Object.fromEntries(Object.entries(choices).map(([key, values]) => [key,
     key === 'coat'
       ? Object.entries(catCoatSchemes).map(([id, { name, colors }]) => ({ id, name, colors }))
-      : Object.entries(values).map(([id, name]) => key === 'palette' && choices !== options
-        ? { id, name, colors: catPaletteColors(id as CatConfig['palette']) }
-        : { id, name }),
+      : key === 'noseColor' || key === 'earColor'
+        ? Object.entries(catFeatureColors).map(([id, option]) => ({ id, name: option.name,
+          ...('color' in option ? { colors: [option.color] } : {}) }))
+      : Object.entries(values).map(([id, name]) => {
+        if (choices !== options && key === 'palette') return { id, name, colors: catPaletteColors(id as CatConfig['palette']) };
+        if (choices !== options && key === 'eyeColor' && Object.hasOwn(catIrisColors, id)) {
+          return { id, name, colors: [catIrisColors[id as CatIrisColor]] };
+        }
+        return { id, name };
+      }),
   ]));
 
 Object.assign(window, {
@@ -42,7 +50,9 @@ Object.assign(window, {
       fieldsByFrame: { M1: fields(options), CAT: fields(catOptions), CAT_ORANGE: fields(orangeCatOptions) },
       presets: Object.entries(allPresets).map(([id, config]) => ({
         id, name: config.name, frame: config.frame,
-        ...(config.frame === 'CAT' ? { palette: config.palette, colors: catPaletteColors(config.palette) } : {}),
+        ...(config.frame === 'CAT' ? {
+          palette: config.palette, colors: catPaletteColors(config.palette), naturalSwatches: catNaturalSwatches(config),
+        } : {}),
       })),
     }),
     preset: (id: keyof typeof allPresets) => allPresets[id],
@@ -128,8 +138,8 @@ void desktopReady.then(() => {
         });
         visibleSource = config.frame === 'CAT' && (action === 'sit' || action === 'typing')
           ? { config, action, frame: renderedFrame, gaze, typingMode: preview.typingMode,
-            typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive',
-            typingLayout: 'aligned', earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false }
+            typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
+            typingLayout: 'aligned', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(config.pattern), legacyNoseOutline: false }
           : undefined;
         visibleCustom = custom;
         previous = frame;

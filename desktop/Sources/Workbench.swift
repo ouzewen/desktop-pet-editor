@@ -14,6 +14,7 @@ struct AppearancePreset: Decodable {
     let frame: String
     let palette: String?
     let colors: [String]?
+    let naturalSwatches: [String: String]?
 }
 
 struct AppearanceCatalog: Decodable {
@@ -71,6 +72,10 @@ final class WorkbenchState: ObservableObject {
     @Published var gender: String {
         didSet { UserDefaults.standard.set(gender, forKey: "petGender") }
     }
+    /// Descriptive only, like gender; never affects the renderer.
+    @Published var mbti: String {
+        didSet { UserDefaults.standard.set(mbti, forKey: "petMBTI") }
+    }
     /// Descriptive only, like the name and gender; never reaches the renderer.
     @Published var birthDate: Date? {
         didSet {
@@ -101,10 +106,18 @@ final class WorkbenchState: ObservableObject {
     var nameDirty = false
 
     static let genders = ["none", "♂", "♀"]
+    static let mbtiTypes = [
+        "INTJ", "INTP", "ENTJ", "ENTP",
+        "INFJ", "INFP", "ENFJ", "ENFP",
+        "ISTJ", "ISFJ", "ESTJ", "ESFJ",
+        "ISTP", "ISFP", "ESTP", "ESFP",
+    ]
 
     init() {
         let saved = UserDefaults.standard.string(forKey: "petGender") ?? "none"
         gender = Self.genders.contains(saved) ? saved : "none"
+        let savedMBTI = UserDefaults.standard.string(forKey: "petMBTI") ?? "none"
+        mbti = Self.mbtiTypes.contains(savedMBTI) ? savedMBTI : "none"
         let stamp = UserDefaults.standard.double(forKey: "petBirthDate")
         birthDate = stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
     }
@@ -175,6 +188,166 @@ private struct PixelSwatch: View {
     }
 }
 
+private struct ColorOptionLabel: View {
+    let option: AppearanceOption
+    let defaultSwatch: [Color]
+    let palette: PixelPalette
+    var size: CGFloat = 14
+
+    var body: some View {
+        let colors = WBTheme.swatchColors(option.colors)
+        let swatch = colors.isEmpty ? defaultSwatch : colors
+        HStack(spacing: 4) {
+            Text(option.name)
+            Spacer(minLength: 4)
+            if !swatch.isEmpty {
+                PixelSwatch(colors: swatch, palette: palette, size: size)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+private struct PixelColorSelect: View {
+    let title: String
+    let options: [AppearanceOption]
+    let defaultSwatch: [Color]
+    let palette: PixelPalette
+    @Binding var selection: String
+    @State private var isPresented = false
+
+    private var currentName: String {
+        options.first { $0.id == selection }?.name ?? options.first?.name ?? ""
+    }
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentName)
+                Spacer(minLength: 4)
+                PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 10)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+        }
+        .buttonStyle(PixelButtonStyle(palette: palette))
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(title)
+        .accessibilityValue(currentName)
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(spacing: 5) {
+                ForEach(options, id: \.id) { option in
+                    Button {
+                        selection = option.id
+                        isPresented = false
+                    } label: {
+                        ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette)
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: selection == option.id))
+                    .accessibilityAddTraits(selection == option.id ? .isSelected : [])
+                }
+            }
+            .padding(10)
+            .frame(width: 186)
+            .background(palette.panel)
+        }
+    }
+}
+
+private struct PupilColorPicker: View {
+    let title: String
+    let side: String
+    let colors: [AppearanceOption]
+    let naturalSwatches: [String: String]
+    let palette: PixelPalette
+    @Binding var layers: String
+    @Binding var outer: String
+    @Binding var inner: String
+    @State private var isPresented = false
+
+    private var isDouble: Bool { layers == "round" }
+    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
+
+    private var summary: String {
+        let outerName = colors.first { $0.id == outer }?.name ?? "原色"
+        let innerName = colors.first { $0.id == inner }?.name ?? "原色"
+        return isDouble ? "双瞳 · \(outerName) / \(innerName)" : "单瞳 · \(outerName)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(summary)
+                    Spacer(minLength: 4)
+                    PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(PixelButtonStyle(palette: palette))
+            .accessibilityLabel(title)
+            .accessibilityValue(summary)
+            .accessibilityIdentifier("\(side)-eye-pupil-picker")
+            .popover(isPresented: $isPresented, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 6) {
+                        modeButton("单瞳", value: "none")
+                        modeButton("双瞳", value: "round")
+                    }
+                    colorGrid(isDouble ? "外层瞳色" : "瞳色", id: "outer", selection: $outer,
+                              naturalKey: isDouble ? "eyeColor" : "singleEyeColor")
+                    if isDouble {
+                        colorGrid("内层瞳色", id: "inner", selection: $inner, naturalKey: "innerEyeColor")
+                    }
+                }
+                .padding(12)
+                .frame(width: 292)
+                .background(palette.panel)
+            }
+        }
+    }
+
+    private func modeButton(_ title: String, value: String) -> some View {
+        Button {
+            layers = value
+        } label: {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(PixelButtonStyle(palette: palette, prominent: layers == value))
+        .accessibilityAddTraits(layers == value ? .isSelected : [])
+        .accessibilityIdentifier("\(side)-eye-mode-\(value)")
+    }
+
+    private func colorGrid(_ title: String, id: String, selection: Binding<String>, naturalKey: String) -> some View {
+        let defaultSwatch = WBTheme.swatchColors(naturalSwatches[naturalKey].map { [$0] })
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 6) {
+                ForEach(colors, id: \.id) { option in
+                    Button {
+                        selection.wrappedValue = option.id
+                    } label: {
+                        ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette, size: 10)
+                    }
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: selection.wrappedValue == option.id))
+                    .accessibilityLabel("\(title) \(option.name)")
+                    .accessibilityAddTraits(selection.wrappedValue == option.id ? .isSelected : [])
+                    .accessibilityIdentifier("\(side)-eye-\(id)-\(option.id)")
+                }
+            }
+        }
+    }
+}
+
 private struct PixelStatusBadge: View {
     let text: String
     let color: Color
@@ -220,9 +393,8 @@ struct WorkbenchView: View {
 
     private var palette: PixelPalette { .of(colorScheme) }
 
-    private let fields = [
-        ("ear", "耳朵"), ("nose", "鼻子"), ("mouth", "嘴巴"), ("muzzle", "嘴鼻"), ("tail", "尾巴"),
-        ("pattern", "面部花纹"), ("bodyPattern", "毛皮花纹"), ("accessory", "配饰"),
+    private let dogFields = [
+        ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"), ("pattern", "面部花纹"),
     ]
     private let fieldColumns = [
         GridItem(.flexible(), spacing: 10, alignment: .top),
@@ -496,6 +668,16 @@ struct WorkbenchView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
+                            profileLabel("MBTI")
+                            PixelSelect(
+                                options: [("none", "未选择")] + WorkbenchState.mbtiTypes.map { ($0, $0) },
+                                selection: $state.mbti,
+                                palette: palette
+                            )
+                            .accessibilityLabel("MBTI")
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
                                 profileLabel("出生日期")
                                 Spacer(minLength: 0)
@@ -536,7 +718,7 @@ struct WorkbenchView: View {
                             profileLabel("姓名")
                             Text(state.appearance["name", default: ""].isEmpty
                                  ? "未命名" : state.appearance["name", default: ""])
-                                .font(PixelFont.font(16))
+                                .font(PixelFont.font(13))
                                 .foregroundStyle(state.appearance["name", default: ""].isEmpty ? palette.inkSoft : palette.ink)
                                 .lineLimit(1)
                         }
@@ -545,6 +727,12 @@ struct WorkbenchView: View {
                             Text(genderText)
                                 .font(PixelFont.font(13))
                                 .foregroundStyle(state.gender == "none" ? palette.inkSoft : palette.ink)
+                        }
+                        HStack(spacing: 8) {
+                            profileLabel("MBTI")
+                            Text(state.mbti == "none" ? "未选择" : state.mbti)
+                                .font(PixelFont.font(13))
+                                .foregroundStyle(state.mbti == "none" ? palette.inkSoft : palette.ink)
                         }
                         HStack(spacing: 8) {
                             profileLabel("出生日期")
@@ -700,23 +888,40 @@ struct WorkbenchView: View {
                         .font(PixelFont.font(12))
                         .foregroundStyle(palette.inkSoft)
 
-                    LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-                        ForEach(fields, id: \.0) { key, title in
-                            if let options = fieldsForFrame[key] {
-                                fieldPicker(title: key == "pattern" && frame == "CAT" ? "额头花纹" : title,
-                                            key: key, options: options)
+                    if frame == "CAT" {
+                        partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fieldsForFrame)
+                        pupilControls(options: fieldsForFrame)
+                        partColorRow("nose", shapeTitle: "鼻形", colorTitle: "鼻色", fields: fieldsForFrame)
+                        if let mouths = fieldsForFrame["mouth"] {
+                            fieldPicker(title: "嘴巴", key: "mouth", options: mouths)
+                        }
+                        if let tails = fieldsForFrame["tail"] {
+                            fieldPicker(title: "尾巴", key: "tail", options: tails)
+                        }
+                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                            if let foreheadPatterns = fieldsForFrame["pattern"] {
+                                fieldPicker(title: "额头花纹", key: "pattern", options: foreheadPatterns)
+                            }
+                            if let bodyPatterns = fieldsForFrame["bodyPattern"] {
+                                fieldPicker(title: "毛皮花纹", key: "bodyPattern", options: bodyPatterns)
                             }
                         }
-                    }
-
-                    if frame == "CAT" {
                         Text("额头单独搭配；毛皮花纹同时改变脸部、身体和尾巴")
                             .font(PixelFont.font(12))
                             .foregroundStyle(palette.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
-                        pupilControls(options: fieldsForFrame)
+                        if let accessories = fieldsForFrame["accessory"] {
+                            accessoryRow(accessories)
+                        }
                         coatPicker(options: fieldsForFrame["coat"] ?? [], palettes: fieldsForFrame["palette"] ?? [])
                     } else {
+                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                            ForEach(dogFields, id: \.0) { key, title in
+                                if let options = fieldsForFrame[key] {
+                                    fieldPicker(title: title, key: key, options: options)
+                                }
+                            }
+                        }
                         paletteRow(options: fieldsForFrame["palette"] ?? [])
                     }
                 }
@@ -730,101 +935,105 @@ struct WorkbenchView: View {
         return (count == 0 || count > 8) ? palette.red : palette.inkSoft
     }
 
-    private func fieldPicker(title: String, key: String, options: [AppearanceOption]) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    @ViewBuilder
+    private func partColorRow(
+        _ part: String, shapeTitle: String, colorTitle: String, fields: [String: [AppearanceOption]]
+    ) -> some View {
+        let colorKey = part + "Color"
+        if let shapes = fields[part], let colors = fields[colorKey] {
+            HStack(alignment: .top, spacing: 10) {
+                fieldPicker(title: shapeTitle, key: part, options: shapes)
+                fieldPicker(title: colorTitle, key: colorKey, options: colors,
+                            defaultSwatch: WBTheme.swatchColors(naturalSwatches[colorKey].map { [$0] }))
+            }
+        }
+    }
+
+    private func accessoryRow(_ options: [AppearanceOption]) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            fieldPicker(title: "头顶配饰", key: "accessory", options: options)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("服装配饰")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+                Text("无")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
+                    .background(PixelBox(corner: 3).fill(palette.panelAlt))
+                    .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1))
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func fieldPicker(
+        title: String, key: String, options: [AppearanceOption], defaultSwatch: [Color]? = nil
+    ) -> some View {
+        let accessibilityID = switch key {
+        case "eyeColor": "eye-color-picker"
+        case "earColor": "ear-color-picker"
+        case "noseColor": "nose-color-picker"
+        default: "\(key)-picker"
+        }
+        return VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(PixelFont.font(12))
                 .foregroundStyle(palette.inkSoft)
-            PixelSelect(
-                options: options.map { (id: $0.id, name: $0.name) },
-                selection: appearanceBinding(key),
-                palette: palette
-            )
-            .accessibilityLabel(title)
-            .accessibilityIdentifier(key == "eyeColor" ? "eye-color-picker" : "\(key)-picker")
+            Group {
+                if let defaultSwatch {
+                    PixelColorSelect(title: title, options: options, defaultSwatch: defaultSwatch,
+                                     palette: palette, selection: appearanceBinding(key))
+                } else {
+                    PixelSelect(options: options.map { (id: $0.id, name: $0.name) },
+                                selection: appearanceBinding(key), palette: palette)
+                        .accessibilityLabel(title)
+                }
+            }
+            .accessibilityIdentifier(accessibilityID)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private func pupilControls(options: [String: [AppearanceOption]]) -> some View {
-        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-            combinedPupilPicker(
-                title: "单瞳孔颜色",
-                options: options["eyeColor"] ?? [],
-                allowNone: false
-            )
-            combinedPupilPicker(
-                title: "双瞳孔颜色",
-                options: options["eyeColor"] ?? [],
-                allowNone: true
-            )
+        let colors = options["eyeColor"] ?? []
+        return LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+            pupilPicker(title: "左眼瞳色", side: "left", colors: colors)
+            pupilPicker(title: "右眼瞳色", side: "right", colors: colors)
         }
     }
 
-    /// One dropdown per pupil: picking a colour implies the pupil exists; the
-    /// double pupil can also be switched off with 无.
-    private func combinedPupilPicker(title: String, options: [AppearanceOption], allowNone: Bool) -> some View {
-        let current: String = {
-            if allowNone, state.appearance["innerPupil"] == "none" { return "none" }
-            let key = allowNone ? "innerEyeColor" : "eyeColor"
-            return state.appearance[key] ?? "natural"
-        }()
-        var choices: [(id: String, name: String)] = allowNone ? [("none", "无")] : []
-        choices += options.map { (id: $0.id, name: $0.name) }
-
-        return VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.inkSoft)
-            PixelSelect(
-                options: choices,
-                selection: Binding(
-                    get: { current },
-                    set: { value in
-                        if allowNone {
-                            if value == "none" {
-                                state.appearance["innerPupil"] = "none"
-                            } else {
-                                state.appearance["innerPupil"] = "round"
-                                state.appearance["innerEyeColor"] = value
-                            }
-                        } else {
-                            state.appearance["eyeColor"] = value
-                        }
-                        state.refresh()
-                    }
-                ),
-                palette: palette
-            )
-            .accessibilityLabel(title)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    private func pupilPicker(title: String, side: String, colors: [AppearanceOption]) -> some View {
+        PupilColorPicker(
+            title: title, side: side, colors: colors, naturalSwatches: naturalSwatches, palette: palette,
+            layers: pupilBinding("\(side)InnerPupil", inherited: "innerPupil", defaultValue: "round"),
+            outer: pupilBinding("\(side)EyeColor", inherited: "eyeColor", defaultValue: "natural"),
+            inner: pupilBinding("\(side)InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural")
+        )
     }
+
+    private func pupilBinding(_ key: String, inherited: String, defaultValue: String) -> Binding<String> {
+        let selection = appearanceBinding(key)
+        return Binding(
+            get: { state.appearance[key] ?? state.appearance[inherited] ?? defaultValue },
+            set: { selection.wrappedValue = $0 }
+        )
+    }
+
+    private var nativeCatPreset: AppearancePreset? {
+        let paletteID = state.appearance["palette", default: "CC01"]
+        return state.catalog?.presets.first { $0.frame == "CAT" && $0.palette == paletteID }
+    }
+
+    private var naturalSwatches: [String: String] { nativeCatPreset?.naturalSwatches ?? [:] }
 
     private func coatPicker(options: [AppearanceOption], palettes: [AppearanceOption]) -> some View {
-        let selected = options.first { $0.id == state.appearance["coat"] }
-        let colors = WBTheme.swatchColors(selected?.colors)
         let paletteID = state.appearance["palette", default: "CC01"]
-        let nativeColors = palettes.first { $0.id == paletteID }?.colors
-            ?? state.catalog?.presets.first { $0.frame == "CAT" && $0.palette == paletteID }?.colors
-        let swatch = colors.isEmpty ? WBTheme.paletteColors(paletteID, catalogColors: nativeColors) : colors
-        return VStack(alignment: .leading, spacing: 3) {
-            Text("毛色搭配")
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.inkSoft)
-            HStack(spacing: 8) {
-                PixelSelect(
-                    options: options.map { (id: $0.id, name: $0.name) },
-                    selection: appearanceBinding("coat"),
-                    palette: palette
-                )
-                .accessibilityLabel("毛色搭配")
-                .accessibilityIdentifier("coat-picker")
-                .frame(maxWidth: .infinity)
-                PixelSwatch(colors: swatch, palette: palette, size: 20)
-                    .accessibilityHidden(true)
-            }
-        }
+        let nativeColors = palettes.first { $0.id == paletteID }?.colors ?? nativeCatPreset?.colors
+        return fieldPicker(title: "毛色搭配", key: "coat", options: options,
+                           defaultSwatch: WBTheme.paletteColors(paletteID, catalogColors: nativeColors))
     }
 
     private func paletteRow(options: [AppearanceOption]) -> some View {
