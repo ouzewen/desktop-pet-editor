@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { copyPublicAssets } from '../scripts/copy-public-assets.ts';
 
 export default defineConfig({
+  plugins: [copyPublicAssets()],
   base: './',
   build: {
     outDir: 'build/desktop',

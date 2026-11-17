@@ -1,11 +1,20 @@
-export type TypingAnimation = 'reference' | 'shared' | 'legacy';
+import { typingAtlases } from './pet-assets';
 
-export const catTypingFrameCount = 12;
+export type TypingAnimation = 'reference-v2' | 'reference' | 'shared' | 'legacy';
 
-export function catTypingFrameDuration(mode: 'gentle' | 'fast' | 'frenzy', animation: TypingAnimation = 'reference') {
+export const currentTypingAnimation = 'reference-v2' as const;
+export const catTypingFrameCount = typingAtlases[currentTypingAnimation].frames;
+
+export function catTypingFrameCountFor(animation: TypingAnimation = currentTypingAnimation) {
+  if (animation === 'reference' || animation === 'reference-v2') return typingAtlases[animation].frames;
+  return animation === 'legacy' ? 4 : 12;
+}
+
+export function catTypingFrameDuration(mode: 'gentle' | 'fast' | 'frenzy', animation: TypingAnimation = currentTypingAnimation) {
+  if (animation === 'reference-v2') return mode === 'gentle' ? 70 : mode === 'fast' ? 40 : 20;
   if (animation === 'legacy') return mode === 'gentle' ? 250 : 90;
   const duration = mode === 'gentle' ? 1000 : mode === 'fast' && animation === 'reference' ? 600 : 360;
-  return duration / catTypingFrameCount;
+  return duration / catTypingFrameCountFor(animation);
 }
 
 // Small lateral recovery separates the descending and returning strokes.
@@ -21,7 +30,9 @@ export function lowTypingArms(left: ImageData, right: ImageData, frame: number) 
   const leftPixels = new Uint32Array(left.data.buffer, left.data.byteOffset, left.data.length / 4);
   const rightPixels = new Uint32Array(right.data.buffer, right.data.byteOffset, right.data.length / 4);
   const output = new Uint32Array(result.data.buffer);
-  const step = ((frame % catTypingFrameCount) + catTypingFrameCount) % catTypingFrameCount;
+  // This historical geometry is also used to reconstruct older user drawings.
+  // Its twelve positions must not inherit the current animation's frame count.
+  const step = ((frame % strokes.length) + strokes.length) % strokes.length;
   const [drift, leftDown] = strokes[step]!;
   const split = 154;
   // These cels end at the keyboard. Moving their cropped bottom edge would

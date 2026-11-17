@@ -1,4 +1,4 @@
-import { catCoatSchemes, nativeCatFur, type CatConfig } from './cat';
+import { catCoatColors, nativeCatFur, type CatRenderConfig } from './cat';
 import { bodyPatternChannel } from './cat-body-pattern';
 
 type RGB = readonly [number, number, number];
@@ -19,8 +19,8 @@ function mix(from: RGB, to: RGB, amount: number): RGB {
 
 // The shared Aseprite cels use the orange shadow, fur and highlight tones.
 // Keep their silhouette and shading while assigning the chosen coat pigments.
-export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatConfig) {
-  const colors = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatSchemes[config.coat].colors;
+export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig) {
+  const colors = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatColors(config.coat);
   let base = rgb(colors[0]);
   const marking = rgb(colors[1]), pale = rgb(colors[2]);
   const originalPattern = config.bodyPattern === 'native';

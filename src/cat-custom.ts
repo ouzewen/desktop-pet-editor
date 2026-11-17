@@ -1,6 +1,7 @@
 import { catPresets, readPetConfig, type CatConfig, type PetConfig } from './cat';
-import { catTypingFrameCount, type TypingAnimation } from './cat-typing';
-import { alignTypingLayer, catGlintAperture, catHeadPlacement, catTypingLaptop, drawCatHead, frameCount, horizontalGazeRange, makeLayer, pointerGazeLimit, render, type Gaze, type LaptopVersion, type OutlineVersion, type TypingLayout, type TypingMode } from './render';
+import { catTypingFrameCountFor, currentTypingAnimation, type TypingAnimation } from './cat-typing';
+import { captureCatInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
+import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catTypingLaptop, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, type Gaze, type LaptopVersion, type OutlineVersion, type TypingLayout, type TypingMode } from './render';
 
 const size = 320;
 const straight: Gaze = { x: 0, y: 0 };
@@ -16,14 +17,17 @@ export type CatEditSource = {
   typingLayout: TypingLayout;
   earLayout: 'shared' | 'legacy';
   markingLayout: 'shared' | 'legacy';
+  legacyNoseOutline: boolean;
   gaze: Gaze;
 };
 
 export type CatPixelEdits = { paint: HTMLCanvasElement; mask: HTMLCanvasElement };
+export type CatInkSource = CatEditSource & { pixelEdits: CatInkDocument };
 type CatHeadEdits = { full?: CatPixelEdits; idleHead?: CatPixelEdits; typingHead?: CatPixelEdits };
 
 export type CatCustomization = {
   source: CatEditSource;
+  ink?: CatInkDocument;
   scratch: ReturnType<typeof makeLayer>;
   laptop?: CatPixelEdits;
   idleTorso?: CatPixelEdits;
@@ -40,7 +44,8 @@ function readSource(value: unknown): CatEditSource | undefined {
     const config = readPetConfig(record.config);
     const { action, frame, typingMode, gaze } = record;
     const typingAnimation = record.typingAnimation ?? (action === 'typing' ? 'legacy' : 'shared');
-    const typingLayout = record.typingLayout ?? (action === 'typing' && typingAnimation !== 'reference' ? 'legacy' : 'aligned');
+    const referenceAnimation = typingAnimation === 'reference' || typingAnimation === 'reference-v2';
+    const typingLayout = record.typingLayout ?? (action === 'typing' && !referenceAnimation ? 'legacy' : 'aligned');
     // Even the first reference-animation saves used the original laptop.
     const laptopVersion = record.laptopVersion ?? 'original';
     // Older saved images have the fixed source ink, even when their fur was recolored.
@@ -49,15 +54,15 @@ function readSource(value: unknown): CatEditSource | undefined {
     const markingLayout = record.markingLayout ?? 'legacy';
     if (config.frame !== 'CAT' || (action !== 'sit' && action !== 'typing')
       || frame === undefined || !Number.isInteger(frame) || frame < 0
-      || frame >= (action === 'typing' && typingAnimation === 'legacy' ? 4 : frameCount(config, action))
+      || frame >= (action === 'typing' ? catTypingFrameCountFor(typingAnimation) : frameCount(config, action))
       || (typingMode !== 'gentle' && typingMode !== 'fast' && typingMode !== 'frenzy') || !gaze
       || (typingLayout !== 'aligned' && typingLayout !== 'legacy')
       || (laptopVersion !== 'clean' && laptopVersion !== 'original')
       || (outlineVersion !== 'adaptive' && outlineVersion !== 'original')
       || (laptopVersion === 'clean' && typingLayout === 'legacy')
-      || (typingAnimation !== 'reference' && typingAnimation !== 'shared' && typingAnimation !== 'legacy')
-      || (typingMode === 'frenzy' && typingAnimation !== 'reference')
-      || (action === 'typing' && typingAnimation === 'reference' && typingLayout !== 'aligned')
+      || (!referenceAnimation && typingAnimation !== 'shared' && typingAnimation !== 'legacy')
+      || (typingMode === 'frenzy' && !referenceAnimation)
+      || (action === 'typing' && referenceAnimation && typingLayout !== 'aligned')
       || (earLayout !== 'shared' && earLayout !== 'legacy')
       || (markingLayout !== 'shared' && markingLayout !== 'legacy')
       || !Number.isInteger(gaze.x) || !Number.isInteger(gaze.y)) return;
@@ -65,7 +70,10 @@ function readSource(value: unknown): CatEditSource | undefined {
       if (Math.abs(gaze.x) > pointerGazeLimit || Math.abs(gaze.y) > pointerGazeLimit) return;
     } else if (gaze.space !== undefined || gaze.x < horizontalGazeRange.min || gaze.x > horizontalGazeRange.max
       || Math.abs(gaze.y) > 2) return;
-    return { config, action, frame, typingMode, typingAnimation, laptopVersion, outlineVersion, typingLayout, earLayout, markingLayout, gaze };
+    // Saves from before the nose cleanup have no flag and used the outlined art.
+    const legacyNoseOutline = hasLegacyNoseOutline(config) && record.legacyNoseOutline !== false;
+    return { config, action, frame, typingMode, typingAnimation, laptopVersion, outlineVersion, typingLayout,
+      earLayout, markingLayout, legacyNoseOutline, gaze };
   } catch {
     return;
   }
@@ -73,6 +81,33 @@ function readSource(value: unknown): CatEditSource | undefined {
 
 function pixels(ctx: CanvasRenderingContext2D) {
   return new Uint32Array(ctx.getImageData(0, 0, size, size).data.buffer);
+}
+
+export function prepareStructuredCatCustomization(reference: unknown): CatCustomization | undefined {
+  if (!reference || typeof reference !== 'object' || !Object.hasOwn(reference, 'pixelEdits')) return;
+  const record = reference as Partial<CatInkSource>;
+  const ink = readCatInk(record.pixelEdits);
+  const config = readPetConfig(record.config);
+  if (config.frame !== 'CAT') throw Error('自定义笔迹须关联猫咪外观');
+  // Pose metadata is only context for the editor. Old poses are not needed
+  // to play any per-part ink, even if one is no longer supported.
+  const source = readSource(reference) ?? {
+    config, action: 'sit', frame: 0, gaze: straight, typingMode: 'gentle',
+    typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean',
+    outlineVersion: 'adaptive', earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false,
+  };
+  return { source, ink, scratch: makeLayer(size), fixedGlints: [false, false], paint: {} };
+}
+
+export function saveCatInk(reference: unknown, changes: CatInkChange[]): CatInkSource {
+  const source = readSource(reference);
+  if (!source || !Array.isArray(changes)) throw Error('像素编辑预览无效，请重新打开编辑器');
+  const previous = (reference as Partial<CatInkSource>).pixelEdits;
+  const typing = source.action === 'typing';
+  const geometry = catInkGeometry(source.config, typing, source.frame, source);
+  const offsetY = typing ? 0 : catHeadPlacement(false, source.frame).y;
+  const pixelEdits = captureCatInk(geometry, changes, previous === undefined ? undefined : readCatInk(previous), offsetY);
+  return { ...source, pixelEdits };
 }
 
 function isPale(pixel: number) {
@@ -100,8 +135,41 @@ function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource) 
     typingMode: source.typingMode, typingAnimation: source.typingAnimation, typingLayout: source.typingLayout,
     laptopVersion: source.laptopVersion, outlineVersion: source.outlineVersion,
     earLayout: source.earLayout, markingLayout: source.markingLayout,
+    legacyNoseOutline: source.legacyNoseOutline,
   });
   return pixels(layer.ctx);
+}
+
+function argb(pixel: number) {
+  return ((pixel & 0xff00ff00) | ((pixel & 255) << 16) | ((pixel >>> 16) & 255)) >>> 0;
+}
+
+// Only legacy overlays need a one-time conversion, when actually re-edited.
+// Compare against this exact live frame so the stock art never enters the edits.
+export function seedCatInkForEditor(
+  preview: HTMLCanvasElement, source: CatEditSource, custom: CatCustomization,
+): CatInkDocument {
+  if (custom.ink) return custom.ink;
+  const edited = pixels(preview.getContext('2d')!);
+  const clean = drawSource(makeLayer(size), source);
+  const changes: CatInkChange[] = [];
+  for (let i = 0; i < edited.length; i++) {
+    if (edited[i] !== clean[i]) changes.push([i, argb(edited[i]!)]);
+  }
+  const { pixelEdits } = saveCatInk(source, changes);
+  // The computer is absent in idle, but old computer strokes must survive
+  // opening the idle preview and saving another edit.
+  if (source.action === 'sit' && custom.laptop) {
+    const coverage = pixels(custom.laptop.mask.getContext('2d')!);
+    const color = pixels(custom.laptop.paint.getContext('2d')!);
+    const laptopChanges: CatInkChange[] = [];
+    for (let i = 0; i < coverage.length; i++) {
+      if (coverage[i]) laptopChanges.push([i, argb(color[i]!)]);
+    }
+    const laptop = captureCatInk(catInkGeometry(source.config, true, 0), laptopChanges).parts.laptop;
+    if (laptop) pixelEdits.parts.laptop = laptop;
+  }
+  return pixelEdits;
 }
 
 function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, fallback: PetConfig) {
@@ -119,23 +187,26 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
   }
   let source: CatEditSource = {
     config: configs[0]!, action: 'sit', frame: 0, typingMode: 'gentle', typingLayout: 'aligned',
-    typingAnimation: 'reference', laptopVersion: 'clean', outlineVersion: 'adaptive',
-    earLayout: 'shared', markingLayout: 'shared', gaze: straight,
+    typingAnimation: 'reference-v2', laptopVersion: 'clean', outlineVersion: 'adaptive',
+    earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false, gaze: straight,
   };
   const idlePoses = [0, 17].map(frame =>
-    ({ frame, typingMode: 'gentle', typingLayout: 'aligned', typingAnimation: 'reference' } as const));
+    ({ frame, typingMode: 'gentle', typingLayout: 'aligned', typingAnimation: 'reference-v2' } as const));
   const oldTypingPoses = [
     ...(['aligned', 'legacy'] as const).flatMap(typingLayout =>
       (['gentle', 'fast'] as const).flatMap(typingMode => [0, 1, 2, 3].map(frame =>
         ({ frame, typingMode, typingLayout, typingAnimation: 'legacy' } as const)))),
     ...(['gentle', 'fast'] as const).flatMap(typingMode =>
-      Array.from({ length: catTypingFrameCount }, (_, frame) =>
+      Array.from({ length: catTypingFrameCountFor('shared') }, (_, frame) =>
         ({ frame, typingMode, typingLayout: 'aligned', typingAnimation: 'shared' } as const))),
   ];
-  const newTypingPoses = (['gentle', 'fast', 'frenzy'] as const).flatMap(typingMode =>
-    Array.from({ length: catTypingFrameCount }, (_, frame) =>
-      ({ frame, typingMode, typingLayout: 'aligned', typingAnimation: 'reference' } as const)));
-  const currentTypingPoses = [...newTypingPoses, ...oldTypingPoses];
+  // Keep every saved animation's own frame count. Old reference PNGs still
+  // need their original twelve poses, rather than wrapping through v2's 32.
+  const referenceTypingPoses = (['reference-v2', 'reference'] as const).flatMap(typingAnimation =>
+    (['gentle', 'fast', 'frenzy'] as const).flatMap(typingMode =>
+      Array.from({ length: catTypingFrameCountFor(typingAnimation) }, (_, frame) =>
+        ({ frame, typingMode, typingLayout: 'aligned', typingAnimation } as const))));
+  const currentTypingPoses = [...referenceTypingPoses, ...oldTypingPoses];
   let best = Infinity;
   for (const config of configs) {
     // Native coats retain their original pixels in either version.
@@ -150,11 +221,12 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
           : markingLayout === 'shared' ? currentTypingPoses : oldTypingPoses;
         for (const pose of poses) {
           const versions: readonly LaptopVersion[] = action === 'sit' ? ['clean']
-            : pose.typingAnimation === 'reference' ? ['clean', 'original'] : ['original'];
+            : pose.typingAnimation === 'reference-v2' ? ['clean']
+              : pose.typingAnimation === 'reference' ? ['clean', 'original'] : ['original'];
           for (const laptopVersion of versions) {
             for (const outlineVersion of outlineVersions) {
               const candidate = { config, action, gaze: straight, earLayout: 'shared', markingLayout,
-                laptopVersion, outlineVersion, ...pose } as const;
+                laptopVersion, outlineVersion, legacyNoseOutline: false, ...pose } as const;
               const reference = drawSource(layer, candidate);
               let difference = 0;
               for (let index = 0; index < edited.length; index += 5) {
@@ -170,6 +242,20 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
         }
       }
     }
+  }
+  if (hasLegacyNoseOutline(source.config)) {
+    // Once the pose is identified, use the closer of the two nose versions
+    // for PNGs without source metadata.
+    const outlined = { ...source, legacyNoseOutline: true };
+    const current = drawSource(layer, source);
+    const original = drawSource(layer, outlined);
+    let outlineMatches = 0, borderlessMatches = 0;
+    for (let i = 0; i < edited.length; i++) {
+      if (current[i] === original[i]) continue;
+      if (edited[i] === original[i]) outlineMatches++;
+      if (edited[i] === current[i]) borderlessMatches++;
+    }
+    if (outlineMatches > borderlessMatches) return outlined;
   }
   return source;
 }
@@ -229,7 +315,7 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   layer.ctx.scale(placement.scale, placement.scale);
   drawCatHead(layer.ctx, source.config, typing, source.frame, source.gaze,
     { scale: placement.scale, earLayout: source.earLayout, markingLayout: source.markingLayout,
-      outlineVersion: source.outlineVersion,
+      outlineVersion: source.outlineVersion, legacyNoseOutline: source.legacyNoseOutline,
       typingMode: source.typingMode, typingAnimation: source.typingAnimation });
   const headPixels = pixels(layer.ctx);
   const aperture = catGlintAperture(source.config, typing, source.frame, {

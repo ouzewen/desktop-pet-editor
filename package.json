@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "assets:check": "node scripts/pet-assets-cli.mjs check",
+    "assets:list": "node scripts/pet-assets-cli.mjs list",
+    "assets:export": "node scripts/pet-assets-cli.mjs export",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1"

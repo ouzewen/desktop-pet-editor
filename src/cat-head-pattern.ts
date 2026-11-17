@@ -1,15 +1,15 @@
-import { catCoatSchemes, nativeCatFur, type CatConfig } from './cat';
+import { catCoatColors, nativeCatFur, type CatRenderConfig } from './cat';
 import { bodyPatternChannel } from './cat-body-pattern';
 
 type RGB = readonly [number, number, number];
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const colors = new Map<string, readonly [RGB, RGB, RGB]>();
 
-function tones(config: CatConfig) {
+function tones(config: CatRenderConfig) {
   const key = `${config.palette}/${config.coat}`;
   const cached = colors.get(key);
   if (cached) return cached;
-  const hex = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatSchemes[config.coat].colors;
+  const hex = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatColors(config.coat);
   const result = hex.map(value => {
     const number = Number.parseInt(value.slice(1), 16);
     return [number >>> 16, (number >>> 8) & 255, number & 255] as const;
@@ -32,7 +32,7 @@ function furDepth(x: number, y: number) {
 }
 
 export function clearForeheadFur(
-  image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray, config: CatConfig,
+  image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray, config: CatRenderConfig,
 ) {
   const { data, width } = image;
   const [base, marking] = tones(config);
@@ -47,7 +47,7 @@ export function clearForeheadFur(
 
 export function paintForeheadFur(
   image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray,
-  pattern: Uint8ClampedArray, config: CatConfig,
+  pattern: Uint8ClampedArray, config: CatRenderConfig,
 ) {
   const [, marking, pale] = tones(config);
   const { data } = image;
@@ -64,7 +64,7 @@ export function paintForeheadFur(
 
 export function paintHeadFur(
   image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray,
-  pattern: Uint8ClampedArray | undefined, config: CatConfig, atlas?: Uint8ClampedArray,
+  pattern: Uint8ClampedArray | undefined, config: CatRenderConfig, atlas?: Uint8ClampedArray,
 ) {
   if (config.bodyPattern === 'native') return;
   const [base, marking] = tones(config);

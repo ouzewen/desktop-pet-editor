@@ -16,8 +16,14 @@ if [ "${SKIP_NPM_BUILD:-0}" != "1" ]; then
 fi
 
 app="build/desktop/桌宠.app"
+assets="build/desktop/assets"
+if [ -e "$assets/cat/custom" ] || [ -L "$assets/cat/custom" ]; then
+  printf '%s\n' 'Desktop asset staging contains private presets. Rebuild without SKIP_NPM_BUILD.' >&2
+  exit 1
+fi
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp -R build/desktop/assets "$app/Contents/Resources/"
+rm -rf "$app/Contents/Resources/assets/cat/custom"
+cp -R "$assets" "$app/Contents/Resources/"
 cp build/desktop/pet.js desktop/Resources/pet.html "$app/Contents/Resources/"
 cp desktop/Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp desktop/Resources/ArkPixel12.ttf "$app/Contents/Resources/ArkPixel12.ttf"

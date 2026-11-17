@@ -5,7 +5,11 @@ local layers = {}
 for _, layer in ipairs(sprite.layers) do layers[layer.name] = layer end
 assert(layers.mouth and layers.nose and layers.base_patch, "Missing face-part layers")
 
-local left, top, width, height = 128, 119, 48, 44
+local left = tonumber(app.params.left or "128")
+local top = tonumber(app.params.top or "119")
+local width = tonumber(app.params.width or "48")
+local height = tonumber(app.params.height or "44")
+local columns = tonumber(app.params.columns or "4")
 
 local function copy(atlas, layer, frame, column, row)
   local cel = layer:cel(frame)
@@ -19,9 +23,9 @@ end
 
 for _, tag in ipairs(sprite.tags) do
   local first = tag.fromFrame.frameNumber
-  assert(tag.toFrame.frameNumber == first + 3, "Use four variants per coat tag")
+  assert(tag.toFrame.frameNumber == first + columns - 1, "Face variant count must match the manifest")
   local atlas = Image(320, 320, ColorMode.RGB)
-  for column = 0, 3 do
+  for column = 0, columns - 1 do
     copy(atlas, layers.mouth, first + column, column, 0)
     copy(atlas, layers.nose, first + column, column, 1)
   end

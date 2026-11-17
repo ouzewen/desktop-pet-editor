@@ -75,14 +75,14 @@ npm run preview
 ```
 
 - 构建产物统一放在 `build/`（已忽略）：`build/web` 是 Web 编辑器，`build/desktop/桌宠.app` 是 App。
-- 素材目录、命名约定和新增零件流程见 [docs/ASSETS.md](docs/ASSETS.md)。
+- 内置素材的源稿、导出与运行时路径统一登记在 [src/pet-assets.ts](src/pet-assets.ts)，可用 `npm run assets:list` 查询。素材目录、命名约定和新增零件流程见 [docs/ASSETS.md](docs/ASSETS.md)。
 - 版本号、构建号与发布流程见 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
 ## 素材说明
 
 - 猫的基础层是 160×160；部分 HD 素材（耳、嘴、眼、毛色、打字动作）是 320×320，位于 `public/assets/cat/hd/`，文件名保留 `new_` 前缀以区分代际。
 - 毛色通过 `*_g/_s/_l/_w/_d` 遮罩实现，瞳色使用 `*_iris` 遮罩。眼神跟随使用独立的小高光图层。
-- 三档打字源稿位于 `art/cat-shared/typing-reference/{gentle,fast,frenzy}.aseprite`，由 `scripts/export-cat-typing-reference.lua` 导出至 `public/assets/cat/hd/typing-reference/`。新像素编辑底稿记录 `typingAnimation: reference`；旧 `shared` 12 帧与 `legacy` 四帧保留用于还原历史存档。
+- 当前三档打字使用 `typing-v2` 素材组，共用 32 帧低抬爪动作。历史 12 帧和四帧素材保留，以便还原旧存档。
 - 柴犬 M1 的 160×160 素材仍在 `public/assets/` 根目录下的 `frames/`、`parts/`、`motion/`、`masks/` 中，历史说明见 [docs/SHIBA-NOTES.md](docs/SHIBA-NOTES.md)。
 
 ## 版本与签名

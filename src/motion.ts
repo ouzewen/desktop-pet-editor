@@ -1,7 +1,7 @@
 import { frameCount, render, type Action, type Gaze, type TypingMode } from './render';
-import { isOrangeCat, type PetConfig } from './cat';
+import { usesOrangeCatArt, type PetConfig } from './cat';
 import type { CatCustomization } from './cat-custom';
-import { catTypingFrameCount, catTypingFrameDuration } from './cat-typing';
+import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation } from './cat-typing';
 
 const orangeTypingTimeout = 500;
 
@@ -80,7 +80,7 @@ export class Motion {
     if (this.pressing) return;
     const config = this.config;
     if (config.frame === 'CAT') {
-      if (now - this.lastKey >= (isOrangeCat(config) ? orangeTypingTimeout : 1001)) {
+      if (now - this.lastKey >= (usesOrangeCatArt(config) ? orangeTypingTimeout : 1001)) {
         this.typingFrameTick = now;
         this.typingPhase = 0;
         this.typingMode = 'gentle';
@@ -126,7 +126,7 @@ export class Motion {
     let frame: number;
     const config = this.config;
     const cat = config.frame === 'CAT';
-    const orange = isOrangeCat(config);
+    const orange = usesOrangeCatArt(config);
     if (this.pressing && cat) {
       frame = 0;
       this.stretch += (this.stretchTarget - this.stretch) * 0.36;
@@ -153,7 +153,7 @@ export class Motion {
     const pose = `${action}/${frame}/${this.typingMode}/${stretch}`;
     if (pose !== this.rendered) {
       render(this.canvas, config, action, frame, this.gaze, {
-        typingMode: this.typingMode, typingAnimation: 'reference', stretch, custom: this.custom,
+        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, stretch, custom: this.custom,
       });
       this.rendered = pose;
     }

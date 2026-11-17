@@ -1,4 +1,5 @@
-import { catCoatSchemes, nativeCatFur, type CatConfig, type CatCoatScheme } from './cat';
+import { catCoatColors, nativeCatFur, type CatRenderCoat } from './cat';
+import type { CatArtPalette } from './cat-breeds';
 import { isLaptopFur } from './cat-body-pattern';
 
 type RGB = readonly [number, number, number];
@@ -33,11 +34,11 @@ function ramp(stops: readonly (readonly [number, RGB])[], tone: number): RGB {
 
 const pigmentMap = new Map<string, (red: number, green: number, blue: number) => RGB>();
 
-function coatPigments(palette: CatConfig['palette'], scheme: Exclude<CatCoatScheme, 'native'>) {
+function coatPigments(palette: CatArtPalette, scheme: Exclude<CatRenderCoat, 'native'>) {
   const key = `${palette}/${scheme}`;
   const cached = pigmentMap.get(key);
   if (cached) return cached;
-  const [base, marking, pale] = catCoatSchemes[scheme].colors.map(parseColor) as [RGB, RGB, RGB];
+  const [base, marking, pale] = catCoatColors(scheme).map(parseColor) as [RGB, RGB, RGB];
   const light = mix(base, pale, 0.5);
   const deepMarking = mix(marking, [30, 24, 29], 0.45);
 
@@ -99,7 +100,7 @@ function coatPigments(palette: CatConfig['palette'], scheme: Exclude<CatCoatSche
   return read;
 }
 
-function isFaceFur(palette: CatConfig['palette'], red: number, green: number, blue: number) {
+function isFaceFur(palette: CatArtPalette, red: number, green: number, blue: number) {
   if (palette === 'CC02') return green >= 42 && red - green < 17;
   if (palette === 'CC04') return green >= 55 && green - blue > 14;
   return green >= 145 || (green >= 99 && green - blue >= 20);
@@ -107,8 +108,8 @@ function isFaceFur(palette: CatConfig['palette'], red: number, green: number, bl
 
 export function recolorCatCoat(
   pixels: ImageData,
-  palette: CatConfig['palette'],
-  scheme: Exclude<CatCoatScheme, 'native'>,
+  palette: CatArtPalette,
+  scheme: Exclude<CatRenderCoat, 'native'>,
   surface: CatCoatSurface,
   protectedEyes?: Uint8ClampedArray,
 ) {

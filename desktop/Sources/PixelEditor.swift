@@ -71,37 +71,82 @@ struct PixelEditSnapshot {
 }
 
 enum PixelPresetStore {
-    static let folderName = "custom"
-
-    static var runtimeFolder: URL {
+    static var folder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("DesktopPet/\(folderName)", isDirectory: true)
+            .appendingPathComponent("DesktopPet/custom", isDirectory: true)
     }
 
-    /// The repo's public folder when running from a checkout; otherwise the
-    /// app-support folder, so the editor still works in a packaged build.
-    static var exportFolder: URL {
-        if let repo = repoRoot {
-            let folder = repo.appendingPathComponent("public/assets/cat/\(folderName)", isDirectory: true)
-            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            return folder
-        }
-        let base = runtimeFolder
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
-    }
-
-    static var repoRoot: URL? {
+    // Older development builds wrote the preset library into the checkout.
+    static func migrateCheckoutPresets() throws {
         var url = Bundle.main.bundleURL
         for _ in 0..<8 {
-            let candidate = url.appendingPathComponent("public/assets/cat", isDirectory: true)
-            if FileManager.default.fileExists(atPath: candidate.path) { return url }
+            let legacy = url.appendingPathComponent("public/assets/cat/custom", isDirectory: true)
+            if FileManager.default.fileExists(atPath: manifestURL(in: legacy).path) {
+                try migrateLegacyPresets(from: legacy, to: folder)
+                return
+            }
             url.deleteLastPathComponent()
         }
-        return nil
     }
 
-    static var manifestURL: URL { exportFolder.appendingPathComponent("presets.json") }
+    private static func manifestURL(in folder: URL) -> URL {
+        folder.appendingPathComponent("presets.json")
+    }
+
+    private static func readManifest(in folder: URL) throws -> [[String: String]] {
+        let url = manifestURL(in: folder)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try JSONDecoder().decode([[String: String]].self, from: Data(contentsOf: url))
+    }
+
+    private static func writeManifest(_ entries: [[String: String]], in folder: URL) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(entries).write(to: manifestURL(in: folder), options: .atomic)
+    }
+
+    static func migrateLegacyPresets(from legacy: URL, to folder: URL) throws {
+        let files = FileManager.default
+        guard files.fileExists(atPath: manifestURL(in: legacy).path) else { return }
+        let legacyManifest = try readManifest(in: legacy)
+        var entries = try readManifest(in: folder)
+        for preset in presets(legacyManifest, in: legacy) {
+            let snapshot = try read(preset.url)
+            let stem = preset.url.deletingPathExtension().lastPathComponent
+            var suffix = 0
+            while true {
+                let id = suffix == 0 ? preset.id : "\(preset.id)-legacy-\(suffix)"
+                let file = suffix == 0 ? preset.url.lastPathComponent : "\(stem)-legacy-\(suffix).png"
+                let target = folder.appendingPathComponent(file)
+                let collisions = entries.filter { ($0["id"] ?? $0["file"]) == id || $0["file"] == file }
+                let sameEntry = collisions.count == 1
+                    && (collisions[0]["id"] ?? collisions[0]["file"]) == id && collisions[0]["file"] == file
+                if collisions.isEmpty || sameEntry {
+                    let existing = try? read(target)
+                    if !files.fileExists(atPath: target.path) {
+                        try write(snapshot, to: target)
+                    } else if let existing, existing.png == snapshot.png,
+                              existing.source == nil || snapshot.source == nil || existing.source == snapshot.source {
+                        if existing.source == nil, let source = snapshot.source {
+                            try source.write(to: sourceURL(for: target), options: .atomic)
+                        }
+                    } else {
+                        suffix += 1
+                        continue
+                    }
+                    if collisions.isEmpty { entries.append(["id": id, "name": preset.name, "file": file]) }
+                    break
+                }
+                suffix += 1
+            }
+        }
+        try writeManifest(entries, in: folder)
+        let backups = folder.deletingLastPathComponent().appendingPathComponent("legacy-custom-backups", isDirectory: true)
+        try files.createDirectory(at: backups, withIntermediateDirectories: true)
+        // Only move the old directory after its entries are usable in the private library.
+        try files.moveItem(at: legacy, to: backups.appendingPathComponent(UUID().uuidString, isDirectory: true))
+    }
 
     private static func sourceURL(for url: URL) -> URL {
         url.deletingPathExtension().appendingPathExtension("source.json")
@@ -122,55 +167,53 @@ enum PixelPresetStore {
         }
     }
 
-    static func load() -> [CustomPresetInfo] {
-        guard let data = try? Data(contentsOf: manifestURL),
-              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return [] }
+    static func load(from folder: URL = PixelPresetStore.folder) -> [CustomPresetInfo] {
+        presets((try? readManifest(in: folder)) ?? [], in: folder)
+    }
+
+    private static func presets(_ list: [[String: String]], in folder: URL) -> [CustomPresetInfo] {
         return list.compactMap { item in
-            guard let name = item["name"], let file = item["file"] else { return nil }
-            let url = exportFolder.appendingPathComponent(file)
+            guard let name = item["name"], let file = item["file"],
+                  !file.contains("/"), (file as NSString).pathExtension.lowercased() == "png" else { return nil }
+            let url = folder.appendingPathComponent(file)
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
             return CustomPresetInfo(id: item["id"] ?? file, name: name, url: url)
         }
     }
 
     @discardableResult
-    static func save(name: String, cells: [UInt32], source: Data?) -> URL? {
+    static func save(name: String, cells: [UInt32], source: Data?, in folder: URL = PixelPresetStore.folder) -> URL? {
         let slug = slugify(name)
         guard !slug.isEmpty else { return nil }
         let file = "\(slug).png"
-        let url = exportFolder.appendingPathComponent(file)
+        let url = folder.appendingPathComponent(file)
         guard let png = renderPNG(cells: cells) else { return nil }
         let snapshot = PixelEditSnapshot(png: png, source: source)
         do {
+            var list = try readManifest(in: folder)
             try write(snapshot, to: url)
+            list.removeAll { $0["id"] == slug }
+            list.append(["id": slug, "name": name, "file": file])
+            try writeManifest(list, in: folder)
         } catch {
             return nil
         }
-        var list = (try? JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [[String: String]]) ?? []
-        list.removeAll { $0["id"] == slug }
-        list.append(["id": slug, "name": name, "file": file])
-        if let data = try? JSONSerialization.data(withJSONObject: list, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: manifestURL)
-        }
-        // Keep a copy the running pet can read even outside the repo checkout.
-        let runtime = runtimeFolder.appendingPathComponent(file)
-        if url != runtime { try? write(snapshot, to: runtime) }
         return url
     }
 
     @discardableResult
     static func delete(_ preset: CustomPresetInfo) -> Bool {
         let fm = FileManager.default
+        let folder = preset.url.deletingLastPathComponent()
+        guard var list = try? readManifest(in: folder) else { return false }
+        list.removeAll { ($0["id"] ?? $0["file"]) == preset.id }
+        do {
+            try writeManifest(list, in: folder)
+        } catch {
+            return false
+        }
         try? fm.removeItem(at: preset.url)
         try? fm.removeItem(at: sourceURL(for: preset.url))
-        let runtime = runtimeFolder.appendingPathComponent(preset.url.lastPathComponent)
-        try? fm.removeItem(at: runtime)
-        try? fm.removeItem(at: sourceURL(for: runtime))
-        var list = (try? JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [[String: String]]) ?? []
-        list.removeAll { ($0["id"] ?? "") == preset.id }
-        if let data = try? JSONSerialization.data(withJSONObject: list, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: manifestURL)
-        }
         return true
     }
 
@@ -248,6 +291,7 @@ enum PixelBrushShape: String, CaseIterable {
 }
 
 final class PixelEditorModel: ObservableObject {
+    typealias SourceResolver = (Data, [[UInt32]], @escaping (Data?) -> Void) -> Void
     static let side = 320
     static let brushSizes = 1.0...32.0
 
@@ -258,15 +302,23 @@ final class PixelEditorModel: ObservableObject {
     @Published var isErasing = false
     @Published var name: String = ""
     @Published var message: String = ""
-    private var undoStack: [[UInt32]] = []
+    @Published private(set) var isSaving = false
+    private var ink: [Int: UInt32] = [:]
+    private var undoStack: [(cells: [UInt32], ink: [Int: UInt32])] = []
     private var strokeOpen = false
     private var lastPoint: (column: Int, row: Int)?
     private let source: Data?
+    private let resolveSource: SourceResolver?
 
-    init?(previewPNG: Data, source: Data? = nil) {
+    var pixelChanges: [[UInt32]] {
+        ink.sorted { $0.key < $1.key }.map { [UInt32($0.key), $0.value] }
+    }
+
+    init?(previewPNG: Data, source: Data? = nil, resolveSource: SourceResolver? = nil) {
         guard let cells = PixelPresetStore.pixels(from: previewPNG) else { return nil }
         self.cells = cells
         self.source = source
+        self.resolveSource = resolveSource
     }
 
     func chooseColor(_ hex: UInt32) {
@@ -275,6 +327,7 @@ final class PixelEditorModel: ObservableObject {
     }
 
     func paint(column: Int, row: Int) {
+        guard !isSaving else { return }
         guard (0..<Self.side).contains(column), (0..<Self.side).contains(row) else {
             lastPoint = nil
             return
@@ -289,6 +342,7 @@ final class PixelEditorModel: ObservableObject {
         let origin = -(diameter - 1) / 2
         let rows = brushShape.rows(diameter: diameter)
         var updated = cells
+        var changed = false
         for step in 0...steps {
             let x = start.column + dx * step / steps
             let y = start.row + dy * step / steps
@@ -297,16 +351,22 @@ final class PixelEditorModel: ObservableObject {
                 guard (0..<Self.side).contains(targetY) else { continue }
                 let left = max(0, x + origin + span.left)
                 let right = min(Self.side - 1, x + origin + span.right)
+                guard left <= right else { continue }
                 for targetX in left...right {
-                    updated[targetY * Self.side + targetX] = value
+                    let index = targetY * Self.side + targetX
+                    // Paint matching the preview is still deliberate. Erasing empty space does nothing.
+                    guard value == 0 ? updated[index] != 0 : ink[index] != value else { continue }
+                    if !strokeOpen {
+                        recordUndo()
+                        strokeOpen = true
+                    }
+                    ink[index] = value
+                    updated[index] = value
+                    changed = true
                 }
             }
         }
-        guard updated != cells else { return }
-        if !strokeOpen {
-            recordUndo()
-            strokeOpen = true
-        }
+        guard changed else { return }
         cells = updated
         message = ""
     }
@@ -317,45 +377,67 @@ final class PixelEditorModel: ObservableObject {
     }
 
     func undo() {
+        guard !isSaving else { return }
         guard let previous = undoStack.popLast() else {
             message = "没有可撤销的操作"
             return
         }
-        cells = previous
+        cells = previous.cells
+        ink = previous.ink
         endStroke()
         message = ""
     }
 
     func clear() {
-        guard cells.contains(where: { $0 != 0 }) else { return }
+        guard !isSaving, cells.contains(where: { $0 != 0 }) else { return }
         recordUndo()
+        for (index, value) in cells.enumerated() where value != 0 { ink[index] = 0 }
         cells = Array(repeating: 0, count: Self.side * Self.side)
         endStroke()
         message = ""
     }
 
     private func recordUndo() {
-        undoStack.append(cells)
+        undoStack.append((cells, ink))
         if undoStack.count > 60 { undoStack.removeFirst() }
     }
 
-    @discardableResult
-    func save() -> URL? {
+    func save(in folder: URL = PixelPresetStore.folder, completion: @escaping (URL?) -> Void) {
+        guard !isSaving else { completion(nil); return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             message = "先给这个像素形象起个名字"
-            return nil
+            completion(nil)
+            return
         }
-        guard cells.contains(where: { $0 != 0 }) else {
+        if source == nil, !cells.contains(where: { $0 != 0 }) {
             message = "至少画一个格子再保存"
-            return nil
+            completion(nil)
+            return
         }
-        guard let url = PixelPresetStore.save(name: trimmed, cells: cells, source: source) else {
-            message = "保存失败"
-            return nil
+        if source != nil, resolveSource == nil {
+            message = "无法读取这份形象的笔迹，请重新打开像素编辑"
+            completion(nil)
+            return
         }
-        message = "已保存：\(trimmed)"
-        return url
+        let draft = cells
+        let changes = pixelChanges
+        endStroke()
+        isSaving = true
+        message = ""
+        let finish: (Data?) -> Void = { resolved in
+            self.isSaving = false
+            guard self.source == nil || resolved != nil,
+                  let url = PixelPresetStore.save(name: trimmed, cells: draft, source: resolved, in: folder) else {
+                self.message = "保存失败，请重试"
+                completion(nil)
+                return
+            }
+            self.message = "已保存：\(trimmed)"
+            completion(url)
+        }
+        if let source, let resolveSource { resolveSource(source, changes, finish) }
+        else { finish(nil) }
     }
 }
 
@@ -382,8 +464,10 @@ struct PixelEditorView: View {
                     .buttonStyle(PixelButtonStyle(palette: palette))
                 Button("清空") { model.clear() }
                     .buttonStyle(PixelButtonStyle(palette: palette))
-                Button("保存") {
-                    if let url = model.save() { onSaved(url) }
+                Button(model.isSaving ? "保存中…" : "保存") {
+                    model.save { url in
+                        if let url { onSaved(url) }
+                    }
                 }
                 .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
             }
@@ -411,6 +495,7 @@ struct PixelEditorView: View {
         .padding(12)
         .frame(width: gridSide + 24)
         .background(palette.panel)
+        .disabled(model.isSaving)
     }
 
     private var grid: some View {

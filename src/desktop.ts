@@ -1,14 +1,16 @@
 import { checkCatActions } from './desktop-check';
 import { Motion } from './motion';
 import { options, presets } from './model';
-import { catCoatSchemes, catOptions, catPresets, orangeCatOptions, readPetConfig, type PetConfig } from './cat';
-import { prepareCatCustomization, type CatCustomization, type CatEditSource } from './cat-custom';
-import { catTypingFrameDuration } from './cat-typing';
+import { catCoatSchemes, catOptions, catPaletteColors, catPresets, orangeCatOptions, readPetConfig, type CatConfig, type PetConfig } from './cat';
+import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor,
+  type CatCustomization, type CatEditSource } from './cat-custom';
+import { catTypingFrameDuration, currentTypingAnimation } from './cat-typing';
 import { actions, assetsReady, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
 let preview: { config: PetConfig; action: Action; typingMode: TypingMode; started: number } | undefined;
 let visibleSource: CatEditSource | undefined;
+let visibleCustom: CatCustomization | undefined;
 let custom: CatCustomization | undefined;
 let customRequest = 0;
 let gaze: Gaze = { x: 0, y: 0 };
@@ -24,10 +26,12 @@ function setGaze(next: Gaze) {
 }
 
 const fields = (choices: typeof options | typeof catOptions | typeof orangeCatOptions) =>
-  Object.fromEntries(Object.entries(choices).map(([key, values]) => [
-    key, key === 'coat'
+  Object.fromEntries(Object.entries(choices).map(([key, values]) => [key,
+    key === 'coat'
       ? Object.entries(catCoatSchemes).map(([id, { name, colors }]) => ({ id, name, colors }))
-      : Object.entries(values).map(([id, name]) => ({ id, name })),
+      : Object.entries(values).map(([id, name]) => key === 'palette' && choices !== options
+        ? { id, name, colors: catPaletteColors(id as CatConfig['palette']) }
+        : { id, name }),
   ]));
 
 Object.assign(window, {
@@ -36,7 +40,10 @@ Object.assign(window, {
     check: async () => { await desktopReady; motion.tick(); if (canvas.title) throw Error(canvas.title); return 'ready'; },
     catalog: () => ({
       fieldsByFrame: { M1: fields(options), CAT: fields(catOptions), CAT_ORANGE: fields(orangeCatOptions) },
-      presets: Object.entries(allPresets).map(([id, config]) => ({ id, name: config.name, frame: config.frame })),
+      presets: Object.entries(allPresets).map(([id, config]) => ({
+        id, name: config.name, frame: config.frame,
+        ...(config.frame === 'CAT' ? { palette: config.palette, colors: catPaletteColors(config.palette) } : {}),
+      })),
     }),
     preset: (id: keyof typeof allPresets) => allPresets[id],
     normalize: (config: unknown) => readPetConfig(config),
@@ -61,10 +68,20 @@ Object.assign(window, {
       // Read the frame after the preview loop has drawn any pending appearance changes.
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       if (canvas.title) throw Error(canvas.title);
-      return { png: canvas.toDataURL('image/png'), source: visibleSource ?? null };
+      const source = visibleSource && visibleCustom
+        ? { ...visibleSource, pixelEdits: seedCatInkForEditor(canvas, visibleSource, visibleCustom) }
+        : visibleSource;
+      return { png: canvas.toDataURL('image/png'), source: source ?? null };
     },
+    savePixelEdits: saveCatInk,
     setCustom: async (png: string | null, reference: unknown = null) => {
       const request = ++customRequest;
+      const structured = prepareStructuredCatCustomization(reference);
+      if (structured?.ink) {
+        custom = structured;
+        motion.setCustom(custom);
+        return { ...custom.source, pixelEdits: structured.ink };
+      }
       if (png === null) {
         custom = undefined;
         motion.setCustom(undefined);
@@ -101,19 +118,20 @@ void desktopReady.then(() => {
       const isCatWalk = config.frame === 'CAT' && (preview.action === 'left' || preview.action === 'right');
       const interval = isCatWalk ? 165 : preview.action === 'typing'
         ? (config.frame === 'CAT' ? catTypingFrameDuration(preview.typingMode) : 145) : 90;
-      const frame = Math.floor((now - preview.started) / interval) % frameCount(config, preview.action);
+      const frame = Math.floor(Math.max(0, now - preview.started) / interval) % frameCount(config, preview.action);
       if (frame !== previous || previousPreview !== preview || previousGaze !== gaze || previousCustom !== custom) {
         const stretch = isCatWalk ? Math.sin(frame * Math.PI / 2) * (preview.action === 'left' ? -1 : 1) : 0;
         const action = isCatWalk ? 'sit' : preview.action;
         const renderedFrame = isCatWalk ? 0 : frame;
         render(canvas, config, action, renderedFrame, gaze, {
-          typingMode: preview.typingMode, typingAnimation: 'reference', laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
+          typingMode: preview.typingMode, typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
         });
         visibleSource = config.frame === 'CAT' && (action === 'sit' || action === 'typing')
           ? { config, action, frame: renderedFrame, gaze, typingMode: preview.typingMode,
-            typingAnimation: 'reference', laptopVersion: 'clean', outlineVersion: 'adaptive',
-            typingLayout: 'aligned', earLayout: 'shared', markingLayout: 'shared' }
+            typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive',
+            typingLayout: 'aligned', earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false }
           : undefined;
+        visibleCustom = custom;
         previous = frame;
         previousPreview = preview;
         previousGaze = gaze;

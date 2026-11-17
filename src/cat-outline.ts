@@ -1,22 +1,22 @@
-import { catCoatSchemes, type CatConfig } from './cat';
+import { catCoatColors, type CatRenderConfig } from './cat';
 
 export type OutlineVersion = 'adaptive' | 'original';
 
 const outlineColors = new Map<string, readonly number[]>();
 
-function outlineColor(coat: Exclude<CatConfig['coat'], 'native'>) {
+function outlineColor(coat: Exclude<CatRenderConfig['coat'], 'native'>) {
   const cached = outlineColors.get(coat);
   if (cached) return cached;
   // Use the marking pigment's hue, with enough depth to separate both pale
   // fur and darker patches. Light coats get a softer line automatically.
-  const hex = Number.parseInt(catCoatSchemes[coat].colors[1].slice(1), 16);
+  const hex = Number.parseInt(catCoatColors(coat)[1].slice(1), 16);
   const color = [hex >>> 16, (hex >>> 8) & 255, hex & 255].map(channel => Math.round(channel * 0.58));
   outlineColors.set(coat, color);
   return color;
 }
 
 export function recolorCatOutline(
-  image: ImageData, guide: Uint8ClampedArray, config: CatConfig, head = false,
+  image: ImageData, guide: Uint8ClampedArray, config: CatRenderConfig, head = false,
 ) {
   if (config.coat === 'native') return;
   const color = outlineColor(config.coat);

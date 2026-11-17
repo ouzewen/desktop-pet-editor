@@ -1,8 +1,8 @@
-import type { CatConfig } from './cat';
+import type { CatArtPalette } from './cat-breeds';
 
 type RGB = readonly [number, number, number];
 type EarTones = { outline: RGB; shadow: RGB; fur: RGB; light: RGB };
-type EarCoat = Exclude<CatConfig['palette'], 'CC01'>;
+type EarCoat = Exclude<CatArtPalette, 'CC01'>;
 
 const charcoal: EarTones = { outline: [32, 27, 30], shadow: [57, 51, 61], fur: [79, 74, 87], light: [93, 86, 99] };
 const calicoDark: EarTones = { outline: [49, 27, 18], shadow: [57, 49, 48], fur: [74, 66, 65], light: [89, 79, 77] };

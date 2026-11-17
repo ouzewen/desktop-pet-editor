@@ -1,14 +1,8 @@
-import { catCoatSchemes, nativeCatFur, type CatConfig } from './cat';
+import { catCoatColors, nativeCatFur, type CatRenderConfig } from './cat';
 
 type RGB = readonly [number, number, number];
 
 export const bodyPatternChannel = { mackerel: 0, classic: 1, spotted: 2 } as const;
-
-export const bodyPatternLayers = [
-  'body', 'typing_body',
-  ...['gentle', 'fast'].flatMap(mode => Array.from({ length: 4 }, (_, i) => `typing_arms_${mode}_${i}`)),
-  ...Array.from({ length: 3 }, (_, i) => `typing_front_${i}`),
-];
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 function fromHex(hex: string): RGB {
@@ -24,12 +18,12 @@ export function paintBodyPattern(
   image: ImageData,
   guide: Uint8ClampedArray,
   pattern: Uint8ClampedArray | undefined,
-  config: CatConfig,
+  config: CatRenderConfig,
   typing: boolean,
   laptopOnly = false,
 ) {
   if (config.bodyPattern === 'native') return;
-  const colors = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatSchemes[config.coat].colors;
+  const colors = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatColors(config.coat);
   const base = fromHex(colors[0]), marking = fromHex(colors[1]), pale = fromHex(colors[2]);
   const channel = config.bodyPattern === 'plain' ? 0 : bodyPatternChannel[config.bodyPattern];
   const paleChest = config.palette !== 'CC02';
