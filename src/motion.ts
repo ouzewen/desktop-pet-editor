@@ -1,6 +1,7 @@
-import { frameCount, render, type Action, type Gaze, type TypingMode } from './render';
-import type { PetConfig } from './cat';
+import { frameCount, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
+import { usesOrangeCatArt, type PetConfig } from './cat';
 import type { CatCustomization } from './cat-custom';
+import { CatJellyMotion } from './cat-jelly';
 import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
 
 const catTypingTimeout = 1001;
@@ -21,15 +22,18 @@ export class Motion {
   private stretchTarget = 0;
   private releaseStretch = 0;
   private settledAt = -Infinity;
+  private jelly = new CatJellyMotion();
   private idleSince = performance.now();
   private rendered = '';
   private gaze: Gaze = { x: 0, y: 0 };
   private custom?: CatCustomization;
+  private edge: CatEdge | null = null;
 
   constructor(private canvas: HTMLCanvasElement, private config: PetConfig) {}
 
   setConfig(config: PetConfig) {
     this.config = config;
+    this.jelly.reset();
     this.rendered = '';
     this.lastKey = -Infinity;
     this.recentKeys = [];
@@ -47,15 +51,28 @@ export class Motion {
     this.rendered = '';
   }
 
-  beginDrag() {
+  setEdge(edge: CatEdge | null) {
+    this.edge = edge;
+    this.rendered = '';
+    this.stretch = this.stretchTarget = this.releaseStretch = 0;
+    if (edge) this.jelly.reset();
+  }
+
+  beginDrag(now = performance.now()) {
     this.pressing = true;
+    if (usesOrangeCatArt(this.config)) this.jelly.begin(now);
     this.stretchTarget = 0;
     this.dragDistance = 0;
     this.dragAction = null;
   }
 
-  drag(dx: number) {
-    if (!dx || !this.pressing) return;
+  drag(dx: number, elapsed = 16, now = performance.now()) {
+    if (!this.pressing) return;
+    if (usesOrangeCatArt(this.config)) {
+      this.jelly.drag(dx, elapsed, now);
+      return;
+    }
+    if (!dx) return;
     if (this.config.frame === 'CAT') {
       this.stretchTarget = Math.max(-1, Math.min(1, dx / 12));
       return;
@@ -68,6 +85,7 @@ export class Motion {
 
   release(now = performance.now()) {
     this.pressing = false;
+    this.jelly.release(now);
     this.releaseStretch = this.stretch;
     this.settledAt = now;
     this.recentKeys = [];
@@ -78,7 +96,7 @@ export class Motion {
   }
 
   key(now = performance.now()) {
-    if (this.pressing) return;
+    if (this.pressing || this.edge) return;
     const config = this.config;
     if (config.frame === 'CAT') {
       if (now - this.lastKey >= catTypingTimeout) {
@@ -129,10 +147,18 @@ export class Motion {
     let frame: number;
     const config = this.config;
     const cat = config.frame === 'CAT';
-    if (this.pressing && cat) {
+    const edge = cat ? this.edge ?? undefined : undefined;
+    const jellyCat = usesOrangeCatArt(config);
+    const jelly = !edge && jellyCat ? this.jelly.pose(now) : undefined;
+    if (edge) {
+      const idle = Math.floor(Math.max(0, now - this.idleSince) / 90) % 80;
+      frame = idle >= 25 && idle <= 26 ? 25 : 0;
+    } else if (this.pressing && cat) {
       frame = 0;
-      this.stretch += (this.stretchTarget - this.stretch) * 0.36;
-      this.stretchTarget *= 0.86;
+      if (!jellyCat) {
+        this.stretch += (this.stretchTarget - this.stretch) * 0.36;
+        this.stretchTarget *= 0.86;
+      }
     } else if (this.pressing) {
       action = this.dragAction ?? 'sit';
       frame = this.dragAction ? Math.floor(this.dragDistance / 10) % frameCount(config, action) : 0;
@@ -143,6 +169,8 @@ export class Motion {
       } else {
         frame = this.typingFrame;
       }
+    } else if (jelly) {
+      frame = 0;
     } else {
       frame = Math.floor(Math.max(0, now - this.idleSince) / 90) % 80;
     }
@@ -151,13 +179,13 @@ export class Motion {
       this.stretch = elapsed < 600
         ? this.releaseStretch * Math.cos(elapsed / 53) * Math.exp(-elapsed / 150) : 0;
     }
-    const stretch = cat && action === 'sit' ? Math.round(this.stretch * 32) / 32 : 0;
+    const stretch = cat && !jellyCat && action === 'sit' ? Math.round(this.stretch * 32) / 32 : 0;
     const frenzyHeatFrame = cat && action === 'typing' && this.typingMode === 'frenzy'
       ? frenzyHeatFrameAt(now - this.frenzyStarted) : undefined;
-    const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}`;
+    const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}/${edge}/${jelly?.head}/${jelly?.body}/${jelly?.tail}`;
     if (pose !== this.rendered) {
       render(this.canvas, config, action, frame, this.gaze, {
-        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, custom: this.custom,
+        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, edge, jelly, custom: this.custom,
       });
       this.rendered = pose;
     }

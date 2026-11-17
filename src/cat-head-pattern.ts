@@ -1,15 +1,15 @@
-import { catCoatColors, nativeCatFur, type CatRenderConfig } from './cat';
-import { bodyPatternChannel } from './cat-body-pattern';
+import { catKeepsBreedPigment, catPatternFurColors, type CatRenderConfig } from './cat';
+import { bodyPatternChannel, breedPatternShade, shadeBreedPattern, usesBodyPattern } from './cat-body-pattern';
 
 type RGB = readonly [number, number, number];
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const colors = new Map<string, readonly [RGB, RGB, RGB]>();
 
 function tones(config: CatRenderConfig) {
-  const key = `${config.palette}/${config.coat}`;
+  const hex = catPatternFurColors(config);
+  const key = hex.join('/');
   const cached = colors.get(key);
   if (cached) return cached;
-  const hex = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatColors(config.coat);
   const result = hex.map(value => {
     const number = Number.parseInt(value.slice(1), 16);
     return [number >>> 16, (number >>> 8) & 255, number & 255] as const;
@@ -31,6 +31,36 @@ function furDepth(x: number, y: number) {
     + 0.055 * clamp((py - 135) / 40);
 }
 
+export function paintSolidFace(
+  image: ImageData, guide: Uint8ClampedArray, config: CatRenderConfig,
+  forehead?: Uint8ClampedArray, cheeks?: Uint8ClampedArray, atlas?: Uint8ClampedArray, nativeHead?: Uint8ClampedArray,
+) {
+  const { data, width } = image;
+  const [base, marking] = tones(config);
+  const [nativeBase, nativeMarking] = nativeHead ? tones({ ...config, coat: 'native' }) : [base, marking];
+  const nativeStripeCutoff = (nativeBase[1] + nativeMarking[1]) / 2;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    if (!data[offset + 3]) continue;
+    const column = offset / 4 % width, row = Math.floor(offset / 4 / width);
+    const x = atlas ? 128 + column % 48 : column;
+    const y = atlas ? 119 + row % 44 : row;
+    const world = (y * 320 + x) * 4;
+    if (!isFur(guide, world)) continue;
+    if (atlas && row < 88) {
+      const red = atlas[offset]!, green = atlas[offset + 1]!, blue = atlas[offset + 2]!;
+      if ((red < 145 && green < 70) || (red >= 110 && red > green * 1.25 && blue > green * 0.75)) continue;
+    }
+    // The native cheek / crown controls still own the striped pigments.
+    if (forehead?.[world + 3] || cheeks?.[world + 3]) {
+      const nativeStripe = config.palette === 'CC01' ? guide[world + 1]! < 152
+        : nativeHead?.[world + 3] && nativeHead[world + 1]! < nativeStripeCutoff;
+      if (nativeStripe) continue;
+    }
+    const depth = furDepth(x, y);
+    for (let c = 0; c < 3; c++) data[offset + c] = base[c]! + (marking[c]! - base[c]!) * depth;
+  }
+}
+
 export function clearForeheadFur(
   image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray, config: CatRenderConfig,
 ) {
@@ -50,10 +80,15 @@ export function paintForeheadFur(
   pattern: Uint8ClampedArray, config: CatRenderConfig,
 ) {
   const [, marking, pale] = tones(config);
+  const pigmentShade = catKeepsBreedPigment(config) ? breedPatternShade(config) : undefined;
   const { data } = image;
   for (let offset = 0; offset < data.length; offset += 4) {
     if (!data[offset + 3] || !region[offset + 3] || !pattern[offset + 3] || !isFur(guide, offset)) continue;
     const dark = pattern[offset]! / 255, light = pattern[offset + 1]! / 255;
+    if (pigmentShade && dark >= light) {
+      shadeBreedPattern(data, offset, pigmentShade, dark);
+      continue;
+    }
     const strength = Math.max(dark, light);
     for (let channel = 0; channel < 3; channel++) {
       const color = light > dark ? pale[channel]! : marking[channel]!;
@@ -66,9 +101,10 @@ export function paintHeadFur(
   image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray,
   pattern: Uint8ClampedArray | undefined, config: CatRenderConfig, atlas?: Uint8ClampedArray,
 ) {
-  if (config.bodyPattern === 'native') return;
+  if (!usesBodyPattern(config)) return;
+  const pigmentShade = catKeepsBreedPigment(config) ? breedPatternShade(config) : undefined;
   const [base, marking] = tones(config);
-  const channel = config.bodyPattern === 'plain' ? 0 : bodyPatternChannel[config.bodyPattern];
+  const channel = config.bodyPattern === 'native' || config.bodyPattern === 'plain' ? 0 : bodyPatternChannel[config.bodyPattern];
   const { data, width } = image;
   for (let offset = 0; offset < data.length; offset += 4) {
     if (!data[offset + 3]) continue;
@@ -87,8 +123,12 @@ export function paintHeadFur(
     const y = atlas ? 119 + row % 44 : row;
     const world = (y * 320 + x) * 4;
     if (!region[world + 3]) continue;
-    const depth = furDepth(x, y);
     const ink = (pattern?.[world + channel] ?? 0) / 255;
+    if (pigmentShade) {
+      if (ink) shadeBreedPattern(data, offset, pigmentShade, ink);
+      continue;
+    }
+    const depth = furDepth(x, y);
     const shade = depth + (1 - depth) * ink;
     for (let c = 0; c < 3; c++) data[offset + c] = base[c]! + (marking[c]! - base[c]!) * shade;
   }

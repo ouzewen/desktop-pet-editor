@@ -95,9 +95,11 @@ export const frontTyping = {
   region: { x: 48, y: 140, width: 208, height: 49 },
 } as const;
 export const frontTypingEffectsPath = 'cat/hd/typing-falling/';
+const fallingLetterRegion = { x: 0, y: 90, width: 320, height: 200, frames: frontTyping.frames } as const;
 export const frontTypingEffects = {
-  gentle: { x: 0, y: 90, width: 320, height: 200, frames: frontTyping.frames },
-  frenzy: { x: 0, y: 90, width: 320, height: 200, frames: frontTyping.frames },
+  gentle: fallingLetterRegion,
+  fast: fallingLetterRegion,
+  frenzy: fallingLetterRegion,
   paws: { ...frontTyping.region, frames: frontTyping.pawFrames },
   heat: { x: 63, y: 189, width: 177, height: 98, frames: frontTyping.frames },
   air: { x: 48, y: 151, width: 224, height: 38, frames: frontTyping.frames },
@@ -233,8 +235,8 @@ function scriptGroup(id: string, usage: Usage, source: string, script: string, o
 
 const mappedBreeds = (Object.keys(breedArt) as Breed[]).filter((id): id is FrontBreed => id !== 'CC01');
 const typingV2Atlas = typingAtlases['reference-v2'];
-const fallingTypingGroups = (['gentle', 'frenzy'] as const).map(mode => {
-  const parts: (keyof typeof frontTypingEffects)[] = mode === 'gentle' ? [mode] : [mode, 'paws', 'heat', 'air', 'sparks', 'steam', 'sweat'];
+const fallingTypingGroups = typingModes.map(mode => {
+  const parts: (keyof typeof frontTypingEffects)[] = mode === 'frenzy' ? [mode, 'paws', 'heat', 'air', 'sparks', 'steam', 'sweat'] : [mode];
   const args: Record<string, string | number> = { mode, frames: frontTyping.frames, columns: frontTyping.columns };
   const files = parts.map(part => {
     const { x, y, width, height, frames } = frontTypingEffects[part];
@@ -242,8 +244,9 @@ const fallingTypingGroups = (['gentle', 'frenzy'] as const).map(mode => {
     return { key: frontTypingEffectsPath + part, width: width * frontTyping.columns, height: height * frames / frontTyping.columns };
   });
   if (mode === 'frenzy') files.push(...pngs(withPrefix(frontTypingEffectsPath, ['mouth', 'mouth_orange'])));
-  const source = mode === 'gentle' ? 'typing-gentle-falling' : 'typing-frenzy';
-  return scriptGroup(`cat.typing.front-v4.${mode}`, 'current', `art/cat-shared/${source}.aseprite`,
+  const source = mode === 'frenzy' ? 'typing-frenzy' : `typing-${mode}-falling`;
+  const version = mode === 'fast' ? 'front-v6' : 'front-v4';
+  return scriptGroup(`cat.typing.${version}.${mode}`, 'current', `art/cat-shared/${source}.aseprite`,
     'export-cat-typing-falling', frontTypingEffectsPath, files, args);
 });
 const oldModes = ['gentle', 'fast'] as const;

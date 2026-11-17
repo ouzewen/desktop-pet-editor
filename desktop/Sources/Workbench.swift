@@ -20,6 +20,7 @@ struct AppearancePreset: Decodable {
 struct AppearanceCatalog: Decodable {
     let fieldsByFrame: [String: [String: [AppearanceOption]]]
     let presets: [AppearancePreset]
+    let faceBasePalettes: Set<String>
 
     func matchingPreset(_ config: [String: Any]) -> String? {
         let candidates = presets.filter { $0.frame == config["frame"] as? String }
@@ -237,22 +238,30 @@ private struct PixelColorSelect: View {
         .accessibilityLabel(title)
         .accessibilityValue(currentName)
         .popover(isPresented: $isPresented, arrowEdge: .top) {
-            VStack(spacing: 5) {
-                ForEach(options, id: \.id) { option in
-                    Button {
-                        selection = option.id
-                        isPresented = false
-                    } label: {
-                        ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette)
-                    }
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: selection == option.id))
-                    .accessibilityAddTraits(selection == option.id ? .isSelected : [])
-                }
+            ViewThatFits(in: .vertical) {
+                optionList.fixedSize(horizontal: false, vertical: true)
+                ScrollView { optionList }
             }
-            .padding(10)
             .frame(width: 186)
+            .frame(maxHeight: 360)
             .background(palette.panel)
         }
+    }
+
+    private var optionList: some View {
+        VStack(spacing: 5) {
+            ForEach(options, id: \.id) { option in
+                Button {
+                    selection = option.id
+                    isPresented = false
+                } label: {
+                    ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette)
+                }
+                .buttonStyle(PixelButtonStyle(palette: palette, prominent: selection == option.id))
+                .accessibilityAddTraits(selection == option.id ? .isSelected : [])
+            }
+        }
+        .padding(10)
     }
 }
 
@@ -268,7 +277,7 @@ private struct PupilColorPicker: View {
     @State private var isPresented = false
 
     private var isDouble: Bool { layers == "round" }
-    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
+    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
 
     private var summary: String {
         let outerName = colors.first { $0.id == outer }?.name ?? "原色"
@@ -308,7 +317,7 @@ private struct PupilColorPicker: View {
                     }
                 }
                 .padding(12)
-                .frame(width: 292)
+                .frame(width: 380)
                 .background(palette.panel)
             }
         }
@@ -389,6 +398,7 @@ private struct SpritePreview: NSViewRepresentable {
 struct WorkbenchView: View {
     @ObservedObject var state: WorkbenchState
     let preview: WKWebView
+    let typingActivity: TypingActivity
     @Environment(\.colorScheme) private var colorScheme
 
     private var palette: PixelPalette { .of(colorScheme) }
@@ -494,6 +504,8 @@ struct WorkbenchView: View {
                         .frame(maxWidth: .infinity)
                     }
                 }
+
+                TypingActivitySummary(activity: typingActivity, palette: palette)
             }
         }
         .frame(width: 376)
@@ -881,6 +893,7 @@ struct WorkbenchView: View {
             let frame = state.appearance["frame", default: "M1"]
             let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
             let fieldsForFrame = catalog.fieldsByFrame[optionGroup] ?? [:]
+            let localMarkings = catalog.fieldsByFrame["CAT_MARKINGS"] ?? [:]
 
             PixelPanel(palette: palette, padding: 12) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -895,15 +908,34 @@ struct WorkbenchView: View {
                         if let mouths = fieldsForFrame["mouth"] {
                             fieldPicker(title: "嘴巴", key: "mouth", options: mouths)
                         }
-                        if let tails = fieldsForFrame["tail"] {
-                            fieldPicker(title: "尾巴", key: "tail", options: tails)
-                        }
                         LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                            if let tails = fieldsForFrame["tail"] {
+                                fieldPicker(title: "尾形", key: "tail", options: tails)
+                            }
+                            if let options = localMarkings["tailPattern"] {
+                                fieldPicker(title: "尾纹", key: "tailPattern", options: options)
+                            }
+                        }
+                        HStack(alignment: .top, spacing: 10) {
                             if let foreheadPatterns = fieldsForFrame["pattern"] {
                                 fieldPicker(title: "额头花纹", key: "pattern", options: foreheadPatterns)
                             }
+                            if catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"]),
+                               let options = localMarkings["faceBase"] {
+                                fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
+                            } else {
+                                staticField(title: "脸部底纹", value: "均匀底色")
+                            }
+                            if let options = localMarkings["cheekPattern"] {
+                                fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options)
+                            }
+                        }
+                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                            if let options = localMarkings["bodyBase"] {
+                                fieldPicker(title: "身体底色", key: "bodyBase", options: options)
+                            }
                             if let bodyPatterns = fieldsForFrame["bodyPattern"] {
-                                fieldPicker(title: "毛皮花纹", key: "bodyPattern", options: bodyPatterns)
+                                fieldPicker(title: "身体花纹", key: "bodyPattern", options: bodyPatterns)
                             }
                         }
                         if let accessories = fieldsForFrame["accessory"] {
@@ -948,21 +980,25 @@ struct WorkbenchView: View {
     private func accessoryRow(_ options: [AppearanceOption]) -> some View {
         HStack(alignment: .top, spacing: 10) {
             fieldPicker(title: "头顶配饰", key: "accessory", options: options)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("服装配饰")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Text("无")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-                    .background(PixelBox(corner: 3).fill(palette.panelAlt))
-                    .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1))
-            }
-            .accessibilityElement(children: .combine)
+            staticField(title: "服装配饰", value: "无")
         }
+    }
+
+    private func staticField(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            Text(value)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 10)
+                .background(PixelBox(corner: 3).fill(palette.panelAlt))
+                .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1))
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func fieldPicker(
@@ -1175,5 +1211,45 @@ struct WorkbenchView: View {
             state.appearance[key] = value
             state.refresh()
         })
+    }
+}
+
+private struct TypingActivitySummary: View {
+    @ObservedObject var activity: TypingActivity
+    let palette: PixelPalette
+
+    private var duration: String {
+        let seconds = Int(activity.today.activeSeconds)
+        if seconds >= 3600 { return "\(seconds / 3600) 小时 \(seconds % 3600 / 60) 分" }
+        if seconds >= 60 { return "\(seconds / 60) 分 \(seconds % 60) 秒" }
+        return "\(seconds) 秒"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            metric("今日活跃打字时长", value: duration)
+            Rectangle()
+                .fill(palette.borderSoft)
+                .frame(width: 1, height: 26)
+                .accessibilityHidden(true)
+            metric("今日按键次数", value: "\(activity.today.keyCount.formatted()) 次")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(PixelBox(corner: 2).fill(palette.panelAlt))
+        .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
+    }
+
+    private func metric(_ label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            Text(value)
+                .font(PixelFont.font(16))
+                .foregroundStyle(palette.ink)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -3,10 +3,10 @@ local output = assert(app.params.output)
 local mode = assert(app.params.mode)
 local frames = assert(tonumber(app.params.frames))
 local columns = assert(tonumber(app.params.columns))
-assert(mode == "gentle" or mode == "frenzy")
+local durations = {gentle=0.070, fast=0.040, frenzy=0.020}
+local duration = assert(durations[mode])
 assert(sprite.width == 320 and sprite.height == 320 and sprite.colorMode == ColorMode.RGB)
 assert(#sprite.frames == frames)
-local duration = mode == "gentle" and 0.070 or 0.020
 for _, frame in ipairs(sprite.frames) do assert(math.abs(frame.duration-duration) < 0.0001) end
 app.fs.makeAllDirectories(output)
 

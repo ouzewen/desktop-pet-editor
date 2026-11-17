@@ -1,6 +1,7 @@
-import { catIrisColors, catOptions, catPresets, catRenderConfig, nativeCatFur, orangeCatOptions, readPetConfig, usesOrangeCatArt,
+import { canChooseCatFaceBase, catIrisColors, catKeepsBreedPigment, catOptions, catPatternFurColors, catPresets, catRenderConfig, currentFurPatternColors, orangeCatOptions, readPetConfig, usesOrangeCatArt,
   type CatConfig, type CatIrisColor } from './cat';
 import { colorCatBreed } from './cat-breeds';
+import { calicoChestBounds } from './cat-body-pattern';
 import { catAssetOptions, frontTyping } from './pet-assets';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor } from './cat-custom';
 import { projectCatInk, type CatInkDocument, type CatInkPart } from './cat-ink';
@@ -696,8 +697,8 @@ export function checkIndependentPupils() {
   const same = (a: Uint32Array, b: Uint32Array) => a.every((pixel, index) => pixel === b[index]);
   const { preset_cat_orange: orange, preset_cat_calico: calico, preset_cat_ragdoll: ragdoll } = catPresets;
   const shared = { eyeColor: 'violet', innerPupil: 'round', innerEyeColor: 'rose' } as const;
-  const left = { leftEyeColor: 'blue', leftInnerPupil: 'none', leftInnerEyeColor: 'amber' } as const;
-  const right = { rightEyeColor: 'green', rightInnerPupil: 'round', rightInnerEyeColor: 'amber' } as const;
+  const left = { leftEyeColor: 'iceBlue', leftInnerPupil: 'none', leftInnerEyeColor: 'amber' } as const;
+  const right = { rightEyeColor: 'teal', rightInnerPupil: 'round', rightInnerEyeColor: 'honeyGold' } as const;
 
   for (const breed of [orange, calico, ragdoll]) {
     const legacy = { ...breed, ...shared };
@@ -714,8 +715,8 @@ export function checkIndependentPupils() {
       const leftOnly = image({ ...legacy, ...left }, action, 0, pose);
       const rightOnly = image({ ...legacy, ...right }, action, 0, pose);
       const mixed = image(chosen, action, 0, pose);
-      const flat = image({ ...legacy, eyeColor: 'blue', innerPupil: 'none' }, action, 0, pose);
-      const double = image({ ...legacy, eyeColor: 'green', innerEyeColor: 'amber' }, action, 0, pose);
+      const flat = image({ ...legacy, eyeColor: left.leftEyeColor, innerPupil: left.leftInnerPupil }, action, 0, pose);
+      const double = image({ ...legacy, eyeColor: right.rightEyeColor, innerEyeColor: right.rightInnerEyeColor }, action, 0, pose);
       const changed = [0, 0];
       for (let at = 0; at < stock.length; at++) {
         const x = at % size, y = Math.floor(at / size);
@@ -841,6 +842,94 @@ export function checkCatActions() {
     return pose;
   };
 
+  for (const preset of Object.values(catPresets)) {
+    const uniform = { ...preset, faceBase: 'solid' } as const;
+    const editSource = {
+      config: uniform, action: 'sit', frame: 0, typingMode: 'gentle', gaze: { x: 0, y: 0 },
+      furPatternColors: 'breed-pigment', tailArtVersion: 'clean', outlineVersion: 'adaptive', earLayout: 'shared', markingLayout: 'shared',
+    } as const;
+    const separate = canChooseCatFaceBase(preset.palette);
+    const normalized = readPetConfig(uniform) as CatConfig;
+    assert(normalized.faceBase === (separate ? 'solid' : 'native'), `${preset.name} exposed the wrong face-base choices`);
+    const natural = snapshot('sit', 0, preset);
+    const flat = snapshot('sit', 0, uniform);
+    assert(separate !== same(natural, flat), `${preset.name} changed the meaning of its uniform face base`);
+    if (separate) {
+      assert(same(natural, snapshot('sit', 0, preset, editSource)), `${preset.name} repainted the native face`);
+      // The new version only replaces pixels within the two eye surrounds.
+      for (const [action, mode, frame] of [['sit', 'gentle', 0], ['typing', 'gentle', 8], ['typing', 'frenzy', 40]] as const) {
+        const pose = { typingMode: mode, typingEffects: true };
+        const current = snapshot(action, frame, uniform, pose);
+        const prior = snapshot(action, frame, uniform, { ...pose, furPatternColors: 'breed-pigment' });
+        const cleaned = [0, 0];
+        for (let offset = 0; offset < current.length; offset += 4) {
+          if (samePixel(current, prior, offset)) continue;
+          const x = offset / 4 % SIZE, y = Math.floor(offset / 4 / SIZE);
+          assert(y >= 96 && y <= 136 && ((x >= 91 && x <= 131) || (x >= 170 && x <= 210))
+            && current[offset + 3] === prior[offset + 3], `${preset.name} repainted pixels outside the eyes`);
+          if (current[offset + 1]! > prior[offset + 1]!) cleaned[x < 160 ? 0 : 1]!++;
+        }
+        if (mode === 'gentle' && (preset.palette === 'CC03' || preset.palette === 'CC04')) {
+          assert(cleaned.every(count => count > 0), `${preset.name} kept the dark rim around an open eye`);
+        }
+      }
+    }
+    if (separate || preset === orange) {
+      render(canvas, uniform, 'sit', 0, undefined, editSource);
+      const restored = prepareCatCustomization(canvas, editSource, preset);
+      assert(restored.source.furPatternColors === 'breed-pigment' && !restored.paint.full,
+        `${preset.name} imported old eye or coat pixels as user ink`);
+    }
+  }
+
+  for (const preset of Object.values(catPresets)) {
+    const source = readPetConfig(preset) as CatConfig;
+    assert(source.faceBase === 'native' && source.bodyBase === 'native'
+      && source.cheekPattern === 'native' && source.tailPattern === 'native'
+      && same(snapshot('sit', 0, preset), snapshot('sit', 0, source)), `${preset.name} has incorrect defaults for independent markings`);
+    for (const bodyPattern of ['classic', 'plain'] as const) {
+      const oldLinked = { ...preset, bodyPattern };
+      const migrated = readPetConfig(oldLinked) as CatConfig;
+      assert(migrated.cheekPattern === bodyPattern && migrated.tailPattern !== undefined
+        && same(snapshot('sit', 0, oldLinked), snapshot('sit', 0, migrated)),
+      `Opening ${preset.name} changed its saved ${bodyPattern} markings`);
+    }
+    const pose = preset === calico
+      ? { ...source, bodyBase: 'solid', bodyPattern: 'plain' } as const
+      : preset === orange
+        ? { ...source, faceBase: 'solid', cheekPattern: 'plain', pattern: 'P03', bodyPattern: 'mackerel' } as const
+        : source;
+    for (const [action, typingMode, frame] of [
+      ['sit', 'gentle', 0], ['typing', 'gentle', 5], ['typing', 'fast', 8], ['typing', 'frenzy', 20],
+    ] as const) {
+      const base = snapshot(action, frame, pose, { typingMode });
+      const newBody = snapshot(action, frame, { ...pose, bodyPattern: 'spotted' }, { typingMode });
+      const newFace = snapshot(action, frame, { ...pose, faceBase: pose.faceBase === 'solid' ? 'native' : 'solid' }, { typingMode });
+      const newCheeks = snapshot(action, frame, { ...pose, cheekPattern: 'classic' }, { typingMode });
+      const newForehead = snapshot(action, frame, { ...pose, pattern: 'P05' }, { typingMode });
+      const newTail = snapshot(action, frame, { ...pose, tailPattern: 'spotted' }, { typingMode });
+      const previous = preset === calico ? snapshot(action, frame, pose, { typingMode, furPatternColors: 'calico-chest' }) : undefined;
+      let restoredWarmFur = false;
+      assert((preset !== calico || !same(base, newFace)) && !same(base, newCheeks) && !same(base, newForehead) && !same(base, newTail),
+        `${preset.name} ignored an independent marking selection in ${action}/${typingMode}`);
+      for (let offset = 0; offset < base.length; offset += 4) {
+        const x = offset / 4 % SIZE, y = Math.floor(offset / 4 / SIZE);
+        const chest = preset === calico && x >= calicoChestBounds.left && x <= calicoChestBounds.right
+          && y >= calicoChestBounds.top && y < calicoChestBounds.bottom;
+        if (y < 170 || x >= 250) assert(samePixel(base, newBody, offset), 'Body markings crossed into the face or tail');
+        if (y >= 176) assert([newFace, newCheeks, newForehead].every(pixels => samePixel(base, pixels, offset)),
+          'A facial choice recolored the body');
+        if (y < 145) assert(samePixel(base, newTail, offset), 'Changing the tail repainted the head');
+        if (previous && !samePixel(base, previous, offset)) {
+          assert(chest && base[offset + 3] === previous[offset + 3], 'The short chest fur changed pixels outside the neckline');
+          restoredWarmFur ||= base[offset + 1]! < 200 && previous[offset + 1]! > 220;
+        }
+      }
+      if (previous) assert(restoredWarmFur, `The pure calico body retained the trial white chest in ${action}/${typingMode}`);
+      if (action === 'sit') assert(!same(base, newBody), 'The split body ignored its selected markings');
+    }
+  }
+
   const mouthTouchUp = new Set([[148, 132], [133, 134], [149, 134], [168, 134], [130, 140],
     [135, 142], [135, 143], [135, 144], [135, 145]].map(([x, y]) => y! * SIZE + x!));
   const affectedByTypingCleanup = (x: number, y: number) =>
@@ -956,6 +1045,12 @@ export function checkCatActions() {
   const coats = Object.keys(catOptions.coat) as (keyof typeof catOptions.coat)[];
   const bodyPatterns = Object.keys(catOptions.bodyPattern) as (keyof typeof catOptions.bodyPattern)[];
   const foreheadPatterns = Object.keys(catOptions.pattern) as (keyof typeof catOptions.pattern)[];
+  function hasMarkingColor(pixels: Uint8ClampedArray, color: string, left: number, top: number, right: number, bottom: number) {
+    for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) {
+      if (rgba(pixels, (y * SIZE + x) * 4) === color) return true;
+    }
+    return false;
+  }
   const propCanvas = document.createElement('canvas');
   propCanvas.width = propCanvas.height = SIZE;
   const propContext = propCanvas.getContext('2d')!;
@@ -1080,6 +1175,23 @@ export function checkCatActions() {
   }
   for (const preset of Object.values(catPresets)) {
     const idle = snapshot('sit', 0, preset);
+    assert(same(idle, snapshot('sit', 0, preset, { furPatternColors: 'original' })),
+      `Matching the drawn markings changed the original ${preset.name}`);
+    const appearance = catRenderConfig(preset);
+    const keepPigment = catKeepsBreedPigment(appearance);
+    const hex = catPatternFurColors(appearance)[1];
+    const rgb = Number.parseInt(hex.slice(1), 16);
+    const marking = `${rgb >>> 16},${(rgb >>> 8) & 255},${rgb & 255},255`;
+    if (preset === orange) assert(hasMarkingColor(idle, marking, 122, 57, 188, 81),
+      'The orange marking color does not match its original forehead');
+    for (const bodyPattern of keepPigment ? [] : ['mackerel', 'classic', 'spotted'] as const) {
+      const painted = snapshot('sit', 0, { ...preset, bodyPattern, pattern: 'P05' });
+      assert(hasMarkingColor(painted, marking, 110, 46, 196, 91)
+        && hasMarkingColor(painted, marking, 61, 93, 89, 149)
+        && hasMarkingColor(painted, marking, 66, 197, 116, 240)
+        && hasMarkingColor(painted, marking, 249, 197, 276, 245),
+      `${preset.name}/${bodyPattern} did not use its marking color on the forehead, cheek, body and tail`);
+    }
     assert(same(idle, snapshot('sit', 0, preset, { markingLayout: 'legacy' })),
       `Separating forehead markings changed the default ${preset.name}`);
     const eyeCanvas = document.createElement('canvas');
@@ -1109,11 +1221,15 @@ export function checkCatActions() {
         }
       }
     }
-    for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast']] as const) {
+    for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast'], ['typing', 'frenzy']] as const) {
       for (let frame = 0; frame < (action === 'sit' ? 1 : frontTyping.pawFrames); frame++) {
         const variants = bodyPatterns.map(bodyPattern => snapshot(action, frame, { ...preset, bodyPattern }, { typingMode }));
         const stock = variants[0]!;
-        assert(distinct(variants), `Pattern options matched in ${action}/${frame}/${typingMode}/${preset.name}`);
+        if (keepPigment) {
+          assert(same(stock, variants[1]!), `No fur markings removed breed pigment from ${preset.name}/${action}/${typingMode}`);
+        }
+        assert(distinct(keepPigment ? variants.slice(1) : variants),
+          `Pattern options matched in ${action}/${frame}/${typingMode}/${preset.name}`);
         assert(distinct(variants.slice(1).map(variant => variant.slice(86 * SIZE * 4, 174 * SIZE * 4))),
           `Fur pattern selection did not produce different facial fur in ${action}/${preset.name}`);
         for (const painted of variants) {
@@ -1268,13 +1384,20 @@ export function checkCatActions() {
       protectedEyeOffsets.push(offset);
       eyeAreas[offset / 4 % SIZE < SIZE / 2 ? 0 : 1]!++;
     }
+    let fastLettersReachedFloor = false;
     for (let frame = 0; frame < catTypingFrameCountFor('reference-v2'); frame++) {
       const fastPose = snapshot('typing', frame, preset, { typingMode: 'fast' });
       const openEyes = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true });
       assert(protectedEyeOffsets.every(offset => samePixel(openEyes, fastPose, offset)),
         `${preset.name} closed or moved its pupils before frenzy typing`);
-      const previousFast = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true, typingAnimation: 'front-v3' });
-      assert(same(openEyes, previousFast), `${preset.name} changed its existing fast typing art`);
+      const previousFast = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true, typingAnimation: 'front-v5' });
+      const originalFast = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true, typingAnimation: 'front-v3' });
+      assert(same(previousFast, originalFast), `${preset.name} changed the historical fast typing art`);
+      if (!fastLettersReachedFloor) {
+        for (let offset = 280 * SIZE * 4 + 3; offset < 290 * SIZE * 4; offset += 4) {
+          if (openEyes[offset] && !previousFast[offset]) { fastLettersReachedFloor = true; break; }
+        }
+      }
       fastHeads.push(openEyes.subarray(0, 140 * SIZE * 4));
       if (frame === frontTyping.pawFrames) {
         render(canvas, preset, 'typing', frame, { x: -100, y: 60, space: 'pointer' }, { typingMode: 'fast' });
@@ -1289,6 +1412,7 @@ export function checkCatActions() {
       }
 
     }
+    assert(fastLettersReachedFloor, `${preset.name} never landed fast typing letters beside the laptop`);
     for (const frame of [0, 13, 28, 29, 36, 48, 58, 59, 63]) {
       const normal = snapshot('typing', frame, preset);
       const effort = snapshot('typing', frame, preset, { typingMode: 'frenzy', typingEffects: true });
@@ -1343,26 +1467,11 @@ export function checkCatActions() {
     }
   }
 
-  // A unified plain coat must not retain a deep point-color triangle when its
-  // independent forehead is blank. Native breed pigment is tested separately.
-  const bareForehead = snapshot('sit', 0, {
-    ...catPresets.preset_cat_siamese, pattern: 'P03', bodyPattern: 'plain',
-  });
-  const foreheadBase = Number.parseInt(nativeCatFur.CC04[0].slice(1), 16);
-  const foreheadMarking = Number.parseInt(nativeCatFur.CC04[1].slice(1), 16);
-  // Stay below the preserved top outline; its dark edge reaches y54 here.
-  for (let y = 60; y <= 90; y++) for (let x = 124; x <= 178; x++) {
-    for (let channel = 0; channel < 3; channel++) {
-      const shift = 16 - channel * 8;
-      const base = (foreheadBase >>> shift) & 255, marking = (foreheadMarking >>> shift) & 255;
-      const color = bareForehead[(y * SIZE + x) * 4 + channel]!;
-      assert(color >= base + (marking - base) * 0.35 - 2 && color <= base + 2,
-        'No-forehead-pattern retained a deep pigment patch instead of clean fur');
-    }
-  }
   for (const preset of [calico, catPresets.preset_cat_siamese, catPresets.preset_cat_ragdoll]) {
     const original = snapshot('sit', 0, preset);
     const unmarked = snapshot('sit', 0, { ...preset, pattern: 'P03' });
+    const plain = snapshot('sit', 0, { ...preset, pattern: 'P03', bodyPattern: 'plain' });
+    assert(same(unmarked, plain), `Removing both markings removed part of the original ${preset.name} coat`);
     for (let i = 0; i < unmarked.length; i += 4) {
       if (samePixel(original, unmarked, i)) continue;
       const x = i / 4 % SIZE, y = Math.floor(i / (SIZE * 4));
@@ -1380,21 +1489,6 @@ export function checkCatActions() {
     assert(oldCrown[spot + 1]! < 78 && cleanCrown[spot + 1]! > 120
       && samePixel(oldCrown, cleanCrown, outerLine),
     `Unmarked forehead retained dark ink at the ear seam or changed the outer line at x=${x}`);
-  }
-
-  // The calico atlas used a white fringe around its muzzle. A plain fur choice
-  // must remove that background while preserving every dark/pink facial pixel.
-  const calicoFace = snapshot('sit', 0, calico);
-  const plainCalicoFace = snapshot('sit', 0, { ...calico, bodyPattern: 'plain' });
-  for (let y = 119; y < 157; y++) for (let x = 133; x < 171; x++) {
-    const offset = (y * SIZE + x) * 4;
-    const red = calicoFace[offset]!, green = calicoFace[offset + 1]!, blue = calicoFace[offset + 2]!;
-    const feature = (red < 145 && green < 70)
-      || (red >= 110 && red > green * 1.25 && blue > green * 0.75);
-    if (feature) assert(samePixel(calicoFace, plainCalicoFace, offset),
-      'Cleaning the muzzle background repainted the nose or mouth');
-    if (!feature) assert(Math.min(plainCalicoFace[offset]!, plainCalicoFace[offset + 1]!, plainCalicoFace[offset + 2]!) < 190,
-      'Plain facial fur retained the old white fringe around the muzzle');
   }
 
   for (let frame = 0; frame < 4; frame++) {
@@ -1685,7 +1779,7 @@ export function checkCatActions() {
         tailArtVersion: 'clean', typingLayout: 'aligned', earLayout: 'shared', markingLayout: 'shared', gaze: { x: 0, y: 0 },
       } as const;
       render(editable, config, action, frame, source.gaze,
-        { typingMode, typingAnimation, laptopVersion, outlineVersion: 'original' });
+        { typingMode, typingAnimation, laptopVersion, outlineVersion: 'original', furPatternColors: 'original' });
       const previous = prepareCatCustomization(editable, source, config);
       assert(previous.source.outlineVersion === 'original' && !previous.paint.full && !previous.laptop
         && !previous.idleTorso && !previous.typingTorso,
@@ -1723,7 +1817,7 @@ export function checkCatActions() {
         config, action, frame, typingMode, gaze: { x: 0, y: 0 },
         typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean', outlineVersion: 'adaptive',
         typingInkVersion: 'clean', typingMouthVersion: 'shared',
-        tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared',
+        tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared', furPatternColors: currentFurPatternColors,
       }, config);
       assert(current.source.outlineVersion === 'adaptive' && current.source.typingAnimation === currentTypingAnimation
         && current.source.frame === frame && !current.paint.full && !current.laptop
@@ -1739,7 +1833,7 @@ export function checkCatActions() {
   }
   for (const preset of [orange, calico]) {
     const oldLook = { ...preset, pattern: 'P02', bodyPattern: 'classic' } as const;
-    render(editable, oldLook, 'sit', 0, undefined, { markingLayout: 'legacy' });
+    render(editable, oldLook, 'sit', 0, undefined, { markingLayout: 'legacy', furPatternColors: 'original' });
     const oldSource = {
       config: oldLook, action: 'sit', frame: 0, gaze: { x: 0, y: 0 }, typingMode: 'gentle',
       tailArtVersion: 'clean', earLayout: 'shared', typingLayout: 'aligned', typingAnimation: 'shared',
@@ -1756,6 +1850,15 @@ export function checkCatActions() {
     editor.fillRect(150, 76, 3, 3);
     const previousPaint = prepareCatCustomization(editable, oldSource, oldLook);
     const newLook = { ...oldLook, pattern: 'P05', bodyPattern: 'spotted' } as const;
+    for (const furPatternColors of preset === calico ? ['original', 'matched'] as const : ['original'] as const) {
+      render(editable, newLook, 'sit', 0, undefined, { furPatternColors });
+      const saved = { ...oldSource, config: newLook, markingLayout: 'shared', furPatternColors };
+      for (const reference of [saved, null]) {
+        const earlierColors = prepareCatCustomization(editable, reference, newLook);
+        assert(earlierColors.source.furPatternColors === furPatternColors && !earlierColors.paint.full && !earlierColors.idleTorso,
+          `${preset.name} treated the old fur palette as user paint`);
+      }
+    }
     for (const action of ['sit', 'typing'] as const) {
       const base = snapshot(action, 0, newLook);
       const migrated = snapshot(action, 0, newLook, { custom: previousPaint });
@@ -1772,7 +1875,7 @@ export function checkCatActions() {
         config: newLook, action, frame, typingMode, gaze: { x: 0, y: 0 },
         typingLayout: 'aligned', typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive',
         typingInkVersion: 'clean', typingMouthVersion: 'shared',
-        tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared',
+        tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared', furPatternColors: currentFurPatternColors,
       } as const;
       const currentMarkings = prepareCatCustomization(editable, source, newLook);
       assert(currentMarkings.source.markingLayout === 'shared' && currentMarkings.source.typingAnimation === currentTypingAnimation
@@ -2014,6 +2117,17 @@ export function checkCatActions() {
         && restored.source.frenzyHeatFrame === frenzySteamLoopStart && !restored.paint.full && !restored.laptop,
       'A saved typing expression, red laptop, or steam became custom paint after reopening');
     }
+  }
+
+  const previousFastSource = {
+    ...hotSource, frame: 10, typingAnimation: 'front-v5', typingMode: 'fast', frenzyHeatFrame: undefined,
+  } as const;
+  render(editable, orange, 'typing', previousFastSource.frame, undefined, previousFastSource);
+  for (const reference of [null, previousFastSource]) {
+    const restored = prepareCatCustomization(editable, reference, orange);
+    assert(restored.source.typingAnimation === 'front-v5' && restored.source.typingMode === 'fast'
+      && !restored.paint.full && !restored.laptop && !restored.idleTorso && !restored.typingTorso,
+    'Letters from the old fast typing pose became custom paint after reopening');
   }
 
   render(editable, calico, 'typing', 0, undefined, { typingLayout: 'legacy', typingAnimation: 'legacy', markingLayout: 'legacy' });

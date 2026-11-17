@@ -68,11 +68,15 @@ final class PetView: WKWebView {
     /// Runs right after the panel moves, in the same drag event, so attached
     /// cards are repositioned before the next frame instead of trailing the pet.
     var onMove: () -> Void = {}
+    var onDragStart: (NSPoint) -> Void = { _ in }
+    var onDragEnd: (NSPoint) -> Void = { _ in }
     /// True while the focus card is pinned: the pet stays put when dragged.
     var isLocked: () -> Bool = { false }
+    private(set) var isDragging = false
     private var start: NSPoint?
     private var origin: NSPoint = .zero
     private var previousX: CGFloat = 0
+    private var previousDragTimestamp: TimeInterval = 0
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -130,26 +134,38 @@ final class PetView: WKWebView {
 
     override func mouseDown(with event: NSEvent) {
         guard !isLocked(), let window else { return }
-        let point = NSEvent.mouseLocation
+        let point = window.convertPoint(toScreen: event.locationInWindow)
         start = point
+        isDragging = false
         previousX = point.x
-        origin = window.frame.origin
+        previousDragTimestamp = event.timestamp
         send("beginDrag()")
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard !isLocked(), let start, let window else { return }
-        let point = NSEvent.mouseLocation
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        if !isDragging {
+            guard hypot(point.x - start.x, point.y - start.y) >= 4 else { return }
+            isDragging = true
+            onDragStart(start)
+            origin = window.frame.origin
+        }
         window.setFrameOrigin(NSPoint(x: origin.x + point.x - start.x, y: origin.y + point.y - start.y))
         onMove()
         let dx = point.x - previousX
-        if dx != 0 { send("drag(\(dx))") }
+        let elapsed = max(1, (event.timestamp - previousDragTimestamp) * 1000)
+        send("drag(\(dx),\(elapsed))")
         previousX = point.x
+        previousDragTimestamp = event.timestamp
     }
 
     override func mouseUp(with event: NSEvent) {
+        let moved = isDragging
         start = nil
+        isDragging = false
         send("release()")
+        if moved, !isLocked(), let window { onDragEnd(window.convertPoint(toScreen: event.locationInWindow)) }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -162,6 +178,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         contentRect: NSRect(x: 0, y: 0, width: 240, height: 240),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
     )
+    private var edgePlacement: PetEdgePlacement?
+    private var browserFollowTimer: Timer?
     private let web: PetView = {
         let config = WKWebViewConfiguration()
         // The bundled renderer compares custom edits to its local sprite layers.
@@ -175,6 +193,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return WKWebView(frame: .zero, configuration: config)
     }()
     private let workbenchState = WorkbenchState()
+    private let typingActivity = TypingActivity()
     private var workbenchWindow: NSWindow?
     private var previewReady = false
     private var appliedConfig: [String: Any]?
@@ -250,6 +269,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var dropChoiceKind: FileKind = .unsupported
     private var dropChoiceMonitor: Any?
     private var dropChoiceLocalMonitor: Any?
+    private lazy var fileOrganizer = FileOrganizerWindow(activate: { [weak self] in self?.activateForPetUI() })
     private var quickBarWindow: ReminderPanel?
     private var quickBarTimer: Timer?
     private var quickBarLeaveAt: Date?
@@ -296,6 +316,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             }
         }
         web.onMove = { [weak self] in self?.layoutReminder() }
+        web.onDragStart = { [weak self] in self?.beginPetDrag(at: $0) }
+        web.onDragEnd = { [weak self] in self?.finishPetDrag(at: $0) }
         web.isLocked = { [weak self] in self?.focus.pinned ?? false }
         configureWorkbench()
         let prefs = UserDefaults.standard
@@ -376,6 +398,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
+    func applicationDidChangeScreenParameters(_ notification: Notification) {
+        if edgePlacement != nil { layoutEdgePet(size: workbenchState.petSize) }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
@@ -435,7 +461,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func createWorkbench() {
         guard workbenchWindow == nil else { return }
-        let host = NSHostingController(rootView: WorkbenchView(state: workbenchState, preview: preview))
+        let host = NSHostingController(
+            rootView: WorkbenchView(state: workbenchState, preview: preview, typingActivity: typingActivity)
+        )
         let window = NSWindow(contentViewController: host)
         window.title = "桌宠工作台"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
@@ -637,6 +665,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         fputs("Mouse movement did not produce the expected gaze offsets\n", stderr)
                         exit(1)
                     }
+                    guard self.verifyPetEdgeDragging() else {
+                        fputs("Dragging did not snap to the screen edge or restore the full pet\n", stderr)
+                        exit(1)
+                    }
                     guard self.verifyReminderPanel() else {
                         fputs("Reminder card failed to position above the pet\n", stderr)
                         exit(1)
@@ -688,7 +720,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                                 fputs("Pixel editor failed to save and read part-based pixel edits\n", stderr)
                                 exit(1)
                             }
-                            print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, typing and motion transitions, focus and break session, weather advice and card, music detection, clipboard history, translation panels, chat routing, trash, quick bar, file actions, pixel editor preview and part-based preset storage")
+                            print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, edge dragging, typing and motion transitions, focus and break session, weather advice and card, music detection, clipboard history, translation panels, chat routing, trash, quick bar, file actions, pixel editor preview and part-based preset storage")
                             NSApp.terminate(nil)
                         }
                     }
@@ -874,6 +906,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func verifyFileActions() -> Bool {
+        guard let organization = makeMenu().item(withTitle: "整理文件")?.submenu,
+              organization.items.map(\.action) == [#selector(organizeDesktopFiles), #selector(chooseFileOrganizationFolder)]
+        else { return false }
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pet-file-test")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
@@ -1275,16 +1310,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func gazeOffset(for view: NSView, mouse: NSPoint) -> (x: Int, y: Int) {
         guard let window = view.window else { return (0, 0) }
         let frameOnScreen = window.convertToScreen(view.convert(view.bounds, to: nil))
+        if view === web, let edge = edgePlacement?.edge {
+            return Self.gazeOffset(for: mouse, in: frameOnScreen, eyes: edge.eyeCenter, units: edge.size(for: 160))
+        }
         return Self.gazeOffset(for: mouse, in: frameOnScreen)
     }
 
-    private static func gazeOffset(for mouse: NSPoint, in frameOnScreen: NSRect) -> (x: Int, y: Int) {
+    private static func gazeOffset(for mouse: NSPoint, in frameOnScreen: NSRect,
+                                   eyes: NSPoint = NSPoint(x: 75.0 / 160, y: 58.0 / 160),
+                                   units: NSSize = NSSize(width: 160, height: 160)) -> (x: Int, y: Int) {
         guard frameOnScreen.width > 0, frameOnScreen.height > 0 else { return (0, 0) }
         let normalizedX = (mouse.x - frameOnScreen.minX) / frameOnScreen.width
         let normalizedY = (mouse.y - frameOnScreen.minY) / frameOnScreen.height
         // Keep the angle from the eyes and cap only the length of that vector.
-        let dx = normalizedX * 160 - 75
-        let dy = (1 - normalizedY) * 160 - 58
+        let dx = (normalizedX - eyes.x) * units.width
+        let dy = (1 - normalizedY - eyes.y) * units.height
         let distance = hypot(dx, dy)
         guard distance > 3 else { return (0, 0) }
         let factor = 100 * min(1, (distance - 3) / 32) / distance
@@ -1836,7 +1876,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     /// Visible only while the pointer is on the pet (or on the bar itself).
     private func quickBarTick(at point: NSPoint) {
-        guard workbenchState.visible else {
+        guard workbenchState.visible, !web.isDragging else {
             hideQuickBar()
             return
         }
@@ -1899,8 +1939,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func layoutQuickBar() {
         guard let card = quickBarWindow,
               let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
-        guard !quickBarAdjusting else { return }
+        guard !quickBarAdjusting, !web.isDragging else { return }
         let size = card.frame.size
+        if let edge = edgePlacement?.edge {
+            let rightOfPet = panel.frame.maxX + 6
+            let leftOfPet = panel.frame.minX - size.width - 6
+            let x = edge == .bottom ? panel.frame.midX - size.width / 2 : edge == .left ? rightOfPet : leftOfPet
+            let y = edge == .bottom ? panel.frame.maxY + 6 : panel.frame.midY - size.height / 2
+            card.setFrameOrigin(NSPoint(x: min(max(x, screen.minX + 6), screen.maxX - size.width - 6),
+                                        y: min(max(y, screen.minY + 6), screen.maxY - size.height - 6)))
+            return
+        }
 
         // Always below the pet. When the pet sits too low for the bar, lift the
         // pet just enough and put it back when the bar hides.
@@ -2728,7 +2777,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         ))
         fitCardHost(host, fallback: NSSize(width: 288, height: 44))
         let size = host.frame.size
-        if reminderInputPetOrigin == nil, let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+        if edgePlacement == nil, reminderInputPetOrigin == nil, let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
             // Keep the input directly under the cat even when the pet sits near the screen bottom.
             let required = screen.minY + 8 + size.height + 8 - panel.frame.minY
             let room = screen.maxY - panel.frame.maxY - 8
@@ -2954,7 +3003,194 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func configurePet(_ config: [String: Any]) {
         guard ready else { return }
+        if edgePlacement != nil, config["frame"] as? String != "CAT" {
+            undockPet(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY), keepOnScreen: true)
+        }
         web.callAsyncJavaScript("window.pet.configure(config)", arguments: ["config": config], in: nil, in: .page)
+    }
+
+    private func beginPetDrag(at point: NSPoint) {
+        hideQuickBar()
+        hideReminderInput()
+        if edgePlacement != nil { undockPet(at: point) }
+    }
+
+    private func verifyPetEdgeDragging() -> Bool {
+        guard let display = NSScreen.main else { return false }
+        let screen = display.visibleFrame
+        let size = CGFloat(workbenchState.petSize)
+        let secondDisplay = NSRect(x: -1440, y: -120, width: 1440, height: 900)
+        let areaAboveDock = NSRect(x: -1440, y: -32, width: 1440, height: 780)
+        let petAboveDock = NSRect(x: -840, y: areaAboveDock.minY, width: size, height: size)
+        let nearDock = NSPoint(x: secondDisplay.midX, y: areaAboveDock.minY + 2)
+        let nearBottom = NSPoint(x: secondDisplay.midX, y: secondDisplay.minY + 2)
+        guard let dock = PetSurface.dock(in: secondDisplay, visible: areaAboveDock),
+              PetSurface.nearTop(of: dock, point: nearDock, pet: petAboveDock),
+              PetSurface.peekFrame(over: dock, anchor: 0.5, visibleScreens: [areaAboveDock], petSize: size)?.minY == areaAboveDock.minY,
+              PetEdge.near(nearDock, pet: petAboveDock, visible: areaAboveDock, display: secondDisplay, neighbors: []) == nil,
+              PetEdge.near(nearBottom, pet: petAboveDock, visible: areaAboveDock, display: secondDisplay, neighbors: []) == .bottom,
+              PetEdge.bottom.frame(at: 0.5, in: areaAboveDock, display: secondDisplay, petSize: size).minY == secondDisplay.minY
+        else { return false }
+        let start = NSPoint(x: screen.midX, y: screen.midY)
+        let resting = panel.frame
+        defer {
+            if edgePlacement != nil { undockPet(at: start) }
+            panel.setFrame(resting, display: true)
+        }
+
+        func drag(from: NSPoint, to: NSPoint) -> Bool {
+            let steps: [(NSEvent.EventType, NSPoint)] = [(.leftMouseDown, from), (.leftMouseDragged, to), (.leftMouseUp, to)]
+            for (type, point) in steps {
+                guard let event = NSEvent.mouseEvent(with: type, location: panel.convertPoint(fromScreen: point),
+                    modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber, context: nil,
+                    eventNumber: 0, clickCount: 1, pressure: 1) else { return false }
+                switch type {
+                case .leftMouseDown: web.mouseDown(with: event)
+                case .leftMouseDragged: web.mouseDragged(with: event)
+                default: web.mouseUp(with: event)
+                }
+            }
+            return true
+        }
+
+        let tests: [(PetEdge, NSPoint)] = [(.left, NSPoint(x: screen.minX + 2, y: start.y)),
+            (.right, NSPoint(x: screen.maxX - 2, y: start.y)), (.bottom, NSPoint(x: start.x, y: display.frame.minY + 2))]
+        let neighbors = NSScreen.screens.filter { $0 != display }.map(\.frame)
+        for (edge, point) in tests {
+            if PetEdge.near(point, pet: resting, visible: screen, display: display.frame, neighbors: neighbors) != edge { continue }
+            panel.setFrameOrigin(NSPoint(x: start.x - size / 2, y: start.y - size / 2))
+            guard drag(from: start, to: point), let placement = edgePlacement, placement.edge == edge,
+                  panel.frame.equalTo(edge.frame(at: placement.anchor, in: screen, display: display.frame, petSize: size))
+            else { return false }
+            let grip = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+            guard drag(from: grip, to: start), edgePlacement == nil,
+                  panel.frame.size == NSSize(width: size, height: size) else { return false }
+        }
+        return true
+    }
+
+    private func finishPetDrag(at point: NSPoint) {
+        guard appliedConfig?["frame"] as? String == "CAT",
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? panel.screen else { return }
+        let visible = screen.visibleFrame
+        let displayID = PetEdgePlacement.displayID(for: screen)
+        let anchorPoint = NSPoint(x: panel.frame.midX, y: point.y)
+        let screenEdge = PetEdge.near(point, pet: panel.frame, visible: visible, display: screen.frame,
+                                     neighbors: NSScreen.screens.filter { $0 != screen }.map(\.frame))
+        let reach = min(22, panel.frame.width * 0.09)
+        let atDisplayBorder = screenEdge != nil
+            && min(point.y - screen.frame.minY, point.x - visible.minX, visible.maxX - point.x) <= reach
+        if !atDisplayBorder {
+            let dock = PetSurface.dock(in: screen.frame, visible: visible)
+                .flatMap { PetSurface.nearTop(of: $0, point: point, pet: panel.frame) ? $0 : nil }
+            let pointerNearDock = dock.map { abs(point.y - $0.maxY) <= reach } ?? false
+            if !pointerNearDock,
+               let window = PetBrowserWindow.near(point, pet: panel.frame, visibleScreens: NSScreen.screens.map(\.visibleFrame)) {
+                placePet(.init(edge: .bottom, surface: .browser(window, follows: false),
+                               anchor: PetEdge.bottom.anchor(at: anchorPoint, in: window.frame)))
+                if !isTest { offerBrowserAttachment(window) }
+                return
+            }
+            if let dock {
+                placePet(.init(edge: .bottom, surface: .dock(displayID), anchor: PetEdge.bottom.anchor(at: anchorPoint, in: dock)))
+                return
+            }
+        }
+        guard let screenEdge else { return }
+        placePet(.init(edge: screenEdge, surface: .screen(displayID), anchor: screenEdge.anchor(at: anchorPoint, in: visible)))
+    }
+
+    private func placePet(_ placement: PetEdgePlacement) {
+        edgePlacement = placement
+        send("setEdge('\(placement.edge.rawValue)')")
+        petGaze = nil
+        layoutEdgePet(size: workbenchState.petSize)
+        status.menu = makeMenu()
+    }
+
+    private func offerBrowserAttachment(_ window: PetBrowserWindow) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, case .browser(let target, false) = self.edgePlacement?.surface, target.id == window.id else { return }
+            let menu = NSMenu()
+            menu.addItem(self.menuItem("吸附到「\(window.name)」上沿", #selector(self.toggleBrowserAttachment)))
+            let stay = menu.addItem(withTitle: "仅停在这里", action: #selector(NSMenu.cancelTracking), keyEquivalent: "")
+            stay.target = menu
+            menu.popUp(positioning: nil, at: NSPoint(x: self.panel.frame.midX, y: self.panel.frame.maxY), in: nil)
+        }
+    }
+
+    @objc private func toggleBrowserAttachment() {
+        guard var placement = edgePlacement, case .browser(let window, let isFollowing) = placement.surface else { return }
+        placement.surface = .browser(window, follows: !isFollowing)
+        edgePlacement = placement
+        browserFollowTimer?.invalidate()
+        browserFollowTimer = nil
+        if !isFollowing {
+            let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+                guard let self, self.workbenchState.visible else { return }
+                self.layoutEdgePet(size: self.workbenchState.petSize)
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            browserFollowTimer = timer
+            layoutEdgePet(size: workbenchState.petSize)
+        }
+        status.menu = makeMenu()
+    }
+
+    private func layoutEdgePet(size: CGFloat) {
+        guard var placement = edgePlacement else { return }
+        let screens = NSScreen.screens
+        let frame: NSRect
+        switch placement.surface {
+        case .screen(let displayID):
+            guard let screen = screens.first(where: { PetEdgePlacement.displayID(for: $0) == displayID }) else { resetPosition(); return }
+            frame = placement.edge.frame(at: placement.anchor, in: screen.visibleFrame, display: screen.frame, petSize: size)
+        case .dock(let displayID):
+            guard let screen = screens.first(where: { PetEdgePlacement.displayID(for: $0) == displayID }),
+                  let dock = PetSurface.dock(in: screen.frame, visible: screen.visibleFrame),
+                  let above = PetSurface.peekFrame(over: dock, anchor: placement.anchor,
+                                                   visibleScreens: [screen.visibleFrame], petSize: size) else { resetPosition(); return }
+            frame = above
+        case .browser(var window, let follows):
+            if follows {
+                switch window.state() {
+                case .visible(let current): window.frame = current
+                case .hidden: return
+                case .closed:
+                    undockPet(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY), keepOnScreen: true)
+                    return
+                }
+            }
+            guard let above = PetSurface.peekFrame(over: window.frame, anchor: placement.anchor,
+                                                   visibleScreens: screens.map(\.visibleFrame), petSize: size) else { return }
+            placement.surface = .browser(window, follows: follows)
+            edgePlacement = placement
+            frame = above
+        }
+        guard panel.frame != frame else { return }
+        panel.setFrame(frame, display: true)
+        layoutReminder()
+    }
+
+    private func clearEdgePlacement() {
+        edgePlacement = nil
+        browserFollowTimer?.invalidate()
+        browserFollowTimer = nil
+        send("setEdge(null)")
+        petGaze = nil
+        status.menu = makeMenu()
+    }
+
+    private func undockPet(at point: NSPoint, keepOnScreen: Bool = false) {
+        clearEdgePlacement()
+        let size = CGFloat(workbenchState.petSize)
+        var origin = NSPoint(x: point.x - size * 0.47, y: point.y - size * 0.64)
+        if keepOnScreen, let screen = panel.screen?.visibleFrame {
+            origin.x = min(max(origin.x, screen.minX), screen.maxX - size)
+            origin.y = min(max(origin.y, screen.minY), screen.maxY - size)
+        }
+        panel.setFrame(NSRect(origin: origin, size: NSSize(width: size, height: size)), display: true)
+        layoutReminder()
     }
 
     private func showPet(_ visible: Bool) {
@@ -2976,15 +3212,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func resizePet(_ size: Double) {
+        UserDefaults.standard.set(size, forKey: "shibaSize")
+        if edgePlacement != nil {
+            layoutEdgePet(size: size)
+            return
+        }
         let corner = NSPoint(x: panel.frame.maxX, y: panel.frame.minY)
         panel.setContentSize(NSSize(width: size, height: size))
         panel.setFrameOrigin(NSPoint(x: corner.x - size, y: corner.y))
-        UserDefaults.standard.set(size, forKey: "shibaSize")
         layoutReminder()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        browserFollowTimer?.invalidate()
         typingRetry?.invalidate()
+        typingActivity.flush()
         gazeTimer?.invalidate()
         weatherTimer?.invalidate()
         music.stop()
@@ -3016,8 +3258,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func recordKey(_ event: NSEvent) {
         if event.modifierFlags.intersection([.command, .control]).isEmpty && !event.isARepeat {
-            send("key()")
+            handleTypingKey()
         }
+    }
+
+    private func handleTypingKey() {
+        if !isTest { typingActivity.recordKey() }
+        send("key()")
     }
 
     @discardableResult
@@ -3039,7 +3286,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 } else if kind == .keyDown,
                           event.flags.intersection([.maskCommand, .maskControl]).isEmpty,
                           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                    pet.send("key()")
+                    pet.handleTypingKey()
                 }
                 return Unmanaged.passUnretained(event)
             }, userInfo: Unmanaged.passUnretained(self).toOpaque()
@@ -3074,6 +3321,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func refreshTypingListener() {
+        typingActivity.refreshToday()
         let allowed = CGPreflightListenEventAccess()
         if !allowed { stopListening() }
         let next: TypingSyncStatus = allowed ? (startListening() ? .active : .unavailable) : .needsPermission
@@ -3088,7 +3336,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
               typingAlert == nil, let window = workbenchWindow else { return }
         let alert = NSAlert()
         alert.messageText = "开启桌宠打字同步"
-        alert.informativeText = "桌宠默认同步打字。允许「输入监控」后，小猫就会跟着你的按键动起来。桌宠仅使用按键时机。"
+        alert.informativeText = "允许「输入监控」后，小猫会跟着你在其他应用里的按键动起来。桌宠只在本机按天保存活跃打字时长和按键次数。"
         alert.addButton(withTitle: "打开输入监控")
         alert.addButton(withTitle: "稍后")
         typingAlert = alert
@@ -3133,7 +3381,16 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         listening.state = music.enabled ? .on : .off
         menu.addItem(menuItem("剪贴板（\(clipboard.items.count)）", #selector(openClipboard)))
         menu.addItem(menuItem("问问桌宠…", #selector(openChat)))
+        let organize = NSMenuItem(title: "整理文件", action: nil, keyEquivalent: "")
+        let organizationOptions = NSMenu(title: "整理文件")
+        organizationOptions.addItem(menuItem("帮我整理桌面", #selector(organizeDesktopFiles)))
+        organizationOptions.addItem(menuItem("帮我整理文件夹…", #selector(chooseFileOrganizationFolder)))
+        organize.submenu = organizationOptions
+        menu.addItem(organize)
         menu.addItem(.separator())
+        if case .browser(let window, let follows) = edgePlacement?.surface {
+            menu.addItem(menuItem(follows ? "解除浏览器吸附" : "吸附到「\(window.name)」上沿", #selector(toggleBrowserAttachment)))
+        }
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
             ("打字同步设置…", #selector(enableTyping)),
@@ -3145,6 +3402,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         return menu
     }
+
+    @objc private func organizeDesktopFiles() { fileOrganizer.organizeDesktop() }
+
+    @objc private func chooseFileOrganizationFolder() { fileOrganizer.chooseFolder() }
 
     private func addFocusItems(to menu: NSMenu) {
         if focus.pinned {
@@ -3248,6 +3509,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     @objc private func resetPosition() {
         guard let screen = NSScreen.main?.visibleFrame else { return }
+        if edgePlacement != nil {
+            clearEdgePlacement()
+            let size = workbenchState.petSize
+            panel.setContentSize(NSSize(width: size, height: size))
+        }
         // Leave room for the wider focus card so it is not clamped at rest and
         // can keep a fixed offset while the pet is dragged.
         let petWidth = panel.frame.width

@@ -71,6 +71,32 @@ export function createTypingArmPainter(orange: ImageData, colored: ImageData) {
     return image;
   };
 }
+function isFrontPawOutline(data: Uint8ClampedArray, offset: number) {
+  return !!data[offset + 3] && data[offset]! < 140;
+}
+
+export function thickenPeekPawOutline(paw: ImageData, guide: ImageData) {
+  const { data, width, height } = paw;
+  // Add one step of the original 2px grid inward. The guide has no line
+  // across the flat keyboard cut, which becomes the edge of the screen.
+  const steps = [[0, -2], [-2, 0], [2, 0], [0, 2]] as const;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      if (!data[offset + 3] || isFrontPawOutline(guide.data, offset)) continue;
+      for (const [dx, dy] of steps) {
+        const sx = x + dx, sy = y + dy;
+        if (sx < 0 || sx >= width || sy < 0 || sy >= height) continue;
+        const sample = (sy * width + sx) * 4;
+        if (!isFrontPawOutline(guide.data, sample)) continue;
+        // Extend the already recolored ink, so dark fur is never mistaken for linework.
+        data.set(data.subarray(sample, sample + 3), offset);
+        break;
+      }
+    }
+  }
+}
+
 export function recolorFrontPaws(paws: ImageData, body: ImageData, darkOutline: boolean) {
   const { data, width } = paws;
   // Sample the toe fur on either side of the idle body. The two paws can
@@ -80,7 +106,7 @@ export function recolorFrontPaws(paws: ImageData, body: ImageData, darkOutline: 
   const referenceFill = [253, 252, 250];
   for (let offset = 0; offset < data.length; offset += 4) {
     if (!data[offset + 3]) continue;
-    if (data[offset]! < 140) {
+    if (isFrontPawOutline(data, offset)) {
       if (darkOutline) data.set([32, 27, 30], offset);
       continue;
     }

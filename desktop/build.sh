@@ -43,6 +43,9 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleVersion</key><string>${build_number}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSLocationUsageDescription</key><string>用于获取所在城市，给出穿衣与天气提醒。</string>
+<key>NSDesktopFolderUsageDescription</key><string>用于预览并整理桌面上由你确认的文件。</string>
+<key>NSDownloadsFolderUsageDescription</key><string>用于预览并整理你选定的下载文件夹。</string>
+<key>NSDocumentsFolderUsageDescription</key><string>用于预览并整理你选定的文稿文件夹。</string>
 </dict></plist>
 PLIST
 
@@ -62,7 +65,10 @@ fi
 
 swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/main.swift \
+  desktop/Sources/PetEdge.swift \
+  desktop/Sources/PetSurface.swift \
   desktop/Sources/Workbench.swift \
+  desktop/Sources/TypingActivity.swift \
   desktop/Sources/Reminder.swift \
   desktop/Sources/Focus.swift \
   desktop/Sources/Weather.swift \
@@ -74,6 +80,8 @@ swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/Trash.swift \
   desktop/Sources/QuickBar.swift \
   desktop/Sources/FileActions.swift \
+  desktop/Sources/FileOrganizer.swift \
+  desktop/Sources/FileOrganizerWindow.swift \
   desktop/Sources/PixelEditor.swift \
   desktop/Sources/PixelUI.swift \
   -lsqlite3 \

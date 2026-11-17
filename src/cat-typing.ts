@@ -1,8 +1,7 @@
 import { frontTyping, typingAtlases } from './pet-assets';
 
-export type TypingAnimation = 'front-v5' | 'front-v4' | 'front-v3' | 'reference-v2' | 'reference' | 'shared' | 'legacy';
-
-export const currentTypingAnimation = 'front-v5' as const;
+export const currentTypingAnimation = 'front-v6' as const;
+export type TypingAnimation = typeof currentTypingAnimation | 'front-v5' | 'front-v4' | 'front-v3' | 'reference-v2' | 'reference' | 'shared' | 'legacy';
 export const catTypingFrameCount = frontTyping.frames;
 export const frenzyRedFrame = 30;
 export const frenzySteamLoopStart = 35;
@@ -16,7 +15,7 @@ export function isFrontTyping(animation: TypingAnimation) {
 }
 
 export function usesFallingTyping(animation: TypingAnimation) {
-  return animation === 'front-v4' || animation === 'front-v5';
+  return animation === 'front-v4' || animation === 'front-v5' || animation === 'front-v6';
 }
 
 export function catTypingFrameCountFor(animation: TypingAnimation = currentTypingAnimation) {

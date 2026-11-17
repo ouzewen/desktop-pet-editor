@@ -1,5 +1,5 @@
-import { catCoatColors, nativeCatFur, type CatRenderConfig } from './cat';
-import { bodyPatternChannel } from './cat-body-pattern';
+import { catKeepsBreedPigment, catPatternFurColors, nativeCatFur, type CatRenderConfig } from './cat';
+import { bodyPatternChannel, breedPatternShade, shadeBreedPattern } from './cat-body-pattern';
 
 type RGB = readonly [number, number, number];
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
@@ -20,12 +20,15 @@ function mix(from: RGB, to: RGB, amount: number): RGB {
 // The shared Aseprite cels use the orange shadow, fur and highlight tones.
 // Keep their silhouette and shading while assigning the chosen coat pigments.
 export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig) {
-  const colors = config.coat === 'native' ? nativeCatFur[config.palette] : catCoatColors(config.coat);
+  const selected = config.tailPattern ?? config.bodyPattern;
+  const originalPattern = selected === 'native';
+  const keepPigment = config.tailPattern !== 'plain' && catKeepsBreedPigment(config);
+  const colors = (originalPattern || keepPigment) && config.coat === 'native'
+    ? nativeCatFur[config.palette] : catPatternFurColors(config);
   let base = rgb(colors[0]);
   const marking = rgb(colors[1]), pale = rgb(colors[2]);
-  const originalPattern = config.bodyPattern === 'native';
-  const point = originalPattern && (config.palette === 'CC04' || config.palette === 'CC08');
-  const calico = originalPattern && config.palette === 'CC03';
+  const point = (originalPattern || keepPigment) && (config.palette === 'CC04' || config.palette === 'CC08');
+  const calico = (originalPattern || keepPigment) && config.palette === 'CC03';
   const outline: RGB = config.palette === 'CC02' ? [32, 27, 30] : [68, 36, 22];
   let shadow = mix(base, marking, 0.8);
   let light = mix(base, pale, 0.3);
@@ -41,10 +44,11 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
     shadow = [191, 115, 67];
     light = [247, 197, 147];
   }
-  const pattern = originalPattern
+  const pattern = selected === 'native'
     ? (['CC01', 'CC06', 'CC07'].includes(config.palette) ? 'mackerel' : 'plain')
-    : config.bodyPattern;
+    : selected;
   const channel = pattern === 'plain' ? undefined : bodyPatternChannel[pattern];
+  const pigmentShade = keepPigment && channel !== undefined ? breedPatternShade(config) : undefined;
   const { data, width, height } = image;
   let top = height, bottom = 0;
   for (let offset = 3; offset < data.length; offset += 4) {
@@ -73,10 +77,14 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
           color = mix(dark, light, 0.08 * clamp((green - 138) / 58));
         }
       }
-      if (channel !== undefined) color = mix(color, marking, patterns[offset + channel]! / 255);
+      if (channel !== undefined && !pigmentShade) color = mix(color, marking, patterns[offset + channel]! / 255);
     }
     data[offset] = color[0];
     data[offset + 1] = color[1];
     data[offset + 2] = color[2];
+    if (pigmentShade && channel !== undefined && green >= 65) {
+      const ink = patterns[offset + channel]! / 255;
+      if (ink) shadeBreedPattern(data, offset, pigmentShade, ink);
+    }
   }
 }
