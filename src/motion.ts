@@ -1,9 +1,9 @@
 import { frameCount, render, type Action, type Gaze, type TypingMode } from './render';
-import { usesOrangeCatArt, type PetConfig } from './cat';
+import type { PetConfig } from './cat';
 import type { CatCustomization } from './cat-custom';
-import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation } from './cat-typing';
+import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
 
-const orangeTypingTimeout = 500;
+const catTypingTimeout = 1001;
 
 /** Drive the same sprite with editor previews or native pointer/keyboard events. */
 export class Motion {
@@ -13,6 +13,7 @@ export class Motion {
   private lastKey = -Infinity;
   private typingFrame = 0;
   private typingMode: TypingMode = 'gentle';
+  private frenzyStarted = 0;
   private typingFrameTick = 0;
   private typingPhase = 0;
   private recentKeys: number[] = [];
@@ -80,7 +81,7 @@ export class Motion {
     if (this.pressing) return;
     const config = this.config;
     if (config.frame === 'CAT') {
-      if (now - this.lastKey >= (usesOrangeCatArt(config) ? orangeTypingTimeout : 1001)) {
+      if (now - this.lastKey >= catTypingTimeout) {
         this.typingFrameTick = now;
         this.typingPhase = 0;
         this.typingMode = 'gentle';
@@ -91,15 +92,16 @@ export class Motion {
       }
       this.recentKeys = this.recentKeys.filter(time => now - time < 1000);
       this.recentKeys.push(now);
-      this.selectTypingMode();
+      this.selectTypingMode(now);
     } else {
       this.typingFrame = now - this.lastKey > 520 ? 0 : (this.typingFrame + 1) % 4;
     }
     this.lastKey = now;
   }
 
-  private selectTypingMode() {
+  private selectTypingMode(now: number) {
     const rate = this.recentKeys.length;
+    const previous = this.typingMode;
     // Separate entry and exit thresholds keep nearby typing rates from
     // flickering between the open-eyed and effort expressions.
     if (rate <= 2) this.typingMode = 'gentle';
@@ -107,6 +109,7 @@ export class Motion {
     else if (this.typingMode === 'frenzy') {
       if (rate <= 6) this.typingMode = 'fast';
     } else if (rate >= 5) this.typingMode = 'fast';
+    if (previous !== 'frenzy' && this.typingMode === 'frenzy') this.frenzyStarted = now;
   }
 
   private advanceCatTyping(now: number) {
@@ -117,7 +120,7 @@ export class Motion {
     this.typingPhase = (this.typingPhase + Math.max(0, now - this.typingFrameTick) / interval) % catTypingFrameCount;
     this.typingFrameTick = now;
     this.recentKeys = this.recentKeys.filter(time => now - time < 1000);
-    this.selectTypingMode();
+    this.selectTypingMode(now);
     return Math.floor(this.typingPhase);
   }
 
@@ -126,7 +129,6 @@ export class Motion {
     let frame: number;
     const config = this.config;
     const cat = config.frame === 'CAT';
-    const orange = usesOrangeCatArt(config);
     if (this.pressing && cat) {
       frame = 0;
       this.stretch += (this.stretchTarget - this.stretch) * 0.36;
@@ -134,7 +136,7 @@ export class Motion {
     } else if (this.pressing) {
       action = this.dragAction ?? 'sit';
       frame = this.dragAction ? Math.floor(this.dragDistance / 10) % frameCount(config, action) : 0;
-    } else if (now - this.lastKey < (orange ? orangeTypingTimeout : cat ? 1001 : 521)) {
+    } else if (now - this.lastKey < (cat ? catTypingTimeout : 521)) {
       action = 'typing';
       if (cat) {
         frame = this.advanceCatTyping(now);
@@ -150,10 +152,12 @@ export class Motion {
         ? this.releaseStretch * Math.cos(elapsed / 53) * Math.exp(-elapsed / 150) : 0;
     }
     const stretch = cat && action === 'sit' ? Math.round(this.stretch * 32) / 32 : 0;
-    const pose = `${action}/${frame}/${this.typingMode}/${stretch}`;
+    const frenzyHeatFrame = cat && action === 'typing' && this.typingMode === 'frenzy'
+      ? frenzyHeatFrameAt(now - this.frenzyStarted) : undefined;
+    const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}`;
     if (pose !== this.rendered) {
       render(this.canvas, config, action, frame, this.gaze, {
-        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, stretch, custom: this.custom,
+        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, custom: this.custom,
       });
       this.rendered = pose;
     }

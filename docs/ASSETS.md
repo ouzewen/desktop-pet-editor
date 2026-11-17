@@ -10,7 +10,7 @@
 
 ```sh
 npm run assets:list
-npm run assets:list -- cat.typing.reference-v2.fast
+npm run assets:list -- cat.typing.front-v4.frenzy
 npm run assets:check
 npm run assets:export -- cat.ear.folded --out /tmp/pet-review-assets
 ```
@@ -88,7 +88,7 @@ public/assets/
 额头区域沿两耳之间的头型用 2 px 台阶收边，替换耳型的实心形状遮罩会保护耳折痕和内耳。三花、暹罗和布偶没有独立烘焙的额头条纹；使用原生毛皮时保留其连续的品种色区，只叠加所选额纹，避免把黑白块或重点色当成额纹清除。选择统一毛皮时才统一额头底毛；额纹图案与配色仍保持独立。
 
 
-新的像素编辑底稿记录 `markingLayout: shared`；缺失此字段的旧存档按 `legacy` 的整脸贴花与仅身体换纹来还原底稿，再提取用户修改，避免把旧白颊或旧脸纹误判为用户绘画。
+无额纹预览用 `markingLayout: clean-forehead` 记录两侧耳根的局部描边清理。其他当前额纹使用 `shared`。已有 `shared` 底稿按原合成还原，缺字段的历史存档按 `legacy` 还原整脸贴花及仅身体换纹，再提取用户修改。
 
 ### 正面鼻子与嘴巴
 
@@ -101,42 +101,32 @@ public/assets/
 
 ### 共用低抬爪打字动画
 
-八个品种默认使用 `reference-v2` 三档动画，复用已确认的 Aseprite MCP 32 帧慢打稿。三档使用完全相同的低抬爪轨迹，以播放时长区分速度；上半圈爪边略加粗，下半圈保留，固定前臂虎斑与移动手掌独立。三档保持待机头部尺寸与坐标、肩部和电脑位置，不进入面部。`src/cat-typing-paint.ts` 按当前品种、毛色和花纹给共用动作着色。
+八个品种使用 `front-v5` 正视打字。身体、花纹、脚和尾巴取当前待机形象，爪子随当前毛色变化。慢档和特别快档的字母先向两侧弹起，再落到电脑底边的高度，触地后轻弹并散开。
 
-| 工作台动作 | 模式 / 源文件 | 循环时长 | 表情与汗水 |
-| --- | --- | --- | --- |
-| 慢敲键盘 | `gentle` / `gentle.aseprite` | 2240 ms（70 ms/帧） | 微笑 `CN08` |
-| 比较快 | `fast` / `fast.aseprite` | 1280 ms（40 ms/帧） | 睁眼、严肃嘴 `CN06`、汗水 |
-| 特别快 | `frenzy` / `frenzy.aseprite` | 640 ms（20 ms/帧） | 挤眼、奔驰嘴 `CN07`、大汗珠与甩汗 |
+| 工作台动作 | 模式 | 每帧 / 整圈 | 左右落爪间隔 / 单爪遮挡时长 | 字母与表情 |
+| --- | --- | --- | --- | --- |
+| 慢敲键盘 | `gentle` | 70 ms / 4480 ms | 560 ms / 280 ms | 每次落爪弹出一个字母，微笑 `CN08` |
+| 比较快 | `fast` | 40 ms / 2560 ms | 320 ms / 160 ms | 沿用原字母轨迹，睁眼、严肃嘴 `CN06`、汗水 |
+| 特别快 | `frenzy` | 20 ms / 1280 ms | 160 ms / 120 ms | 双侧密集字母，电脑逐渐升温，变红后持续冒汽，全程挤眼、奔驰嘴 `CN07` |
 
-三份 320×320 源文件保存在 `art/cat-shared/typing-v2/`，每份 32 帧。`body_reference`、`head_reference`、`laptop_reference` 是锁定参考。`torso_base`、`forearm_texture_restore`、`forearm_edge_cleanup` 保存固定前臂，`paw_left`、`paw_right`、`paw_upper_outline` 保存动作，`paws_mask` 从新爪形派生。旧 12 帧汗水按相位映射到 32 帧，挤眼时隐藏眼睛与高光。嘴形由动作档位在渲染时选取，打字结束恢复外观选中的嘴形。
+`art/cat-shared/typing-front.aseprite` 提供正视电脑、慢档和比较快共用的 16 帧爪部图集、比较快档字母，以及旧 `front-v3` 底稿。`art/cat-shared/typing-gentle-falling.aseprite` 和 `art/cat-shared/typing-frenzy.aseprite` 分别是 320×320、64 帧的慢档和特别快档分层源稿。特别快档额外导出爪部停顿、电脑热色、蒸汽与敲击火花、汗水和旧版挤眼嘴形。新版特别快档直接复用已有的挤眼图层及奔驰嘴。爪部透明度用于定位左右爪的自定义笔迹。
 
-真实键盘按最近一秒的输入频率选择档位：达到 5 次进入比较快，达到 9 次进入特别快；特别快降到 6 次退出，比较快降到 2 次退出，避免在阈值附近来回跳动。切换档位保留动作进度，停止打字沿用原有待机超时。
+用 `npm run assets:export -- cat.typing.front-v4.gentle` 或 `npm run assets:export -- cat.typing.front-v4.frenzy` 更新 `cat/hd/typing-falling/`。慢档和特别快档的字母与落地粒子合在各自的透明图集里，渲染时绘制在猫和电脑后方。特别快档的电脑从入档开始独立升温，约 600 毫秒后保持红色；蒸汽继续循环。热色随电脑一起应用用户笔迹或擦除。预览以 `frenzyHeatFrame` 保存热状态；旧预览省略此字段，仍以当时的热色和蒸汽重建底稿。
 
-共用手臂和爪子遮罩从慢打源稿导出，素材组为 `cat.typing.reference-v2.shared`。`cat.typing.reference-v2.fast` 和 `cat.typing.reference-v2.frenzy` 分别导出各档的表情和汗水。旧分档嘴形 `mouth_smile.png`、`mouth_flat.png`、`mouth_region.png` 用于重建历史打字存档，新预览记录 `typingMouthVersion: shared`。
+真实键盘按最近一秒的输入频率选择档位，达到 5 次进入比较快，达到 9 次进入特别快；特别快降到 6 次退出，比较快降到 2 次退出。切档保留动作相位。猫停打约 1 秒后回到待机。
 
+#### 历史正视和侧面动作
 
-共导出 10 张透明 PNG。`arms.png` 和 `paws_mask.png` 供三档共用，和独立的 `sweat_fast.png`、`sweat_frenzy.png` 同为 320×10240 的 32 帧纵向图集。表情零件 `mouth_smile.png`、`mouth_flat.png`、`mouth_region.png` 和 `effort_eyes.png` 均为 320×320 单帧图层。前臂图集包含固定胸口与肩部；头部、尾巴和电脑继续使用既有可组合图层。
-
-`gentle.aseprite` 中的 `forearm_ink_cleanup` 和 `mouth_ink_cleanup` 分别保存胸口与前臂、嘴边的局部补色。两张静态补片由三档共用，分别放在活动前爪与独立嘴鼻下方。特别快档按完整睁眼图层清除旧头图残留的眼圈，再叠加挤眼图层。新预览记录 `typingInkVersion: clean-eyes`，旧存档按对应版本的底图提取笔迹。
-
-工作台预览记录 `typingAnimation: reference-v2` 并使用 `aligned` 坐标。旧 `reference` 存档继续从 `typing-reference/` 读取原 12 帧图集，旧 `shared` 存档使用原 12 帧轨迹，缺字段的历史打字档按 `legacy` 四帧重建。加载这些旧档时，先还原对应版本底稿，再提取笔迹并叠加当前动作。`--self-test` 检查 32 帧循环、三档同手轨迹、固定纹理、速度切换、表情换装，以及历史帧笔迹迁移。
-
-当前电脑使用独立的 `art/cat-shared/typing-laptop.aseprite`，直接在最终 320×320 坐标绘制。`laptop` 是可编辑层，身体、头部、前爪参考层锁定；三份动作源稿中的 `laptop_reference` 同步引用这版电脑。外轮廓统一为不透明 `#442416`，清理了旧底稿的灰白杂边和右侧金属支架杂色，中央面板与爪印保留。所有品种共用，毛色、毛纹与尾型不参与电脑换色。
-
-
-这张电脑 PNG 在上述 8 张动作图之外，共计 9 张。新自定义底稿记录 `laptopVersion: clean`；没有此字段的旧底稿按 `original` 重建，包括早期 `reference` 存档。原两张电脑 PNG 保留用于准确提取旧图上的用户笔迹，避免将旧杂边带回新版。
-
-原橘猫电脑层里另有 84 个尾根连接像素。当前渲染将这片毛色精确分离到身体底层，再叠加干净电脑，保留原尾的接缝；换毛色、换纹和自定义笔迹仍作用于这片连接。源稿用锁定的 `tail_join_reference` 记录原像素，动画参考层显示完整合成。
+工作台新预览记录 `typingAnimation: front-v5`。旧 `front-v4` 使用原先会从睁眼微笑切换到挤眼的底稿。历史 `front-v3` 继续从原正视资源还原，包括旧字母轨迹及特别快档的四帧遮挡。旧的 `reference-v2` 使用 `art/cat-shared/typing-v2/` 下的 32 帧源稿，`cat.typing.reference-v2.shared` 导出共用前臂、爪子遮罩及补片，其他两组导出表情和汗水。侧面电脑由 `cat.typing.laptop` 导出，用于重建历史存档的 `laptopVersion: clean`。更早的存档按原图还原，包括原橘猫电脑层中曾经与电脑合绘的尾根连接像素。旧档按相应版本重建底稿后再提取笔迹。
 
 #### 历史 shared 动画与效果源稿
 
-历史 `shared` 的温柔打字和疯狂打字共用 12 帧轨迹，由原温柔打字第 0 帧左爪、第 2 帧右爪生成整数像素中间姿势，循环为 1000 ms 与 360 ms。之后的 `reference` 为三档 12 帧手绘图集，周期 1000/600/360ms。这两代均保留用于旧底稿重建；当前默认动作使用上述 `reference-v2` 图集。
+历史 `shared` 的温柔打字和疯狂打字共用 12 帧轨迹，由原温柔打字第 0 帧左爪、第 2 帧右爪生成整数像素中间姿势，循环为 1000 ms 与 360 ms。之后的 `reference` 为三档 12 帧手绘图集，周期 1000/600/360ms。这两代均保留用于旧底稿重建。
 
 历史效果源稿 `art/cat-shared/typing-effects.aseprite` 保存 `effort_eyes`、`sweat` 和橘猫旧眼睛的底毛补片 `orange_eye_patch`，身体与头部是锁定参考层。四帧分别是休息、出汗、下落、消退；导出一张挤眼、三张汗水、一张补片，共五张透明 PNG。
 
 
-部分早期品种的头底仍含深棕色圆瞳，渲染器只在努力表情时利用现有眼孔遮罩识别、补齐为邻近原毛色，并缓存结果；正常表情和旧存档继续使用原头底。新增品种宜直接保存不含眼睛的干净头底，眼睛、虹膜、高光保持独立，便于复用表情。
+部分早期品种的头底仍含深棕色圆瞳与旧眼圈残留。当前版本先识别需要清理的头底，再按完整睁眼图层的轮廓补齐邻近毛色，缓存干净的挤眼底图。各历史版本按保存时的底图还原。新增品种宜使用干净头底，并将眼睛、虹膜和高光分层，便于复用表情。
 
 ### 橘猫打字原始底稿
 
@@ -147,7 +137,7 @@ public/assets/
 两个历史导出组为 `cat.orange.typing.gentle` 和 `cat.orange.typing.fast`。
 
 
-这些原始四帧保留用于还原 `legacy` 四帧、`shared` 12 帧的旧像素编辑存档，并提供复用的身体与电脑图层；当前 `reference-v2` 动画不再播放原来的高抬手动作。
+这些原始四帧保留用于还原 `legacy` 四帧、`shared` 12 帧的旧像素编辑存档，并提供历史版本的身体与电脑图层。
 
 ### 黑猫、三花猫与暹罗猫
 

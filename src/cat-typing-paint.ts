@@ -71,3 +71,23 @@ export function createTypingArmPainter(orange: ImageData, colored: ImageData) {
     return image;
   };
 }
+export function recolorFrontPaws(paws: ImageData, body: ImageData, darkOutline: boolean) {
+  const { data, width } = paws;
+  // Sample the toe fur on either side of the idle body. The two paws can
+  // have different pigments, and their color must stay fixed as they lift.
+  const colorAt = (x: number) => body.data.subarray((268 * width + x) * 4, (268 * width + x) * 4 + 3);
+  const left = colorAt(123), right = colorAt(178);
+  const referenceFill = [253, 252, 250];
+  for (let offset = 0; offset < data.length; offset += 4) {
+    if (!data[offset + 3]) continue;
+    if (data[offset]! < 140) {
+      if (darkOutline) data.set([32, 27, 30], offset);
+      continue;
+    }
+    const color = offset / 4 % width < width / 2 ? left : right;
+    for (let channel = 0; channel < 3; channel++) {
+      data[offset + channel] = Math.round(data[offset + channel]! * color[channel]! / referenceFill[channel]!);
+    }
+  }
+  return paws;
+}

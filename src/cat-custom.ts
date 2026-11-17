@@ -1,8 +1,8 @@
 import { catPresets, readPetConfig, usesOrangeCatArt, type CatConfig, type PetConfig } from './cat';
-import { catTypingFrameCountFor, currentTypingAnimation, type TypingAnimation } from './cat-typing';
+import { catTypingFrameCountFor, currentTypingAnimation, frenzySteamLoopStart, isFrontTyping, usesFallingTyping, type TypingAnimation } from './cat-typing';
 import { captureCatInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
-import { atlasNoseTips, faceTiles, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
-import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
+import { atlasNoseTips, faceTiles, frontTypingEffects, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
+import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catOpenEyeCoverage, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
 
 const size = 320;
 const straight: Gaze = { x: 0, y: 0 };
@@ -13,6 +13,7 @@ export type CatEditSource = {
   frame: number;
   typingMode: TypingMode;
   typingAnimation: TypingAnimation;
+  frenzyHeatFrame?: number;
   typingInkVersion?: TypingInkVersion;
   typingMouthVersion?: TypingMouthVersion;
   tailArtVersion?: TailArtVersion;
@@ -46,15 +47,15 @@ function readSource(value: unknown): CatEditSource | undefined {
   const record = value as Partial<CatEditSource>;
   try {
     const config = readPetConfig(record.config, { preserveLegacyNose: true, preserveLegacyMouth: true, preserveLegacyTail: true });
-    const { action, frame, typingMode, gaze } = record;
+    const { action, frame, typingMode, frenzyHeatFrame, gaze } = record;
     const typingAnimation = record.typingAnimation ?? (action === 'typing' ? 'legacy' : 'shared');
     const typingInkVersion = record.typingInkVersion ?? 'original';
     const typingMouthVersion = record.typingMouthVersion ?? 'legacy';
     const tailArtVersion = record.tailArtVersion ?? 'initial';
-    const referenceAnimation = typingAnimation === 'reference' || typingAnimation === 'reference-v2';
+    const referenceAnimation = typingAnimation === 'reference' || typingAnimation === 'reference-v2' || isFrontTyping(typingAnimation);
     const typingLayout = record.typingLayout ?? (action === 'typing' && !referenceAnimation ? 'legacy' : 'aligned');
     // Even the first reference-animation saves used the original laptop.
-    const laptopVersion = record.laptopVersion ?? 'original';
+    const laptopVersion = record.laptopVersion ?? (isFrontTyping(typingAnimation) ? 'clean' : 'original');
     // Older saved images have the fixed source ink, even when their fur was recolored.
     const outlineVersion = record.outlineVersion ?? 'original';
     const earLayout = record.earLayout ?? 'legacy';
@@ -63,6 +64,8 @@ function readSource(value: unknown): CatEditSource | undefined {
       || frame === undefined || !Number.isInteger(frame) || frame < 0
       || frame >= (action === 'typing' ? catTypingFrameCountFor(typingAnimation) : frameCount(config, action))
       || (typingMode !== 'gentle' && typingMode !== 'fast' && typingMode !== 'frenzy') || !gaze
+      || (frenzyHeatFrame !== undefined && (action !== 'typing' || typingMode !== 'frenzy' || !usesFallingTyping(typingAnimation)
+        || !Number.isInteger(frenzyHeatFrame) || frenzyHeatFrame < 0 || frenzyHeatFrame > frenzySteamLoopStart))
       || (typingLayout !== 'aligned' && typingLayout !== 'legacy')
       || (laptopVersion !== 'clean' && laptopVersion !== 'original')
       || (typingInkVersion !== currentTypingInkVersion && typingInkVersion !== 'clean' && typingInkVersion !== 'original')
@@ -82,7 +85,7 @@ function readSource(value: unknown): CatEditSource | undefined {
       || Math.abs(gaze.y) > 2) return;
     // Saves from before the nose cleanup have no flag and used the outlined art.
     const legacyNoseOutline = hasLegacyNoseOutline(config) && record.legacyNoseOutline !== false;
-    return { config, action, frame, typingMode, typingAnimation, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
+    return { config, action, frame, typingMode, typingAnimation, frenzyHeatFrame, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
       earLayout, markingLayout, legacyNoseOutline, gaze };
   } catch {
     return;
@@ -140,13 +143,13 @@ function savedGlints(edited: Uint32Array, original: Uint32Array, aperture: Uint3
   return { fixed, hide };
 }
 
-function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource) {
+function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource, custom?: CatCustomization) {
   render(layer.canvas, source.config, source.action, source.frame, source.gaze, {
-    typingMode: source.typingMode, typingAnimation: source.typingAnimation, typingLayout: source.typingLayout,
+    typingMode: source.typingMode, typingAnimation: source.typingAnimation, frenzyHeatFrame: source.frenzyHeatFrame, typingLayout: source.typingLayout,
     typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion, tailArtVersion: source.tailArtVersion,
     laptopVersion: source.laptopVersion, outlineVersion: source.outlineVersion,
     earLayout: source.earLayout, markingLayout: source.markingLayout,
-    legacyNoseOutline: source.legacyNoseOutline,
+    legacyNoseOutline: source.legacyNoseOutline, custom,
   });
   return pixels(layer.ctx);
 }
@@ -161,8 +164,13 @@ export function seedCatInkForEditor(
   preview: HTMLCanvasElement, source: CatEditSource, custom: CatCustomization,
 ): CatInkDocument {
   if (custom.ink) return custom.ink;
-  const edited = pixels(preview.getContext('2d')!);
-  const clean = drawSource(makeLayer(size), source);
+  const layer = makeLayer(size);
+  // A legacy static reflection belongs to the open-eye renderer. Use the
+  // same filtered paint as tracking and let the current eye draw its glint.
+  const edited = custom.following && source.gaze.space !== 'pointer'
+    ? drawSource(layer, source, { ...custom, paint: custom.following, fixedGlints: [false, false] })
+    : pixels(preview.getContext('2d')!);
+  const clean = drawSource(layer, source);
   const changes: CatInkChange[] = [];
   for (let i = 0; i < edited.length; i++) {
     if (edited[i] !== clean[i]) changes.push([i, argb(edited[i]!)]);
@@ -213,8 +221,12 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
   ];
   // Keep every saved animation's own frame count. Old reference PNGs still
   // need their original twelve poses, rather than wrapping through v2's 32.
-  const referenceTypingPoses = (['reference-v2', 'reference'] as const).flatMap(typingAnimation =>
-    (['gentle', 'fast', 'frenzy'] as const).flatMap(typingMode =>
+  const referenceTypingPoses = ([currentTypingAnimation, 'front-v4', 'front-v3', 'reference-v2', 'reference'] as const).flatMap(typingAnimation =>
+    (['gentle', 'fast', 'frenzy'] as const).filter(mode => {
+      // These versions share their unaffected speeds with the current one.
+      if (typingAnimation === 'front-v4') return mode === 'frenzy';
+      return typingAnimation !== 'front-v3' || mode !== 'fast';
+    }).flatMap(typingMode =>
       Array.from({ length: catTypingFrameCountFor(typingAnimation) }, (_, frame) =>
         ({ frame, typingMode, typingLayout: 'aligned', typingAnimation } as const))));
   const currentTypingPoses = [...referenceTypingPoses, ...oldTypingPoses];
@@ -231,6 +243,14 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
   const detailTop = Math.floor(legacyHead.y + top * legacyHead.scale);
   const detailRight = Math.ceil(legacyHead.x + (left + width) * legacyHead.scale);
   for (let y = detailTop; y < top + height; y++) detailRegion.fill(1, y * size + left, y * size + detailRight);
+  // A PNG can contain a hot panel at any paw phase. Prioritize geometry
+  // when identifying the pose, then match the laptop heat and steam cels.
+  const thermalRegion = new Uint8Array(edited.length);
+  for (const bounds of [frontTypingEffects.heat, frontTypingEffects.steam]) {
+    for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+      thermalRegion.fill(1, y * size + bounds.x, y * size + bounds.x + bounds.width);
+    }
+  }
   let best = Infinity;
   for (const config of configs) {
     // Native coats retain their original pixels in either version.
@@ -246,7 +266,7 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
           : markingLayout === 'legacy' ? oldTypingPoses : currentTypingPoses;
         for (const pose of poses) {
           const versions: readonly LaptopVersion[] = action === 'sit' ? ['clean']
-            : pose.typingAnimation === 'reference-v2' ? ['clean']
+            : pose.typingAnimation === 'reference-v2' || isFrontTyping(pose.typingAnimation) ? ['clean']
               : pose.typingAnimation === 'reference' ? ['clean', 'original'] : ['original'];
           for (const laptopVersion of versions) {
             for (const outlineVersion of outlineVersions) {
@@ -257,7 +277,7 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
               let difference = 0, detailDifference = 0;
               for (let index = 0; index < edited.length; index += 5) {
                 if (reference[index] === edited[index]) continue;
-                if (detailRegion[index]) detailDifference++;
+                if (detailRegion[index] || (thermalRegion[index] && (reference[index]! >>> 24) === (edited[index]! >>> 24))) detailDifference++;
                 else difference++;
               }
               const score = difference * edited.length + detailDifference;
@@ -294,6 +314,11 @@ function inferHistoricalDetails(edited: Uint32Array, layer: ReturnType<typeof ma
     }
   }
   if (source.markingLayout === 'clean-forehead') consider({ ...source, markingLayout: 'shared' });
+  if (source.action === 'typing' && usesFallingTyping(source.typingAnimation) && source.typingMode === 'frenzy') {
+    for (let frenzyHeatFrame = 0; frenzyHeatFrame <= frenzySteamLoopStart; frenzyHeatFrame++) {
+      consider({ ...source, frenzyHeatFrame });
+    }
+  }
   for (const nose of Object.keys(atlasNoseTips) as (keyof typeof atlasNoseTips)[]) {
     const config = { ...source.config, nose, noseColor: 'natural' } as const;
     consider({ ...source, config, legacyNoseOutline: false });
@@ -310,8 +335,8 @@ function inferHistoricalDetails(edited: Uint32Array, layer: ReturnType<typeof ma
   }
   // The shared mouth can cover older cleanup pixels, so resolve it before
   // matching a historical typing baseline.
-  if (source.action === 'typing' && source.typingAnimation === currentTypingAnimation) {
-    if (usesOrangeCatArt(source.config)) consider({ ...source, typingInkVersion: 'original' });
+  if (source.action === 'typing' && (source.typingAnimation === 'reference-v2' || isFrontTyping(source.typingAnimation))) {
+    if (usesOrangeCatArt(source.config) && source.typingAnimation === 'reference-v2') consider({ ...source, typingInkVersion: 'original' });
     else if (source.typingMode === 'frenzy') consider({ ...source, typingInkVersion: 'clean' });
   }
   for (const tail of Object.keys(retiredTailStyles) as (keyof typeof retiredTailStyles)[]) {
@@ -373,29 +398,38 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   const edited = pixels(layer.ctx);
   const source = readSource(reference) ?? inferSource(edited, layer, fallback);
   const original = drawSource(layer, source);
-  layer.ctx.resetTransform();
-  layer.ctx.clearRect(0, 0, size, size);
   const typing = source.action === 'typing';
   const placement = catHeadPlacement(typing, source.frame, source.typingLayout);
-  layer.ctx.translate(placement.x, placement.y);
-  layer.ctx.scale(placement.scale, placement.scale);
-  drawCatHead(layer.ctx, source.config, typing, source.frame, source.gaze,
-    { scale: placement.scale, earLayout: source.earLayout, markingLayout: source.markingLayout,
-      outlineVersion: source.outlineVersion, legacyNoseOutline: source.legacyNoseOutline,
-      typingMode: source.typingMode, typingAnimation: source.typingAnimation,
-      typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion });
-  const headPixels = pixels(layer.ctx);
-  const aperture = catGlintAperture(source.config, typing, source.frame, {
-    typingMode: source.typingMode, typingAnimation: source.typingAnimation,
-  });
-  if (aperture) {
+  function placeHead() {
     layer.ctx.resetTransform();
     layer.ctx.clearRect(0, 0, size, size);
     layer.ctx.translate(placement.x, placement.y);
     layer.ctx.scale(placement.scale, placement.scale);
-    layer.ctx.drawImage(aperture, 0, 0);
   }
-  const reflections = savedGlints(edited, original, aperture && pixels(layer.ctx));
+  const headOptions = {
+    scale: placement.scale, earLayout: source.earLayout, markingLayout: source.markingLayout,
+    outlineVersion: source.outlineVersion, legacyNoseOutline: source.legacyNoseOutline,
+    typingMode: source.typingMode, typingAnimation: source.typingAnimation,
+    typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion,
+  };
+  placeHead();
+  drawCatHead(layer.ctx, source.config, typing, source.frame, source.gaze, headOptions);
+  const headPixels = pixels(layer.ctx);
+  const apertureLayer = catGlintAperture(source.config, typing, source.frame, headOptions);
+  const placedMask = (image: HTMLImageElement) => {
+    placeHead();
+    layer.ctx.drawImage(image, 0, 0);
+    return pixels(layer.ctx);
+  };
+  const aperture = apertureLayer && placedMask(apertureLayer);
+  const reflections = savedGlints(edited, original, aperture);
+  const eyeCoverage = aperture && placedMask(catOpenEyeCoverage(source.config));
+  let unlitHead: Uint32Array | undefined;
+  if (reflections.fixed.some(Boolean)) {
+    placeHead();
+    drawCatHead(layer.ctx, source.config, typing, source.frame, source.gaze, { ...headOptions, hideGlints: [true, true] });
+    unlitHead = pixels(layer.ctx);
+  }
   let laptopPixels: Uint32Array | undefined;
   if (typing) {
     layer.ctx.resetTransform();
@@ -406,7 +440,7 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
     const laptopConfig = source.laptopVersion === 'original'
       && source.config.palette === 'CC01' && source.config.tail === 'CT01'
       ? { ...source.config, tail: 'CT02' as const } : source.config;
-    layer.ctx.drawImage(catTypingLaptop(laptopConfig, source.typingLayout, source.laptopVersion), 0, 0);
+    layer.ctx.drawImage(catTypingLaptop(laptopConfig, source.typingLayout, source.laptopVersion, source.typingAnimation), 0, 0);
     laptopPixels = pixels(layer.ctx);
   }
   let lastHeadPixel = headPixels.length - 1;
@@ -417,8 +451,16 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   const torso: number[] = [];
   const laptop: number[] = [];
   for (let index = 0; index < edited.length; index++) {
-    const before = original[index];
-    if (before === edited[index] && !reflections.hide.has(index)) continue;
+    const before = original[index]!, changed = edited[index]!;
+    if (before === changed && !reflections.hide.has(index)) continue;
+    // Old flattened reflections can whiten the edge of the sclera and
+    // expose the original pupil where the default reflection used to be.
+    // That eye artwork must not become head paint when eyes are closed.
+    if (eyeCoverage?.[index] && isPale(before)) {
+      if (!aperture?.[index] && changed === 0xffffffff) continue;
+      const eye = index % size < size / 2 ? 0 : 1;
+      if (aperture?.[index] && reflections.fixed[eye] && changed === unlitHead?.[index]) continue;
+    }
     full.push(index);
     if (laptopPixels?.[index]) {
       laptop.push(index);

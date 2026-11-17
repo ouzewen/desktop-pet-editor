@@ -1,12 +1,12 @@
 import { catIrisColors, catOptions, catPresets, catRenderConfig, nativeCatFur, orangeCatOptions, readPetConfig, usesOrangeCatArt,
   type CatConfig, type CatIrisColor } from './cat';
 import { colorCatBreed } from './cat-breeds';
-import { catAssetOptions } from './pet-assets';
+import { catAssetOptions, frontTyping } from './pet-assets';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor } from './cat-custom';
 import { projectCatInk, type CatInkDocument, type CatInkPart } from './cat-ink';
 import { Motion } from './motion';
-import { catTypingFrameCount, catTypingFrameCountFor, catTypingFrameDuration } from './cat-typing';
-import { catGlintAperture, catHeadPlacement, catInkGeometry, catTypingLaptop, horizontalGazeRange, pointerGazeLimit, render, type Action, type CatPose, type Gaze, type TypingMode } from './render';
+import { catTypingFrameCount, catTypingFrameCountFor, catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt, frenzySteamLoopStart } from './cat-typing';
+import { catGlintAperture, catHeadPlacement, catInkGeometry, catTypingLaptop, drawCatHead, horizontalGazeRange, makeLayer, pointerGazeLimit, render, type Action, type CatPose, type Gaze, type TypingMode } from './render';
 
 const visibleTails = Object.keys(catOptions.tail) as (keyof typeof catOptions.tail)[];
 
@@ -36,10 +36,10 @@ export function checkStructuredCatInk() {
     { part: 'leftEar', at: [74, 39], color: 0xffe711d9 },
     { part: 'rightEar', at: [230, 39], color: 0xff15d3e7 },
     { part: 'head', at: [150, 76], color: 0xffe70a76 },
-    { part: 'torso', at: [73, 193], color: 0xff1349ff },
+    { part: 'torso', at: [77, 183], color: 0xff1349ff },
     { part: 'tail', at: [254, 205], color: 0xff32e91f },
-    { part: 'leftPaw', at: [107, 209], color: 0xff7c38f7 },
-    { part: 'rightPaw', at: [184, 209], color: 0xffdecc16 },
+    { part: 'leftPaw', at: [107, 181], color: 0xff7c38f7 },
+    { part: 'rightPaw', at: [195, 183], color: 0xffdecc16 },
     { part: 'laptop', at: [150, 247], color: 0xff085eaf },
     { part: 'canvas', at: [9, 9], color: 0xffcd24a2 },
   ] as const;
@@ -68,7 +68,7 @@ export function checkStructuredCatInk() {
   });
   const metadata = {
     action: 'typing', frame: sourceFrame, typingMode: 'gentle', gaze: { x: 0, y: 0 },
-    typingLayout: 'aligned', typingAnimation: 'reference-v2', laptopVersion: 'clean', typingInkVersion: 'clean',
+    typingLayout: 'aligned', typingAnimation: currentTypingAnimation, laptopVersion: 'clean', typingInkVersion: 'clean',
     outlineVersion: 'adaptive', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared', legacyNoseOutline: false,
     config: orange,
   } as const;
@@ -95,12 +95,15 @@ export function checkStructuredCatInk() {
       throw Error(`Paint or erase on ${part} failed to round-trip at its original position`);
     }
   }
-  const seam = geometry.head?.mask?.findIndex((covered, index) =>
-    !!covered && !!geometry.torso?.mask?.[index] && !!source[index]);
+  const seamPose = { ...sourceOptions, typingAnimation: 'reference-v2' } as const;
+  const seamSource = pixels(orange, true, sourceFrame, seamPose);
+  const seamGeometry = catInkGeometry(orange, true, sourceFrame, seamPose);
+  const seam = seamGeometry.head?.mask?.findIndex((covered, index) =>
+    !!covered && !!seamGeometry.torso?.mask?.[index] && !!seamSource[index]);
   if (seam === undefined || seam < 0) throw Error('Missing typing fixture where the head overlaps the torso');
-  const seamSave = prepareStructuredCatCustomization(saveCatInk(metadata, [[seam, 0]]));
-  const seamFrame = pixels(orange, true, sourceFrame, { ...sourceOptions, custom: seamSave });
-  if (seamFrame[seam] !== 0 || !seamFrame.every((pixel, index) => index === seam || pixel === source[index])) {
+  const seamSave = prepareStructuredCatCustomization(saveCatInk({ ...metadata, ...seamPose }, [[seam, 0]]));
+  const seamFrame = pixels(orange, true, sourceFrame, { ...seamPose, custom: seamSave });
+  if (seamFrame[seam] !== 0 || !seamFrame.every((pixel, index) => index === seam || pixel === seamSource[index])) {
     throw Error('The eraser did not open a clean single-pixel hole at a layer seam');
   }
   const withoutOriginal = prepareStructuredCatCustomization({ ...metadata, config: calico, frame: -1, pixelEdits: saved });
@@ -161,7 +164,7 @@ export function checkStructuredCatInk() {
   moved.clear();
   for (const mode of ['gentle', 'fast', 'frenzy'] as const) {
     erased.clear();
-    for (const frame of [0, 4, 12, 20, 31]) {
+    for (const frame of [0, 1, 4, 8, 9, 12, 20, 63]) {
       verifyPose({ ...calico, ear: 'CE02', tail: 'CT06' }, true, frame, mode);
     }
     verifyPose({ ...calico, ear: 'CE02', tail: 'CT09' }, true, 12, mode);
@@ -420,7 +423,7 @@ export function checkMouthOptions() {
   for (const preset of Object.values(catPresets)) {
     const selected = { ...preset, mouth: 'CN09', nose: 'NO08', noseColor: 'plum' } as const;
     for (const [typingMode, mouth] of [['gentle', 'CN08'], ['fast', 'CN06'], ['frenzy', 'CN07']] as const) {
-      for (const frame of [0, 15, 16, 31]) {
+      for (const frame of [0, 15, 16, 28, 29, 48, 58, 59, 63]) {
         const rendered = image(selected, 'typing', frame, { typingMode });
         const shared = image({ ...selected, mouth }, 'typing', frame, { typingMode, typingEffects: false });
         if (!mouthMatches(rendered, shared)) {
@@ -533,8 +536,8 @@ export function checkTailOptions() {
   const prop = new Uint32Array(ctx.getImageData(0, 0, size, size).data.buffer);
   const typingModes = ['gentle', 'fast', 'frenzy'] as const;
   const cases = [['sit', 'gentle'], ...typingModes.map(mode => ['typing', mode] as const)] as const;
-  const ringHasHole = (frame: Uint32Array, typing: boolean) => {
-    const [x, y] = typing ? [244, 210] as const : [257, 226] as const;
+  const ringHasHole = (frame: Uint32Array) => {
+    const x = 257, y = 226;
     const start = y * size + x;
     if (frame[start]) return false;
     const visited = new Set([start]);
@@ -563,11 +566,11 @@ export function checkTailOptions() {
         if (shapes.slice(index + 1).some(next => next.every((pixel, at) => (pixel >>> 24) === (stock[at]! >>> 24)))) {
           throw Error(`${label} uses indistinguishable silhouettes for ${tail} and another choice`);
         }
-        if (tail === 'CT09' && !ringHasHole(stock, typing)) throw Error(`${label} has no clean, enclosed ring opening`);
+        if (tail === 'CT09' && !ringHasHole(stock)) throw Error(`${label} has no clean, enclosed ring opening`);
         let tintedTail = false;
         for (let at = 0; at < stock.length; at++) {
           const x = at % size, y = Math.floor(at / size);
-          const tailRegion = x >= (typing ? 210 : 218) && y >= 145 && y < 286;
+          const tailRegion = x >= 218 && y >= 145 && y < 286;
           const before = stock[at]!, after = colored[at]!;
           if (before !== defaultShape[at] && (!tailRegion || (typing && prop[at]))) {
             throw Error(`${label}/${tail} changed the face, body or laptop at ${x},${y}`);
@@ -586,13 +589,15 @@ export function checkTailOptions() {
           }
         }
         if (typing && breed === orange) {
-          const frames = [4, 12, 20, 31].map(frame => image({ ...breed, tail }, action, frame, pose));
+          const samples = [4, 12, 20, 31];
+          const frames = samples.map(frame => image({ ...breed, tail }, action, frame, pose));
           if (same(stock, frames[0]!) || same(stock, frames[1]!) || same(frames[0]!, frames[1]!)
             || same(frames[0]!, frames[2]!) || same(stock, frames[3]!)) {
             throw Error(`${label}/${tail} froze, truncated or aliased its typing cycle`);
           }
-          for (const next of [stock, ...frames]) {
-            if (!prop.every((pixel, at) => !pixel || pixel === next[at])) {
+          for (const [sample, next] of [stock, ...frames].entries()) {
+            const unchangedProp = typingMode === 'frenzy' ? image(breed, 'typing', [0, ...samples][sample]!, pose) : prop;
+            if (!prop.every((pixel, at) => !pixel || unchangedProp[at] === next[at])) {
               throw Error(`${label}/${tail} covers the laptop during typing`);
             }
           }
@@ -676,7 +681,7 @@ export function checkTailOptions() {
   const target = catInkGeometry(ring, false, 0, pose).tail?.mask;
   const editedRing = image(ring, 'sit', 0, { ...pose, custom: edit });
   const painted = editedRing.indexOf(0xff1fe932);
-  if (painted < 0 || !target?.[painted] || !ringHasHole(editedRing, false)) {
+  if (painted < 0 || !target?.[painted] || !ringHasHole(editedRing)) {
     throw Error('An older per-part tail painting did not follow the ring silhouette');
   }
 }
@@ -736,7 +741,7 @@ export function checkIndependentPupils() {
         throw Error(`${breed.name}/${action}/${typingMode} moved pupil color with its reflections`);
       }
     }
-    if (!same(image(legacy, 'typing', 8, { typingMode: 'frenzy' }), image(chosen, 'typing', 8, { typingMode: 'frenzy' }))) {
+    if (!same(image(legacy, 'typing', 36, { typingMode: 'frenzy' }), image(chosen, 'typing', 36, { typingMode: 'frenzy' }))) {
       throw Error(`${breed.name} showed pupil color through effort eyelids`);
     }
     if (breed !== orange && !same(image(legacy, 'sit', 25), image(chosen, 'sit', 25))) {
@@ -805,15 +810,10 @@ export function checkCatActions() {
     }
     assert(!duplicates.length, `Repeated ${label} frames (zero-based): ${duplicates.join(', ')}`);
   };
-  // A stroke naturally revisits a pose while lowering and lifting a paw.
-  // Check the approved contact/left/right poses and the second, softer stroke
-  // rather than rejecting these deliberate repetitions as missing frames.
   const assertTypingCycle = (frames: Uint8ClampedArray[], label: string) => {
-    assert(frames.length === 32 && distinct([frames[0]!, frames[4]!, frames[12]!]),
+    assert(frames.length === frontTyping.pawFrames && distinct([frames[0]!, frames[2]!, frames[10]!]),
       `${label} lost its resting or alternating paw poses`);
-    assert(!same(frames[0]!, frames[16]!) && !same(frames[4]!, frames[20]!),
-      `${label} truncated or aliased its second stroke to an older frame count`);
-    assert(!same(frames[31]!, frames[0]!), `${label} stopped recovering before the loop boundary`);
+    assert(!same(frames.at(-1)!, frames[0]!), `${label} lost the lift at the loop boundary`);
   };
   // The editable crown fans outward toward the cheeks instead of stopping at
   // a rectangular edge. These bounds follow the shared Aseprite region mask.
@@ -850,8 +850,8 @@ export function checkCatActions() {
     || (x >= 210 && x <= 211 && y >= 204 && y <= 206);
   const oldDefaultMouth = historicalMouth(orange, 'CN01');
   for (const typingMode of ['gentle', 'fast', 'frenzy'] as const) {
-    for (let frame = 0; frame < catTypingFrameCount; frame++) {
-      const pose = { typingMode, typingEffects: true, typingMouthVersion: 'legacy' } as const;
+    for (let frame = 0; frame < catTypingFrameCountFor('reference-v2'); frame++) {
+      const pose = { typingMode, typingAnimation: 'reference-v2', typingEffects: true, typingMouthVersion: 'legacy' } as const;
       const before = snapshot('typing', frame, oldDefaultMouth, { ...pose, typingInkVersion: 'original' });
       const clean = snapshot('typing', frame, oldDefaultMouth, pose);
       for (let offset = 0; offset < clean.length; offset += 4) {
@@ -869,7 +869,7 @@ export function checkCatActions() {
   const oldTyping = document.createElement('canvas');
   const oldOrange = historicalMouth(historicalTail(historicalNose(orange, 'NO01'), 'CT01'), 'CN01');
   render(oldTyping, oldOrange, 'typing', 25, undefined,
-    { typingMode: 'frenzy', typingInkVersion: 'original', typingMouthVersion: 'legacy' });
+    { typingMode: 'frenzy', typingAnimation: 'reference-v2', typingInkVersion: 'original', typingMouthVersion: 'legacy' });
   const oldTypingSource = {
     config: oldOrange, action: 'typing', frame: 25, typingMode: 'frenzy', gaze: { x: 0, y: 0 },
     typingLayout: 'aligned', typingAnimation: 'reference-v2', laptopVersion: 'clean',
@@ -882,7 +882,7 @@ export function checkCatActions() {
   }
 
   const eyeRimBreed = catPresets.preset_cat_british_blue;
-  const effortPose = { typingMode: 'frenzy', typingEffects: true } as const;
+  const effortPose = { typingMode: 'frenzy', typingAnimation: 'front-v3', typingEffects: true } as const;
   const formerEyeRim = snapshot('typing', 20, eyeRimBreed, { ...effortPose, typingInkVersion: 'clean' });
   const restoredEyeFur = snapshot('typing', 20, eyeRimBreed, effortPose);
   const cheekGreen = (108 * SIZE + 213) * 4 + 1;
@@ -896,12 +896,12 @@ export function checkCatActions() {
   assert(samePixel(formerEyeRim, restoredEyeFur, eyelid), 'Eye rim cleanup altered the painted squint');
 
   for (const action of ['left', 'typing'] as const) {
-    const frames = Array.from({ length: action === 'typing' ? catTypingFrameCount : 4 },
+    const frames = Array.from({ length: action === 'typing' ? frontTyping.pawFrames : 4 },
       (_, frame) => snapshot(action, frame, orange, { typingMode: 'fast' }));
     const label = `${orange.name}/${action}/fast/typingEffects:false`;
     if (action === 'typing') assertTypingCycle(frames, label);
     else assertDistinctFrames(frames, label);
-    for (let frame = 0; frame < (action === 'typing' ? catTypingFrameCount : 4); frame++) {
+    for (let frame = 0; frame < (action === 'typing' ? frontTyping.pawFrames : 4); frame++) {
       const base = snapshot(action, frame);
       const looks = [
         ...Object.keys(action === 'left' ? catAssetOptions.palette : catOptions.palette)
@@ -918,7 +918,7 @@ export function checkCatActions() {
   }
 
   for (const action of ['sit', 'left', 'right', 'typing'] as const) {
-    const frames = action === 'sit' ? 1 : action === 'typing' ? catTypingFrameCount : 4;
+    const frames = action === 'sit' ? 1 : action === 'typing' ? frontTyping.pawFrames : 4;
     for (let frame = 0; frame < frames; frame++) {
       for (const part of ['ear', 'mouth', 'eye', 'accessory'] as const) {
         const walking = action === 'left' || action === 'right';
@@ -951,7 +951,7 @@ export function checkCatActions() {
     }
   }
 
-  const belowKeyboard = 221 * SIZE * 4;
+  const belowKeyboard = 189 * SIZE * 4;
   const laptop = snapshot('typing', 0, black);
   const coats = Object.keys(catOptions.coat) as (keyof typeof catOptions.coat)[];
   const bodyPatterns = Object.keys(catOptions.bodyPattern) as (keyof typeof catOptions.bodyPattern)[];
@@ -975,6 +975,11 @@ export function checkCatActions() {
     }
   }
   assert(solidProp.length > 1000, 'The cleaned laptop is missing');
+  const logoPixels = solidProp.filter(index => {
+    const i = index * 4;
+    return cleanProp[i]! >= 230 && cleanProp[i + 1]! >= 230 && cleanProp[i + 2]! >= 230;
+  });
+  assert(logoPixels.length > 0, 'The laptop logo is missing');
   const reached = new Set<number>([solidProp[0]!]);
   const pending = [solidProp[0]!];
   while (pending.length) {
@@ -1105,7 +1110,7 @@ export function checkCatActions() {
       }
     }
     for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast']] as const) {
-      for (let frame = 0; frame < (action === 'sit' ? 1 : catTypingFrameCount); frame++) {
+      for (let frame = 0; frame < (action === 'sit' ? 1 : frontTyping.pawFrames); frame++) {
         const variants = bodyPatterns.map(bodyPattern => snapshot(action, frame, { ...preset, bodyPattern }, { typingMode }));
         const stock = variants[0]!;
         assert(distinct(variants), `Pattern options matched in ${action}/${frame}/${typingMode}/${preset.name}`);
@@ -1153,8 +1158,7 @@ export function checkCatActions() {
     const theme = { ...preset, coat: 'silver', bodyPattern: 'spotted' } as const;
     assert(!same(snapshot('sit', 0, theme), snapshot('sit', 0, { ...theme, bodyPattern: 'plain' })),
       `A color scheme covered the selected body pattern for ${preset.name}`);
-    const abovePaws = 190 * SIZE * 4;
-    const belowFloor = 286 * SIZE * 4;
+
     const choices = preset === orange ? orangeCatOptions : catOptions;
     const accessories = Object.fromEntries(Object.keys(choices.accessory).map(accessory =>
       [accessory, snapshot('sit', 0, readPetConfig({ ...preset, accessory }))],
@@ -1203,7 +1207,7 @@ export function checkCatActions() {
               }
             }
             for (const typingMode of ['gentle', 'fast'] as const) {
-              for (let frame = 0; frame < catTypingFrameCount; frame++) {
+              for (let frame = 0; frame < frontTyping.pawFrames; frame++) {
                 const typing = snapshot('typing', frame, configs[index]!, { typingMode });
                 assert(same(typing.subarray(0, belowEars), variant.subarray(0, belowEars)),
                   `Ear seam changed while typing for ${preset.name}/${ear}`);
@@ -1222,46 +1226,39 @@ export function checkCatActions() {
       assert(same(accessories.A06!, snapshot('sit', 0, readPetConfig({ ...preset, accessory: 'A07' }))),
         'Orange cap alias changed');
     }
-    const commonPawCycle = Array.from({ length: catTypingFrameCount }, (_, frame) =>
+    const commonPawCycle = Array.from({ length: frontTyping.pawFrames }, (_, frame) =>
       snapshot('typing', frame, preset, { typingMode: 'gentle' }));
     for (const typingMode of ['gentle', 'fast', 'frenzy'] as const) {
-      const poses = Array.from({ length: catTypingFrameCount }, (_, frame) => snapshot('typing', frame, preset, { typingMode }));
+      const poses = Array.from({ length: frontTyping.pawFrames }, (_, frame) => snapshot('typing', frame, preset, { typingMode }));
       const first = poses[0]!;
-      assertTypingCycle(poses, `${preset.name}/typing/${typingMode}/typingEffects:false`);
-      assert(poses.every((pose, frame) => same(pose, commonPawCycle[frame]!)),
+      if (typingMode !== 'frenzy') assert(poses.every((pose, frame) => same(pose, commonPawCycle[frame]!)),
         `${preset.name}/${typingMode} changed the approved paw shapes instead of their cadence`);
-      assert(same(first, snapshot('typing', 32, preset, { typingMode })),
-        `${preset.name}/${typingMode} failed to wrap at the end of its 32-frame cycle`);
-      for (let offset = 0; offset < 154 * SIZE * 4; offset += 4) {
-        if (samePixel(idle, first, offset)) continue;
-        assert(usesOrangeCatArt(preset) && mouthTouchUp.has(offset / 4) && idle[offset + 3] === first[offset + 3],
-          `Typing shifted or resized the face of ${preset.name}/${typingMode}`);
-      }
-      assert(poses.every(pose => same(gentle.subarray(0, abovePaws), pose.subarray(0, abovePaws))),
-        `Typing moved the head or raised the paws above y190 for ${preset.name}/${typingMode}`);
-      assert(poses.every(pose => pose.subarray(belowFloor).every(channel => channel === 0)),
-        `Typing extended below the sitting baseline of ${preset.name}`);
-      assert(poses.every(pose => same(gentle.subarray(belowKeyboard), pose.subarray(belowKeyboard))),
-        `${preset.name} ${typingMode} typing changed the laptop or tail below the keyboard`);
-      for (let frame = 1; frame < catTypingFrameCount; frame++) {
+      assert(same(first, snapshot('typing', catTypingFrameCount, preset, { typingMode })),
+        `${preset.name}/${typingMode} failed to wrap at the end of its cycle`);
+      for (let frame = 0; frame < frontTyping.pawFrames; frame++) {
         const next = poses[frame]!;
-        for (let y = 0; y < 154; y++) {
-          for (let x = 147; x < 181; x++) {
-            const i = (y * SIZE + x) * 4;
-            assert(samePixel(first, next, i), `Typing moved the center of the cat's head`);
+        const press = typingMode === 'frenzy' ? 6 : 4;
+        const leftHidden = frame >= 2 && frame < 2 + press;
+        const rightHidden = frame >= 10 && frame < 10 + press;
+        let left = false, right = false;
+        for (let offset = 0; offset < next.length; offset += 4) {
+          if (cleanProp[offset + 3]) {
+            if (!samePixel(cleanProp, next, offset)) throw Error('Typing changed the laptop');
+            continue;
           }
+          if (samePixel(idle, next, offset)) continue;
+          const x = offset / 4 % SIZE, y = Math.floor(offset / 4 / SIZE);
+          const isLeft = x >= 82 && x < 122, isRight = x >= 180 && x < 220;
+          assert(y >= 168 && y < 189 && (isLeft || isRight),
+            `${preset.name}/${typingMode} modified idle artwork outside the paws at ${x},${y}`);
+          left ||= isLeft;
+          right ||= isRight;
         }
-        // Restoring the fixed forearm stripes must not make them move with
-        // the hands. Only the two small paw envelopes may change here.
-        for (let y = 190; y < 221; y++) for (let x = 0; x < SIZE; x++) {
-          if (y < 220 && ((x >= 90 && x < 132) || (x >= 164 && x < 206))) continue;
-          const offset = (y * SIZE + x) * 4;
-          assert(samePixel(first, next, offset),
-            `${preset.name}/${typingMode} moved its fixed forearm texture or keyboard edge at ${x},${y}`);
-        }
+        assert(left !== leftHidden && right !== rightHidden,
+          `${preset.name}/${typingMode} failed to alternate completely hidden paws at frame ${frame}`);
       }
     }
-    const effortHeads: Uint8ClampedArray[] = [];
+
     const fastHeads: Uint8ClampedArray[] = [];
     const effortInk = catRenderConfig(preset).palette === 'CC02' ? [32, 27, 30] : [68, 36, 22];
     const protectedEyeOffsets: number[] = [];
@@ -1271,15 +1268,15 @@ export function checkCatActions() {
       protectedEyeOffsets.push(offset);
       eyeAreas[offset / 4 % SIZE < SIZE / 2 ? 0 : 1]!++;
     }
-    for (let frame = 0; frame < catTypingFrameCount; frame++) {
+    for (let frame = 0; frame < catTypingFrameCountFor('reference-v2'); frame++) {
       const fastPose = snapshot('typing', frame, preset, { typingMode: 'fast' });
       const openEyes = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true });
       assert(protectedEyeOffsets.every(offset => samePixel(openEyes, fastPose, offset)),
         `${preset.name} closed or moved its pupils before frenzy typing`);
-      assert(same(openEyes.subarray(154 * SIZE * 4), fastPose.subarray(154 * SIZE * 4)),
-        `${preset.name} fast expression changed the paws, torso or laptop`);
-      fastHeads.push(openEyes.subarray(0, 154 * SIZE * 4));
-      if (frame === catTypingFrameCount / 2) {
+      const previousFast = snapshot('typing', frame, preset, { typingMode: 'fast', typingEffects: true, typingAnimation: 'front-v3' });
+      assert(same(openEyes, previousFast), `${preset.name} changed its existing fast typing art`);
+      fastHeads.push(openEyes.subarray(0, 140 * SIZE * 4));
+      if (frame === frontTyping.pawFrames) {
         render(canvas, preset, 'typing', frame, { x: -100, y: 60, space: 'pointer' }, { typingMode: 'fast' });
         const tracked = pixels(), moved = [0, 0];
         for (const offset of protectedEyeOffsets) {
@@ -1291,12 +1288,14 @@ export function checkCatActions() {
         assert(moved.every(count => count > 0), `${preset.name} disabled eye tracking before frenzy typing`);
       }
 
-      const frenzyPose = snapshot('typing', frame, preset, { typingMode: 'frenzy' });
+    }
+    for (const frame of [0, 13, 28, 29, 36, 48, 58, 59, 63]) {
+      const normal = snapshot('typing', frame, preset);
       const effort = snapshot('typing', frame, preset, { typingMode: 'frenzy', typingEffects: true });
       const eyelidArea = [0, 0];
       let changedEyes = 0;
       for (const offset of protectedEyeOffsets) {
-        if (!samePixel(effort, frenzyPose, offset)) changedEyes++;
+        if (!samePixel(effort, normal, offset)) changedEyes++;
         const red = effort[offset]!, green = effort[offset + 1]!, blue = effort[offset + 2]!;
         if (red === effortInk[0] && green === effortInk[1] && blue === effortInk[2] && effort[offset + 3] === 255) {
           eyelidArea[offset / 4 % SIZE < SIZE / 2 ? 0 : 1]!++;
@@ -1307,14 +1306,16 @@ export function checkCatActions() {
       }
       assert(changedEyes > 0 && eyelidArea.every((area, eye) => area > 0 && area < eyeAreas[eye]! / 2),
         `${preset.name} did not replace both pupils with narrow effort eyelids`);
-      assert(same(effort.subarray(154 * SIZE * 4), frenzyPose.subarray(154 * SIZE * 4)),
-        `${preset.name} effort effects changed the paws, torso or laptop`);
-      effortHeads.push(effort.subarray(0, 154 * SIZE * 4));
+      const baseline = snapshot('typing', frame, preset, { typingMode: 'frenzy' });
+      const panel = (241 * SIZE + 110) * 4;
+      if (frame === 36) {
+        assert(effort[panel]! > baseline[panel]! && effort[panel + 1]! < baseline[panel + 1]!
+          && logoPixels.every(index => samePixel(effort, baseline, index * 4)), `${preset.name} failed to heat the laptop while retaining its logo`);
+      }
       render(canvas, preset, 'typing', frame, { x: -100, y: 60, space: 'pointer' }, { typingMode: 'frenzy' });
       assert(same(pixels(), effort), `${preset.name} drew moving glints over its effort expression`);
     }
-    assert(!same(fastHeads[0]!, fastHeads[catTypingFrameCount / 2]!), `${preset.name} fast expression and sweat did not progress`);
-    assert(!same(effortHeads[0]!, effortHeads[catTypingFrameCount / 2]!), `${preset.name} frenzy sweat did not animate`);
+    assert(!same(fastHeads[0]!, fastHeads[catTypingFrameCount / 4]!), `${preset.name} fast expression and sweat did not progress`);
     // Historic shared saves retain the exact old fast expression; reference
     // fast deliberately uses open eyes, so it cannot reconstruct these pixels.
     const sharedEffort = snapshot('typing', 11, preset,
@@ -1432,10 +1433,10 @@ export function checkCatActions() {
   const gentleDuration = catTypingFrameDuration('gentle');
   const fastDuration = catTypingFrameDuration('fast');
   const frenzyDuration = catTypingFrameDuration('frenzy');
-  assert(catTypingFrameCount === 32 && gentleDuration === 70 && fastDuration === 40 && frenzyDuration === 20,
-    'Approved typing did not use 32 frames at progressively faster 70/40/20ms intervals');
+  assert(catTypingFrameCount === 64 && gentleDuration === 70 && fastDuration === 40 && frenzyDuration === 20,
+    'Approved typing did not use 64 frames at progressively faster 70/40/20ms intervals');
   assert(catTypingFrameCountFor('reference') === 12 && catTypingFrameCountFor('shared') === 12
-    && catTypingFrameCountFor('legacy') === 4,
+    && catTypingFrameCountFor('legacy') === 4 && catTypingFrameCountFor('reference-v2') === 32,
   'Expanding current typing changed a historical animation frame count');
   assert(catTypingFrameDuration('gentle', 'reference') * 12 === 1000
     && catTypingFrameDuration('fast', 'reference') * 12 === 600
@@ -1445,8 +1446,9 @@ export function checkCatActions() {
     const timedCanvas = document.createElement('canvas');
     const typingMotion = new Motion(timedCanvas, preset);
     const observed = () => timedCanvas.getContext('2d')!.getImageData(0, 0, SIZE, SIZE).data;
-    const expected = (frame: number, typingMode: TypingMode) =>
-      snapshot('typing', frame, preset, { typingMode, typingEffects: true });
+    const expected = (frame: number, typingMode: TypingMode, frenzyElapsed = 0) =>
+      snapshot('typing', frame, preset, { typingMode, typingEffects: true,
+        frenzyHeatFrame: typingMode === 'frenzy' ? frenzyHeatFrameAt(frenzyElapsed) : undefined });
     const start = Math.ceil(performance.now());
     typingMotion.key(start);
     typingMotion.tick(start);
@@ -1470,14 +1472,26 @@ export function checkCatActions() {
     typingMotion.tick(frenzyStart);
     assert(same(observed(), expected(4, 'frenzy')), `${preset.name} reset its paw phase when entering frenzy`);
     typingMotion.tick(frenzyStart + frenzyDuration + 0.1);
-    assert(same(observed(), expected(5, 'frenzy')), `${preset.name} did not advance at the frenzy cadence`);
-    // Keep typing through the longer loop; orange cats otherwise time out
-    // after 500ms, before a 640ms frenzy cycle can complete.
-    const lastKey = frenzyStart + catTypingFrameCount * frenzyDuration / 2;
-    typingMotion.key(lastKey);
-    typingMotion.tick(frenzyStart + catTypingFrameCount * frenzyDuration);
-    assert(same(observed(), expected(4, 'frenzy')), `${preset.name} lost its phase across the 32-pose frenzy cycle`);
-    const stop = lastKey + (usesOrangeCatArt(preset) ? 500 : 1001);
+    assert(same(observed(), expected(5, 'frenzy', frenzyDuration)), `${preset.name} did not advance at the frenzy cadence`);
+    // Sustain the same input rate across the longer letter loop.
+    let lastKey = frenzyStart;
+    const cycle = catTypingFrameCount * frenzyDuration;
+    const panel = (241 * SIZE + 110) * 4;
+    let red = observed()[panel]!;
+    let fullHeat: Uint8ClampedArray | undefined;
+    for (let elapsed = 100; elapsed < cycle; elapsed += 100) {
+      lastKey = frenzyStart + elapsed;
+      typingMotion.key(lastKey);
+      typingMotion.tick(lastKey);
+      const frame = observed();
+      assert(frame[panel]! >= red, `${preset.name} cooled down in the middle of frenzy`);
+      red = frame[panel]!;
+      if (elapsed === 600) fullHeat = frame;
+    }
+    typingMotion.tick(frenzyStart + cycle);
+    assert(same(observed(), expected(4, 'frenzy', cycle)), `${preset.name} lost its phase across the 64-pose frenzy cycle`);
+    assert(fullHeat !== undefined && samePixel(observed(), fullHeat, panel), `${preset.name} restarted the warm-up at the loop boundary`);
+    const stop = lastKey + 1001;
     typingMotion.tick(stop);
     assert(same(observed(), snapshot('sit', Math.floor((stop - start) / 90), preset)),
       `${preset.name} did not stop at its keyboard timeout`);
@@ -1491,15 +1505,15 @@ export function checkCatActions() {
       slowing.tick(start + elapsed);
     }
     slowing.tick(start + 1021);
-    assert(same(observed(), expected(16, 'frenzy')), `${preset.name} lost frenzy hysteresis at eight keys`);
+    assert(same(observed(), expected(48, 'frenzy', 1021 - 80)), `${preset.name} lost frenzy hysteresis at eight keys`);
     slowing.tick(start + 1031);
-    assert(same(observed(), expected(17, 'frenzy')), `${preset.name} lost frenzy hysteresis at seven keys`);
+    assert(same(observed(), expected(49, 'frenzy', 1031 - 80)), `${preset.name} lost frenzy hysteresis at seven keys`);
     slowing.tick(start + 1041);
-    assert(same(observed(), expected(17, 'fast')), `${preset.name} failed to slow at six keys without resetting phase`);
+    assert(same(observed(), expected(49, 'fast')), `${preset.name} failed to slow at six keys without resetting phase`);
     slowing.tick(start + 1071);
-    assert(same(observed(), expected(18, 'fast')), `${preset.name} lost fast-mode hysteresis at three keys`);
+    assert(same(observed(), expected(50, 'fast')), `${preset.name} lost fast-mode hysteresis at three keys`);
     slowing.tick(start + 1081);
-    assert(same(observed(), expected(18, 'gentle')), `${preset.name} reset its paw phase when slowing below three keys`);
+    assert(same(observed(), expected(50, 'gentle')), `${preset.name} reset its paw phase when slowing below three keys`);
   }
 
   for (const preset of Object.values(catPresets)) {
@@ -1507,7 +1521,7 @@ export function checkCatActions() {
       const straight = snapshot(action, 0, preset);
       for (const gaze of [{ x: -2, y: 0 }, { x: horizontalGazeRange.min, y: -1 },
         { x: 2, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 }]) {
-        render(canvas, preset, action, 0, gaze);
+        render(canvas, preset, action, 0, gaze, { typingEffects: false });
         const looking = pixels();
         const eyes = Array.from({ length: 2 }, () => ({ gained: 0, lost: 0, gainedAt: 0, lostAt: 0 }));
         for (let i = 0; i < straight.length; i += 4) {
@@ -1532,7 +1546,7 @@ export function checkCatActions() {
             `Glint stayed on the right of the pupil in ${action}/${preset.name}`);
         }
       }
-      render(canvas, preset, action, 0, { x: 0, y: 0 });
+      render(canvas, preset, action, 0, { x: 0, y: 0 }, { typingEffects: false });
       assert(same(pixels(), straight), `Gaze reset did not restore ${action}/${preset.name}`);
     }
   }
@@ -1707,11 +1721,11 @@ export function checkCatActions() {
       render(editable, config, action, frame, undefined, { typingMode });
       const current = prepareCatCustomization(editable, {
         config, action, frame, typingMode, gaze: { x: 0, y: 0 },
-        typingAnimation: 'reference-v2', typingLayout: 'aligned', laptopVersion: 'clean', outlineVersion: 'adaptive',
+        typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean', outlineVersion: 'adaptive',
         typingInkVersion: 'clean', typingMouthVersion: 'shared',
         tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared',
       }, config);
-      assert(current.source.outlineVersion === 'adaptive' && current.source.typingAnimation === 'reference-v2'
+      assert(current.source.outlineVersion === 'adaptive' && current.source.typingAnimation === currentTypingAnimation
         && current.source.frame === frame && !current.paint.full && !current.laptop
         && !current.idleTorso && !current.typingTorso,
       `${preset.name}/${action} mistook its adaptive outline for new custom paint`);
@@ -1756,12 +1770,12 @@ export function checkCatActions() {
       render(editable, newLook, action, frame, undefined, { typingMode });
       const source = {
         config: newLook, action, frame, typingMode, gaze: { x: 0, y: 0 },
-        typingLayout: 'aligned', typingAnimation: 'reference-v2', laptopVersion: 'clean', outlineVersion: 'adaptive',
+        typingLayout: 'aligned', typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive',
         typingInkVersion: 'clean', typingMouthVersion: 'shared',
         tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared',
       } as const;
       const currentMarkings = prepareCatCustomization(editable, source, newLook);
-      assert(currentMarkings.source.markingLayout === 'shared' && currentMarkings.source.typingAnimation === 'reference-v2'
+      assert(currentMarkings.source.markingLayout === 'shared' && currentMarkings.source.typingAnimation === currentTypingAnimation
         && !currentMarkings.paint.full
         && !currentMarkings.idleTorso && !currentMarkings.typingTorso && !currentMarkings.laptop,
       `${preset.name} mistook the new forehead or facial fur for user paint in ${action}/${typingMode}`);
@@ -1787,9 +1801,42 @@ export function checkCatActions() {
   }
   assert(same(snapshot('sit', 0, orange, { custom: oldReflection }), fixedReflection),
     'Tracking did not restore the saved reflection after disabling it');
-  assert(same(snapshot('typing', 0, orange, { typingMode: 'frenzy', typingEffects: true, custom: oldReflection }),
-    snapshot('typing', 0, orange, { typingMode: 'frenzy', typingEffects: true })),
+  assert(same(snapshot('typing', 36, orange, { typingMode: 'frenzy', typingEffects: true, custom: oldReflection }),
+    snapshot('typing', 36, orange, { typingMode: 'frenzy', typingEffects: true })),
   'A fixed custom reflection appeared over effort eyes while pointer tracking was off');
+
+  const legacyEyeSource = {
+    config: orange, action: 'sit', frame: 0, gaze: { x: 0, y: 0 }, typingMode: 'gentle',
+    typingAnimation: 'reference-v2', typingLayout: 'aligned', laptopVersion: 'clean', legacyNoseOutline: false,
+    tailArtVersion: 'clean', earLayout: 'shared', markingLayout: 'shared', outlineVersion: 'adaptive',
+  } as const;
+  render(editable, orange);
+  const unlit = makeLayer(SIZE);
+  drawCatHead(unlit.ctx, orange, false, 0, legacyEyeSource.gaze, { hideGlints: [true, true] });
+  // An old highlight overlaps the white rim and exposes bare pupil at
+  // its former edge. Both remnants were replayed as opaque head paint.
+  editor.putImageData(unlit.ctx.getImageData(116, 109, 1, 7), 116, 109);
+  editor.putImageData(unlit.ctx.getImageData(196, 109, 2, 7), 196, 109);
+  editor.resetTransform();
+  editor.fillStyle = '#FFFFFF';
+  for (const [x, width] of [[120, 5], [200, 6]]) editor.fillRect(x!, 108, width!, 3);
+  editor.fillRect(145, 78, 1, 1);
+  const editedEyes = prepareCatCustomization(editable, legacyEyeSource, orange);
+  render(editable, orange, 'sit', 0, undefined, { custom: editedEyes });
+  const migratedEyes = prepareStructuredCatCustomization({
+    ...legacyEyeSource, pixelEdits: seedCatInkForEditor(editable, legacyEyeSource, editedEyes),
+  });
+  assert(editedEyes.fixedGlints.every(Boolean) && !!migratedEyes,
+    'Displaced legacy highlights could not be recognized or reopened');
+  for (const preset of Object.values(catPresets)) {
+    const pose = { typingMode: 'frenzy', typingEffects: true } as const;
+    const expected = snapshot('typing', 36, preset, pose);
+    expected.set([255, 255, 255, 255], (78 * SIZE + 145) * 4);
+    for (const custom of [editedEyes, migratedEyes]) {
+      assert(same(expected, snapshot('typing', 36, preset, { ...pose, custom })),
+        `${preset.name} replayed legacy eye remnants or lost a separate user mark`);
+    }
+  }
 
   const roundCalico = { ...calico, ear: 'CE03' } as const;
   const earSource = { config: roundCalico, action: 'sit', frame: 0, gaze: { x: 0, y: 0 }, typingMode: 'gentle', tailArtVersion: 'clean' };
@@ -1824,7 +1871,7 @@ export function checkCatActions() {
     assert(same(edited, snapshot('sit', 0, drawing.source.config, { custom: drawing })),
       'Custom cat did not retain its idle pixels');
     for (const typingMode of ['gentle', 'fast', 'frenzy'] as const) {
-      const frames = Array.from({ length: catTypingFrameCount }, (_, frame) =>
+      const frames = Array.from({ length: frontTyping.pawFrames }, (_, frame) =>
         snapshot('typing', frame, drawing.source.config, { custom: drawing, typingMode }));
       assertTypingCycle(frames, `${drawing.source.config.name}/custom/typing/${typingMode}/typingEffects:false`);
       const mark = (76 * SIZE + 161) * 4;
@@ -1878,10 +1925,10 @@ export function checkCatActions() {
   const customFrenzy = customChange + fastDuration;
   for (let key = 0; key < 3; key++) customMotion.key(customFrenzy);
   customMotion.tick(customFrenzy);
-  assert(same(customPixels(), snapshot('typing', 2, layeredLook, { custom, typingMode: 'frenzy', typingEffects: true })),
+  assert(same(customPixels(), snapshot('typing', 2, layeredLook, { custom, typingMode: 'frenzy', typingEffects: true, frenzyHeatFrame: 0 })),
     'Custom paint stopped the phase-preserving switch to frenzy typing');
   customMotion.tick(customFrenzy + frenzyDuration);
-  assert(same(customPixels(), snapshot('typing', 3, layeredLook, { custom, typingMode: 'frenzy', typingEffects: true })),
+  assert(same(customPixels(), snapshot('typing', 3, layeredLook, { custom, typingMode: 'frenzy', typingEffects: true, frenzyHeatFrame: 1 })),
     'Custom paint froze frenzy typing');
   customMotion.tick(customFrenzy + 1001);
   assert(same(customPixels(), snapshot('sit', 12, layeredLook, { custom })), 'Custom cat did not return to its edited idle pose');
@@ -1891,7 +1938,7 @@ export function checkCatActions() {
   editor.fillStyle = '#E711D9';
   editor.fillRect(149, 244, 8, 8);
   const laptopEdit = prepareCatCustomization(editable,
-    { config: calico, action: 'typing', frame: 1, gaze: { x: 0, y: 0 }, typingMode: 'gentle', tailArtVersion: 'clean', typingLayout: 'aligned', typingAnimation: 'reference-v2', laptopVersion: 'clean', earLayout: 'shared', markingLayout: 'shared' }, orange);
+    { config: calico, action: 'typing', frame: 1, gaze: { x: 0, y: 0 }, typingMode: 'gentle', tailArtVersion: 'clean', typingLayout: 'aligned', typingAnimation: currentTypingAnimation, laptopVersion: 'clean', earLayout: 'shared', markingLayout: 'shared' }, orange);
   const laptopMark = (247 * SIZE + 152) * 4;
   assert(rgba(snapshot('typing', 2, calico, { custom: laptopEdit, typingMode: 'fast' }), laptopMark) === '231,17,217,255',
     'Laptop edit was dropped at a different typing speed');
@@ -1929,14 +1976,13 @@ export function checkCatActions() {
         editor.clearRect(231, 236, 1, 1);
       }
       const painted = prepareCatCustomization(editable, source, preset);
+      if (preset.palette === 'CC01') assert(!!painted.typingTorso, 'The former fur connector lost its edits');
       const base = snapshot('typing', 1, preset);
       const restored = snapshot('typing', 1, preset, { custom: painted });
       for (let offset = 0; offset < base.length; offset += 4) {
         const x = offset / 4 % SIZE, y = Math.floor(offset / 4 / SIZE);
-        const marked = (x >= 149 && x < 157 && y >= 244 && y < 252)
-          || (preset.palette === 'CC01' && x === 230 && y === 236);
-        const erased = (x >= 159 && x < 161 && y >= 246 && y < 248)
-          || (preset.palette === 'CC01' && x === 231 && y === 236);
+        const marked = x >= 149 && x < 157 && y >= 244 && y < 252;
+        const erased = x >= 159 && x < 161 && y >= 246 && y < 248;
         assert(erased ? restored[offset + 3] === 0
           : rgba(restored, offset) === (marked ? '231,17,217,255' : rgba(base, offset)),
         `${preset.name}/${typingAnimation} lost laptop edits or reapplied its former edge at ${x},${y}`);
@@ -1944,13 +1990,30 @@ export function checkCatActions() {
     }
   }
   for (const [typingAnimation, laptopVersion] of [
-    ['reference', 'clean'], ['reference', 'original'], ['reference-v2', 'clean'],
+    ['reference', 'clean'], ['reference', 'original'], ['reference-v2', 'clean'], ['front-v3', 'clean'], [currentTypingAnimation, 'clean'],
   ] as const) {
     render(editable, orange, 'typing', 0, undefined, { typingAnimation, laptopVersion });
     const inferred = prepareCatCustomization(editable, null, orange);
     assert(inferred.source.typingAnimation === typingAnimation && inferred.source.laptopVersion === laptopVersion
       && !inferred.paint.full && !inferred.laptop && !inferred.idleTorso && !inferred.typingTorso,
     `PNG-only ${typingAnimation}/${laptopVersion} laptop or old paws were baked into user paint`);
+  }
+
+  const hotSource = {
+    config: orange, action: 'typing', frame: 4, gaze: { x: 0, y: 0 }, typingMode: 'frenzy',
+    typingAnimation: currentTypingAnimation, frenzyHeatFrame: frenzySteamLoopStart, typingMouthVersion: 'shared',
+    typingLayout: 'aligned', laptopVersion: 'clean', earLayout: 'shared', markingLayout: 'shared',
+    tailArtVersion: 'clean', outlineVersion: 'adaptive',
+  } as const;
+  for (const typingAnimation of [currentTypingAnimation, 'front-v4'] as const) {
+    const source = { ...hotSource, typingAnimation };
+    render(editable, orange, 'typing', source.frame, undefined, source);
+    for (const reference of [null, source]) {
+      const restored = prepareCatCustomization(editable, reference, orange);
+      assert(restored.source.typingAnimation === typingAnimation
+        && restored.source.frenzyHeatFrame === frenzySteamLoopStart && !restored.paint.full && !restored.laptop,
+      'A saved typing expression, red laptop, or steam became custom paint after reopening');
+    }
   }
 
   render(editable, calico, 'typing', 0, undefined, { typingLayout: 'legacy', typingAnimation: 'legacy', markingLayout: 'legacy' });
@@ -2020,7 +2083,7 @@ export function checkCatActions() {
     editor.fillStyle = '#E711D9';
     editor.fillRect(150, 76, 3, 3);
     editor.fillStyle = '#15D3E7';
-    editor.fillRect(72, 200, 2, 2);
+    editor.fillRect(79, 184, 2, 2);
     const referencePaint = prepareCatCustomization(editable, referenceSource, preset);
     for (const typingMode of ['gentle', 'fast', 'frenzy'] as const) {
       for (const frame of [0, 4, 12, 20, 31]) {
@@ -2030,7 +2093,7 @@ export function checkCatActions() {
         for (let offset = 0; offset < base.length; offset += 4) {
           const x = offset / 4 % SIZE, y = Math.floor(offset / 4 / SIZE);
           const headInk = x >= 150 && x < 153 && y >= 76 && y < 79;
-          const bodyInk = x >= 72 && x < 74 && y >= 200 && y < 202;
+          const bodyInk = x >= 79 && x < 81 && y >= 184 && y < 186;
           assert(rgba(migrated, offset) === (headInk ? '231,17,217,255'
             : bodyInk ? '21,211,231,255' : rgba(base, offset)),
           `${preset.name}/${typingMode}/${frame} lost reference-era edits or retained an old paw/stripe at ${x},${y}`);

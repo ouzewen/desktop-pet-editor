@@ -5,11 +5,11 @@ import { catCoatSchemes, catFeatureColors, catIrisColors, catOptions, catPalette
   orangeCatOptions, readPetConfig, type CatConfig, type CatIrisColor, type PetConfig } from './cat';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor,
   type CatCustomization, type CatEditSource } from './cat-custom';
-import { catTypingFrameDuration, currentTypingAnimation } from './cat-typing';
+import { catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
 import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
-let preview: { config: PetConfig; action: Action; typingMode: TypingMode; started: number } | undefined;
+let preview: { config: PetConfig; action: Action; typingMode: TypingMode; started: number; frenzyStarted?: number } | undefined;
 let visibleSource: CatEditSource | undefined;
 let visibleCustom: CatCustomization | undefined;
 let custom: CatCustomization | undefined;
@@ -69,9 +69,11 @@ Object.assign(window, {
     preview: (config: unknown, requested: Action | 'typing-gentle' | 'typing-fast') => {
       const action = requested === 'typing-gentle' || requested === 'typing-fast' ? 'typing' : requested;
       if (!Object.hasOwn(actions, action)) throw Error('未知动作');
-      preview = { config: readPetConfig(config), action,
-        typingMode: requested === 'typing' ? 'frenzy' : requested === 'typing-fast' ? 'fast' : 'gentle',
-        started: performance.now() };
+      const appearance = readPetConfig(config);
+      const typingMode = requested === 'typing' ? 'frenzy' : requested === 'typing-fast' ? 'fast' : 'gentle';
+      const started = performance.now();
+      const frenzyStarted = appearance.frame === 'CAT' && typingMode === 'frenzy' ? preview?.frenzyStarted ?? started : undefined;
+      preview = { config: appearance, action, typingMode, started, frenzyStarted };
     },
     previewSnapshot: async () => {
       await desktopReady;
@@ -119,6 +121,7 @@ Object.assign(window, {
 
 void desktopReady.then(() => {
   let previous = -1;
+  let previousHeat: number | undefined;
   let previousPreview = preview;
   let previousGaze = gaze;
   let previousCustom = custom;
@@ -129,20 +132,22 @@ void desktopReady.then(() => {
       const interval = isCatWalk ? 165 : preview.action === 'typing'
         ? (config.frame === 'CAT' ? catTypingFrameDuration(preview.typingMode) : 145) : 90;
       const frame = Math.floor(Math.max(0, now - preview.started) / interval) % frameCount(config, preview.action);
-      if (frame !== previous || previousPreview !== preview || previousGaze !== gaze || previousCustom !== custom) {
+      const frenzyHeatFrame = preview.frenzyStarted === undefined ? undefined : frenzyHeatFrameAt(now - preview.frenzyStarted);
+      if (frame !== previous || frenzyHeatFrame !== previousHeat || previousPreview !== preview || previousGaze !== gaze || previousCustom !== custom) {
         const stretch = isCatWalk ? Math.sin(frame * Math.PI / 2) * (preview.action === 'left' ? -1 : 1) : 0;
         const action = isCatWalk ? 'sit' : preview.action;
         const renderedFrame = isCatWalk ? 0 : frame;
         render(canvas, config, action, renderedFrame, gaze, {
-          typingMode: preview.typingMode, typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
+          typingMode: preview.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
         });
         visibleSource = config.frame === 'CAT' && (action === 'sit' || action === 'typing')
-          ? { config, action, frame: renderedFrame, gaze, typingMode: preview.typingMode,
+          ? { config, action, frame: renderedFrame, gaze, typingMode: preview.typingMode, frenzyHeatFrame,
             typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
             typingLayout: 'aligned', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(config.pattern), legacyNoseOutline: false }
           : undefined;
         visibleCustom = custom;
         previous = frame;
+        previousHeat = frenzyHeatFrame;
         previousPreview = preview;
         previousGaze = gaze;
         previousCustom = custom;

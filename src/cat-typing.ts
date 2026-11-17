@@ -1,17 +1,32 @@
-import { typingAtlases } from './pet-assets';
+import { frontTyping, typingAtlases } from './pet-assets';
 
-export type TypingAnimation = 'reference-v2' | 'reference' | 'shared' | 'legacy';
+export type TypingAnimation = 'front-v5' | 'front-v4' | 'front-v3' | 'reference-v2' | 'reference' | 'shared' | 'legacy';
 
-export const currentTypingAnimation = 'reference-v2' as const;
-export const catTypingFrameCount = typingAtlases[currentTypingAnimation].frames;
+export const currentTypingAnimation = 'front-v5' as const;
+export const catTypingFrameCount = frontTyping.frames;
+export const frenzyRedFrame = 30;
+export const frenzySteamLoopStart = 35;
+
+export function frenzyHeatFrameAt(elapsed: number) {
+  return Math.min(frenzySteamLoopStart, Math.floor(Math.max(0, elapsed) / catTypingFrameDuration('frenzy')));
+}
+
+export function isFrontTyping(animation: TypingAnimation) {
+  return animation === 'front-v3' || usesFallingTyping(animation);
+}
+
+export function usesFallingTyping(animation: TypingAnimation) {
+  return animation === 'front-v4' || animation === 'front-v5';
+}
 
 export function catTypingFrameCountFor(animation: TypingAnimation = currentTypingAnimation) {
+  if (isFrontTyping(animation)) return frontTyping.frames;
   if (animation === 'reference' || animation === 'reference-v2') return typingAtlases[animation].frames;
   return animation === 'legacy' ? 4 : 12;
 }
 
 export function catTypingFrameDuration(mode: 'gentle' | 'fast' | 'frenzy', animation: TypingAnimation = currentTypingAnimation) {
-  if (animation === 'reference-v2') return mode === 'gentle' ? 70 : mode === 'fast' ? 40 : 20;
+  if (isFrontTyping(animation) || animation === 'reference-v2') return mode === 'gentle' ? 70 : mode === 'fast' ? 40 : 20;
   if (animation === 'legacy') return mode === 'gentle' ? 250 : 90;
   const duration = mode === 'gentle' ? 1000 : mode === 'fast' && animation === 'reference' ? 600 : 360;
   return duration / catTypingFrameCountFor(animation);

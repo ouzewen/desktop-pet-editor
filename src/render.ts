@@ -9,8 +9,8 @@ import { recolorCatCoat, type CatCoatSurface } from './cat-coat';
 import { isLaptopFur, paintBodyPattern } from './cat-body-pattern';
 import { paintCatTail } from './cat-tail';
 import { clearForeheadFur, paintForeheadFur, paintHeadFur } from './cat-head-pattern';
-import { catTypingFrameCountFor, currentTypingAnimation, lowTypingArms, type TypingAnimation } from './cat-typing';
-import { createTypingArmPainter } from './cat-typing-paint';
+import { catTypingFrameCountFor, currentTypingAnimation, frenzyRedFrame, frenzySteamLoopStart, isFrontTyping, lowTypingArms, usesFallingTyping, type TypingAnimation } from './cat-typing';
+import { createTypingArmPainter, recolorFrontPaws } from './cat-typing-paint';
 import { clearForeheadOutlineSpots, recolorCatOutline, type OutlineVersion } from './cat-outline';
 export type { OutlineVersion } from './cat-outline';
 import { irisColors, palettes, type Config } from './model';
@@ -19,7 +19,7 @@ import {
   assetFiles, assetsFor, atlasNoseTips, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
   bodyPatternPath, breedArt, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catFrontEars,
   catFurSlots, catMarkings, catMouthPath, catNosePath, catWalkBodies, catWalkFrames, earMaskPath, facePartsPath, faceTiles,
-  foreheadParts, headPatternPath, legacyMouthIds, legacyNoseOutlinePath, mouthSkinColumns, mouthSkinPath, mouthStems,
+  foreheadParts, frontTyping, frontTypingEffects, frontTypingEffectsPath, headPatternPath, legacyMouthIds, legacyNoseOutlinePath, mouthSkinColumns, mouthSkinPath, mouthStems,
   orangePath, sharedMouthStyles, sharedNoseStyles,
   initialTailPath, referenceTailPath, sharedBreedParts, sharedTailStyles, tailPath, typingAtlases, typingEffectPath, typingGeometryPart, typingInkPatches, typingReferencePath,
   walkEyeGlints, type LegacyFrontBreed,
@@ -43,6 +43,7 @@ export type CatPose = {
   typingMode?: TypingMode;
   typingLayout?: TypingLayout;
   typingAnimation?: TypingAnimation;
+  frenzyHeatFrame?: number;
   laptopVersion?: LaptopVersion;
   typingInkVersion?: TypingInkVersion;
   typingMouthVersion?: TypingMouthVersion;
@@ -420,10 +421,11 @@ function typingLayer(path: string, layout: TypingLayout | undefined) {
   return layer;
 }
 
-export function catTypingLaptop(appearance: CatConfig | CatRenderConfig, layout?: TypingLayout, version: LaptopVersion = 'clean') {
+export function catTypingLaptop(appearance: CatConfig | CatRenderConfig, layout?: TypingLayout, version: LaptopVersion = 'clean',
+  animation: TypingAnimation = currentTypingAnimation) {
+  if (isFrontTyping(animation)) return imageFor(frontTyping.path + 'laptop');
   const config = catRenderConfig(appearance);
-  // The new prop is already drawn in aligned coordinates and has no breed fur.
-  // Historic raw-coordinate sources must continue using their original cel.
+  // Older saves used either the cleaned prop or the original prop with fur.
   if (version === 'clean' && layout !== 'legacy') return imageFor(typingReferencePath + 'laptop');
   if (config.tail !== 'CT01') return typingLayer(breedLaptop, layout);
   if (config.palette !== 'CC01') return typingLayer(breedLaptop, layout);
@@ -445,7 +447,7 @@ function bodyWithTypingConnector(body: CatLayer, config: CatRenderConfig, layout
   // The old orange prop contains 84 extra opaque fur pixels at the tail root.
   // Mask away the common prop after its original fur recoloring, preserving
   // that connector exactly without carrying any computer-edge pixels with it.
-  connector.ctx.drawImage(catTypingLaptop(config, layout, 'original'), 0, 0);
+  connector.ctx.drawImage(catTypingLaptop(config, layout, 'original', 'legacy'), 0, 0);
   connector.ctx.globalCompositeOperation = 'destination-out';
   connector.ctx.drawImage(typingLayer(breedLaptop, layout), 0, 0);
   const merged = makeLayer(CAT_SIZE);
@@ -604,6 +606,44 @@ function referenceTypingFrame(part: string, frame: number, animation: ReferenceT
   return canvas;
 }
 
+function drawTypingRegion(ctx: CanvasRenderingContext2D, path: string, { x, y, width, height }: CatInkBounds, frame: number) {
+  const { columns } = frontTyping;
+  const sx = frame % columns * width;
+  const sy = Math.floor(frame / columns) * height;
+  ctx.drawImage(imageFor(path), sx, sy, width, height, x, y, width, height);
+}
+
+function drawFallingTypingCel(ctx: CanvasRenderingContext2D, part: keyof typeof frontTypingEffects, frame: number) {
+  const region = frontTypingEffects[part];
+  drawTypingRegion(ctx, frontTypingEffectsPath + part, region, frame % region.frames);
+}
+
+const frontPawFrames: HTMLCanvasElement[] = [];
+function frontTypingPaws(frame: number, frenzy: boolean) {
+  const phase = frame % frontTyping.pawFrames;
+  const index = phase + (frenzy ? frontTyping.pawFrames : 0);
+  if (frontPawFrames[index]) return frontPawFrames[index]!;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  if (frenzy) drawFallingTypingCel(ctx, 'paws', phase);
+  else drawTypingRegion(ctx, frontTyping.path + 'paws', frontTyping.region, phase);
+  return frontPawFrames[index] = canvas;
+}
+
+const frontPawColors = new WeakMap<CatLayer, WeakMap<HTMLCanvasElement, HTMLCanvasElement>>();
+function coloredFrontPaws(source: HTMLCanvasElement, body: CatLayer, config: CatRenderConfig, outlineVersion: OutlineVersion) {
+  if (config.palette === 'CC01' && config.coat === 'native' && config.bodyPattern === 'native') return source;
+  let frames = frontPawColors.get(body);
+  if (!frames) frontPawColors.set(body, frames = new WeakMap());
+  let colored = frames.get(source);
+  if (!colored) {
+    const { canvas, ctx } = makeLayer(CAT_SIZE);
+    const paws = recolorFrontPaws(layerPixels(source), layerPixels(body), config.palette === 'CC02');
+    ctx.putImageData(paws, 0, 0);
+    frames.set(source, colored = canvas);
+  }
+  return outlinedCatLayer(colored, source, config, outlineVersion);
+}
+
 function layerPixels(source: CatLayer) {
   const { ctx } = makeLayer(CAT_SIZE);
   ctx.drawImage(source, 0, 0);
@@ -752,17 +792,29 @@ function catHeadEye(config: CatRenderConfig, typing: boolean, frame: number) {
 
 type TypingEffects = Pick<CatPose, 'typingMode' | 'typingAnimation' | 'typingEffects' | 'typingInkVersion' | 'typingMouthVersion'>;
 
-function hasEffortEyes(typing: boolean, pose: TypingEffects) {
+function hasEffortEyes(typing: boolean, frame: number, pose: TypingEffects) {
   if (!typing || pose.typingEffects === false) return false;
   const animation = pose.typingAnimation ?? currentTypingAnimation;
-  return isReferenceTyping(animation) ? pose.typingMode === 'frenzy' : animation === 'shared' && pose.typingMode === 'fast';
+  // Rebuild the old transitional expression only for saves from that version.
+  if (animation === 'front-v4') {
+    const phase = frame % frontTyping.frames;
+    return pose.typingMode === 'frenzy' && phase >= 29 && phase < 59;
+  }
+  return isFrontTyping(animation) || isReferenceTyping(animation)
+    ? pose.typingMode === 'frenzy' : animation === 'shared' && pose.typingMode === 'fast';
 }
 
 export function catGlintAperture(appearance: CatConfig | CatRenderConfig, typing: boolean, frame: number, pose: TypingEffects = {}) {
   const config = catRenderConfig(appearance);
-  if (hasEffortEyes(typing, pose)) return;
+  if (hasEffortEyes(typing, frame, pose)) return;
   if (config.palette === 'CC01') return imageFor(orangePath + 'iris');
   if (catHeadEye(config, typing, frame) === 'Y01') return imageFor(breedPath(config.palette) + 'aperture');
+}
+
+export function catOpenEyeCoverage(appearance: CatConfig | CatRenderConfig) {
+  const { palette } = catRenderConfig(appearance);
+  // The orange head has baked eyes. Its fur patch covers their full outline.
+  return imageFor(palette === 'CC01' ? typingEffectPath + 'orange_eye_patch' : breedPath(palette) + 'eyes');
 }
 
 const noseColumns = Object.keys(atlasNoseTips);
@@ -923,7 +975,7 @@ function sharedMouthLayer(config: CatRenderConfig) {
 function drawCatFaceParts(
   ctx: CanvasRenderingContext2D, config: CatRenderConfig, markingLayout: MarkingLayout | undefined,
   transientMouth: 'smile' | 'flat' | undefined, animation: TypingAnimation, cleanMouth: boolean,
-  legacyNoseOutline?: boolean,
+  legacyNoseOutline?: boolean, effortMouth = false,
 ) {
   // The Aseprite exporter packs the original face coordinates into three rows.
   const { left, top, width, height } = faceTiles;
@@ -948,6 +1000,13 @@ function drawCatFaceParts(
     // Restore the local fur before compositing the independent lips. Old
     // flattened saves still need the original face atlas and its exact pixels.
     ctx.drawImage(mouthSkinLayer(config, markingLayout), 0, 0);
+  }
+  if (effortMouth) {
+    const path = frontTypingEffectsPath + 'mouth';
+    const line = coloredCatIris(path, config.palette === 'CC02' ? '#261B1C' : '#442416');
+    ctx.drawImage(line, 0, Math.max(0, tip - 130));
+    drawNose();
+    return;
   }
   if (transientMouth && isReferenceTyping(animation)) {
     const path = referenceTypingPath(animation) + `mouth_${transientMouth}`;
@@ -1195,17 +1254,20 @@ export function drawCatHead(
 ) {
   const animation = typingPose.typingAnimation ?? currentTypingAnimation;
   const mode = typingPose.typingMode ?? 'gentle';
-  const referenceEffects = typing && isReferenceTyping(animation) && typingPose.typingEffects !== false;
-  const sharedTypingMouth = referenceEffects && animation === currentTypingAnimation && typingPose.typingMouthVersion !== 'legacy';
+  const effectsAnimation = isFrontTyping(animation) ? 'reference-v2' : animation;
+  const referenceEffects = typing && isReferenceTyping(effectsAnimation) && typingPose.typingEffects !== false;
+  const frenzyEffects = referenceEffects && usesFallingTyping(animation) && mode === 'frenzy';
+  const transitionalFace = frenzyEffects && animation === 'front-v4';
+  const sharedTypingMouth = referenceEffects && effectsAnimation === 'reference-v2' && typingPose.typingMouthVersion !== 'legacy';
   const selected = catRenderConfig(appearance);
-  const config = sharedTypingMouth ? { ...selected, mouth: typingMouths[mode] } : selected;
+  const config = sharedTypingMouth ? { ...selected, mouth: transitionalFace ? typingMouths.gentle : typingMouths[mode] } : selected;
   const { palette } = config;
   const orange = palette === 'CC01';
   const path = orange ? orangePath : breedPath(palette);
   const accessory = config.accessory === 'A07' ? 'A06' : config.accessory;
   const eye = catHeadEye(config, typing, frame);
-  const effort = hasEffortEyes(typing, typingPose);
-  const cleanEyeRim = effort && !orange && animation === currentTypingAnimation
+  const effort = hasEffortEyes(typing, frame, typingPose);
+  const cleanEyeRim = effort && !orange && effectsAnimation === 'reference-v2'
     && (typingPose.typingInkVersion ?? currentTypingInkVersion) === currentTypingInkVersion;
   const leftPupil = catPupilStyle(config, 'left');
   const rightPupil = catPupilStyle(config, 'right');
@@ -1237,7 +1299,11 @@ export function drawCatHead(
     drawEyePair(ctx, frontCatEye(palette, eye, leftPupil), frontCatEye(palette, eye, rightPupil));
   }
   const cleanMouth = orange && typing && animation === 'reference-v2' && typingPose.typingInkVersion !== 'original';
-  drawCatFaceParts(ctx, config, markingLayout, transientMouth, animation, cleanMouth, legacyNoseOutline);
+  const effortMouth = transitionalFace && effort && sharedTypingMouth;
+  const orangeMouth = effortMouth && orange && config.coat === 'native' && config.bodyPattern === 'native'
+    && config.nose === 'NO05' && markingLayout !== 'legacy';
+  drawCatFaceParts(ctx, config, markingLayout, transientMouth, effectsAnimation, cleanMouth, legacyNoseOutline, effortMouth && !orangeMouth);
+  if (orangeMouth) ctx.drawImage(imageFor(frontTypingEffectsPath + 'mouth_orange'), 0, 0);
   const pupilPath = breedPath(orange ? 'CC03' : config.palette);
   if (!effort && orange) {
     drawEyePair(ctx, orangeCatIris(leftPupil, pupilPath), orangeCatIris(rightPupil, pupilPath));
@@ -1254,7 +1320,7 @@ export function drawCatHead(
       config.rightInnerEyeColor === undefined ? undefined : innerCatIris(rightPupil, alternatePath, true));
   }
   if (effort) {
-    const path = (referenceEffects ? referenceTypingPath(animation) : typingEffectPath) + 'effort_eyes';
+    const path = (referenceEffects ? referenceTypingPath(effectsAnimation) : typingEffectPath) + 'effort_eyes';
     const expression = config.palette === 'CC02'
       ? coloredCatIris(path, '#201B1E') : imageFor(path);
     ctx.drawImage(expression, 0, 0);
@@ -1263,8 +1329,10 @@ export function drawCatHead(
   }
   // New sweat belongs on the forehead, beneath hats and hair clips. Preserve
   // the old shared order when reconstructing older pixel-editor saves.
-  if (referenceEffects && isReferenceTyping(animation) && mode !== 'gentle') {
-    ctx.drawImage(referenceTypingFrame(`sweat_${mode}`, frame, animation), 0, 0);
+  if (frenzyEffects) {
+    drawFallingTypingCel(ctx, 'sweat', frame);
+  } else if (referenceEffects && mode !== 'gentle') {
+    ctx.drawImage(referenceTypingFrame(`sweat_${mode}`, frame, effectsAnimation), 0, 0);
   }
   if (accessory !== 'A00') ctx.drawImage(imageFor(`${orangePath}accessory_${accessory}`), 0, 0);
   if (effort && !referenceEffects) {
@@ -1296,18 +1364,23 @@ function frontCatLayers(config: CatRenderConfig, typing: boolean, frame: number,
   const outlineVersion = pose.outlineVersion ?? 'adaptive';
   const tailArtVersion = pose.tailArtVersion ?? 'clean';
   const laptopVersion = layout === 'legacy' ? 'original'
-    : pose.laptopVersion ?? (isReferenceTyping(animation) ? 'clean' : 'original');
-  const bodyBase = frontBodyLayer(path, typing ? 'typing_body' : 'body', config, layout, outlineVersion);
-  const selectedBody = bodyWithSelectedTail(bodyBase, config, typing, layout, outlineVersion, tailArtVersion);
-  const body = typing ? bodyWithTypingConnector(selectedBody, config, layout, laptopVersion) : selectedBody;
-  const arms = !typing ? undefined : animation === 'legacy'
+    : pose.laptopVersion ?? (isFrontTyping(animation) || isReferenceTyping(animation) ? 'clean' : 'original');
+  const historicalBody = typing && !isFrontTyping(animation);
+  const bodyBase = frontBodyLayer(path, historicalBody ? 'typing_body' : 'body', config, layout, outlineVersion);
+  const selectedBody = bodyWithSelectedTail(bodyBase, config, historicalBody, layout, outlineVersion, tailArtVersion);
+  const body = historicalBody ? bodyWithTypingConnector(selectedBody, config, layout, laptopVersion) : selectedBody;
+  const frenzyPaws = usesFallingTyping(animation) && mode === 'frenzy';
+  const frontPaws = typing && isFrontTyping(animation) ? frontTypingPaws(frame, frenzyPaws) : undefined;
+  const arms = !typing ? undefined : frontPaws
+    ? coloredFrontPaws(frontPaws, bodyBase, config, outlineVersion)
+    : animation === 'legacy'
     ? frontBodyLayer(path, `typing_arms_${mode}_${frame}`, config, layout, outlineVersion)
     : animation === 'shared' ? sharedTypingArms(path, config, frame, layout, outlineVersion)
-      : referenceTypingArms(path, config, mode, frame, animation, outlineVersion, pose.typingInkVersion);
+      : isReferenceTyping(animation) ? referenceTypingArms(path, config, mode, frame, animation, outlineVersion, pose.typingInkVersion) : undefined;
   const raisedPaws = typing && animation === 'legacy' && mode === 'fast' && frame < 3
     ? frontBodyLayer(path, `typing_front_${frame}`, config, layout, outlineVersion) : undefined;
-  const laptop = typing ? catTypingLaptop(config, layout, laptopVersion) : undefined;
-  return { body, bodyBase, arms, raisedPaws, laptop, mode, animation, outlineVersion, laptopVersion, tailArtVersion };
+  const laptop = typing ? catTypingLaptop(config, layout, laptopVersion, animation) : undefined;
+  return { body, bodyBase, arms, frontPaws, frenzyPaws, historicalBody, raisedPaws, laptop, mode, animation, outlineVersion, laptopVersion, tailArtVersion };
 }
 
 const inkArea = CAT_SIZE * CAT_SIZE;
@@ -1410,21 +1483,22 @@ function idlePawAt(x: number, y: number) {
 function catBodyInkGeometry(
   config: CatRenderConfig, typing: boolean, frame: number, pose: CatPose, layers: ReturnType<typeof frontCatLayers>,
 ): CatInkGeometry {
-  const { body, bodyBase, arms, laptop, mode, animation, outlineVersion, laptopVersion, tailArtVersion } = layers;
+  const { body, bodyBase, arms, frontPaws, frenzyPaws, historicalBody, laptop, mode, animation, outlineVersion, laptopVersion, tailArtVersion } = layers;
   const layout = pose.typingLayout;
-  // Current typing speeds share all 32 geometric cels. Sweat and facial
-  // expressions do not change the ownership of the body or keyboard pixels.
-  const armMode = animation === 'reference-v2' ? '' : mode;
-  const poseKey = typing ? `${animation}/${layout}/${laptopVersion}/${armMode}/${frame}` : 'idle';
+  // The three speeds share the same geometry. Expression and letter effects
+  // do not change which part owns an edited pixel.
+  const armMode = animation === 'reference-v2' || (isFrontTyping(animation) && !frenzyPaws) ? '' : mode;
+  const geometryFrame = frontPaws ? frame % frontTyping.pawFrames : frame;
+  const poseKey = typing ? `${animation}/${layout}/${laptopVersion}/${armMode}/${geometryFrame}` : 'idle';
   const key = `${config.palette}/${config.tail}/${tailArtVersion}/${poseKey}`;
   const cached = bodyInkCache.get(key);
   if (cached) return cached;
   const bodyAlpha = catLayerAlpha(body), armsAlpha = arms && catLayerAlpha(arms);
   const laptopAlpha = laptop && catLayerAlpha(laptop);
-  const baseAlpha = catLayerAlpha(bodyBase), removedTail = catLayerAlpha(tailRemoval(typing, layout));
+  const baseAlpha = catLayerAlpha(bodyBase), removedTail = catLayerAlpha(tailRemoval(historicalBody, layout));
   const replacementTail = config.tail !== 'CT01'
-    ? catLayerAlpha(selectedTail(config, typing, layout, outlineVersion, tailArtVersion)) : undefined;
-  const referencePaws = typing && isReferenceTyping(animation)
+    ? catLayerAlpha(selectedTail(config, historicalBody, layout, outlineVersion, tailArtVersion)) : undefined;
+  const referencePaws = frontPaws ? catLayerAlpha(frontPaws) : typing && isReferenceTyping(animation)
     ? catLayerAlpha(referenceTypingFrame(typingGeometryPart('paws', animation, mode), frame, animation)) : undefined;
   const leftPaw = new Uint8Array(inkArea), rightPaw = new Uint8Array(inkArea);
   const tail = new Uint8Array(inkArea), torso = new Uint8Array(inkArea);
@@ -1443,7 +1517,7 @@ function catBodyInkGeometry(
     }
     if (paw === 'leftPaw') leftPaw[index] = 1;
     else if (paw === 'rightPaw') rightPaw[index] = 1;
-    else if (!laptopAlpha?.[index] && !armsAlpha?.[index] && bodyAlpha[index] && (replacementTail
+    else if ((!historicalBody || !laptopAlpha?.[index]) && !armsAlpha?.[index] && bodyAlpha[index] && (replacementTail
       ? replacementTail[index] && (!baseAlpha[index] || removedTail[index])
       : baseAlpha[index] && removedTail[index])) tail[index] = 1;
     else torso[index] = 1;
@@ -1463,20 +1537,26 @@ export function catInkGeometry(appearance: CatConfig, typing: boolean, frame: nu
   const count = frameCount(appearance, typing ? 'typing' : 'sit', pose.typingAnimation);
   const index = ((frame % count) + count) % count;
   const layers = frontCatLayers(config, typing, index, pose);
+  const head = catHeadInkGeometry(config, typing, pose);
+  if (layers.frontPaws && head.head?.mask) {
+    const paws = catLayerAlpha(layers.frontPaws);
+    const mask = head.head.mask.map((pixel, index) => paws[index] ? 0 : pixel);
+    return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers),
+      ...head, head: { ...head.head, mask } };
+  }
   // The idle bob moves all authored surfaces together. The pixel editor
   // accounts for that translation in its cursor coordinates.
-  return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers),
-    ...catHeadInkGeometry(config, typing, pose) };
+  return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers), ...head };
 }
 
 function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, typing: boolean, frame: number, gaze: Gaze, pose: CatPose) {
   const layers = frontCatLayers(config, typing, frame, pose);
-  const { body, arms, laptop, raisedPaws, mode, animation, outlineVersion, laptopVersion } = layers;
+  const { body, arms, frontPaws, laptop, raisedPaws, mode, animation, outlineVersion, laptopVersion } = layers;
   const layout = pose.typingLayout;
   const custom = pose.custom;
   const ink = custom?.ink;
   const legacyCustom = ink ? undefined : custom;
-  const effort = hasEffortEyes(typing, { ...pose, typingMode: mode });
+  const effort = hasEffortEyes(typing, frame, { ...pose, typingMode: mode });
   const sameIdle = !typing && legacyCustom?.source.action === 'sit';
   const placement = catHeadPlacement(typing, frame, layout);
   const tracking = legacyCustom !== undefined && gaze.space === 'pointer';
@@ -1492,6 +1572,8 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     typingInkVersion: pose.typingInkVersion, typingMouthVersion: pose.typingMouthVersion,
   };
   const stretch = typing ? 0 : pose.stretch ?? 0;
+  const fallingLetters = typing && usesFallingTyping(animation) && mode !== 'fast' && pose.typingEffects !== false;
+  const frenzyEffects = fallingLetters && mode === 'frenzy';
 
   // Work in actual 320px coordinates; the outer renderer uses 160 logical units.
   ctx.save();
@@ -1503,6 +1585,7 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     ctx.translate(-160, -278);
   }
 
+  if (fallingLetters) drawFallingTypingCel(ctx, mode, frame);
   if (legacyCustom && torsoEdits) {
     const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
     layer.drawImage(body, 0, 0);
@@ -1534,11 +1617,12 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     layer.globalCompositeOperation = 'destination-in';
     layer.drawImage(paws, 0, 0);
     ctx.drawImage(canvas, 0, 0);
-  } else if (arms) {
+  } else if (arms && !frontPaws) {
     ctx.drawImage(arms, 0, 0);
   }
-  if (ink && bodyInkParts.some(part => ink.parts[part])) {
-    applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), bodyInkParts);
+  const bodyParts = frontPaws ? ['torso', 'tail'] as const : bodyInkParts;
+  if (ink && bodyParts.some(part => ink.parts[part])) {
+    applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), bodyParts);
   }
 
   ctx.save();
@@ -1568,23 +1652,67 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     ctx.restore();
   }
   if (laptop) {
+    const drawLaptop = (target: CanvasRenderingContext2D) => {
+      target.drawImage(laptop, 0, 0);
+      if (frenzyEffects) {
+        // A source without separate heat timing still reconstructs the old art.
+        const heat = pose.frenzyHeatFrame === undefined ? frame : Math.min(pose.frenzyHeatFrame, frenzyRedFrame);
+        drawFallingTypingCel(target, 'heat', heat);
+      }
+    };
+    if (frontPaws && arms) {
+      ctx.drawImage(arms, 0, 0);
+      if (ink?.parts.leftPaw || ink?.parts.rightPaw) {
+        applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), ['leftPaw', 'rightPaw']);
+      }
+    }
     if (raisedPaws) ctx.drawImage(raisedPaws, 0, 0);
-    if (legacyCustom?.laptop) {
+    if (legacyCustom?.laptop && isFrontTyping(animation)) {
+      // The old screen had a different silhouette. Clip its saved brush
+      // strokes to the new screen, and keep explicit erasures transparent.
       const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
+      drawLaptop(ctx);
+      layer.drawImage(legacyCustom.laptop.mask, 0, 0);
+      layer.globalCompositeOperation = 'destination-in';
       layer.drawImage(laptop, 0, 0);
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(canvas, 0, 0);
+      ctx.restore();
+      clearCustomLayer(legacyCustom);
+      layer.drawImage(legacyCustom.laptop.paint, 0, 0);
+      layer.globalCompositeOperation = 'destination-in';
+      layer.drawImage(laptop, 0, 0);
+      ctx.drawImage(canvas, 0, 0);
+    } else if (legacyCustom?.laptop) {
+      const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
+      drawLaptop(layer);
       copyCatEdits(layer, legacyCustom.laptop);
       ctx.drawImage(canvas, 0, 0);
     } else {
-      ctx.drawImage(laptop, 0, 0);
+      drawLaptop(ctx);
     }
     if (ink?.parts.laptop) {
       applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), ['laptop']);
     }
     if (legacyCustom?.source.action === 'typing' && legacyCustom.source.frame === frame && legacyCustom.source.typingMode === mode
       && legacyCustom.source.typingAnimation === animation
+      && legacyCustom.source.frenzyHeatFrame === pose.frenzyHeatFrame
       && legacyCustom.source.laptopVersion === laptopVersion
       && (legacyCustom.source.markingLayout === 'legacy') === (pose.markingLayout === 'legacy') && fullEdits) {
       copyCatEdits(ctx, fullEdits);
+    }
+    if (frenzyEffects) {
+      const heat = pose.frenzyHeatFrame;
+      if (heat === undefined) drawFallingTypingCel(ctx, 'air', frame);
+      else {
+        const steam = heat < frenzySteamLoopStart ? heat : frenzySteamLoopStart + frame % frontTyping.pawFrames;
+        drawFallingTypingCel(ctx, 'steam', steam);
+        drawFallingTypingCel(ctx, 'sparks', frame);
+      }
+    }
+    if (isFrontTyping(animation) && !fallingLetters && pose.typingEffects !== false) {
+      drawTypingRegion(ctx, frontTyping.path + 'letters', frontTyping.region, frame);
     }
   } else if (sameIdle && fullEdits) {
     ctx.save();

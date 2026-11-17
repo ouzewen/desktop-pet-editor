@@ -906,10 +906,6 @@ struct WorkbenchView: View {
                                 fieldPicker(title: "毛皮花纹", key: "bodyPattern", options: bodyPatterns)
                             }
                         }
-                        Text("额头单独搭配；毛皮花纹同时改变脸部、身体和尾巴")
-                            .font(PixelFont.font(12))
-                            .foregroundStyle(palette.inkSoft)
-                            .fixedSize(horizontal: false, vertical: true)
                         if let accessories = fieldsForFrame["accessory"] {
                             accessoryRow(accessories)
                         }

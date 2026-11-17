@@ -90,6 +90,21 @@ export const tailPath = 'cat/hd/tails/';
 export const initialTailPath = tailPath + 'initial/';
 export const referenceTailPath = tailPath + 'reference/';
 export const typingEffectPath = 'cat/hd/typing-effects/';
+export const frontTyping = {
+  path: 'cat/hd/typing-front/', frames: 64, pawFrames: 16, columns: 8,
+  region: { x: 48, y: 140, width: 208, height: 49 },
+} as const;
+export const frontTypingEffectsPath = 'cat/hd/typing-falling/';
+export const frontTypingEffects = {
+  gentle: { x: 0, y: 90, width: 320, height: 200, frames: frontTyping.frames },
+  frenzy: { x: 0, y: 90, width: 320, height: 200, frames: frontTyping.frames },
+  paws: { ...frontTyping.region, frames: frontTyping.pawFrames },
+  heat: { x: 63, y: 189, width: 177, height: 98, frames: frontTyping.frames },
+  air: { x: 48, y: 151, width: 224, height: 38, frames: frontTyping.frames },
+  sparks: { x: 48, y: 151, width: 224, height: 38, frames: frontTyping.frames },
+  steam: { x: 128, y: 152, width: 48, height: 37, frames: frontTyping.frames },
+  sweat: { x: 32, y: 32, width: 240, height: 64, frames: frontTyping.frames },
+} as const;
 export const typingAtlases = {
   reference: { path: 'cat/hd/typing-reference/', frames: 12 },
   'reference-v2': { path: 'cat/hd/typing-v2/', frames: 32 },
@@ -217,7 +232,20 @@ function scriptGroup(id: string, usage: Usage, source: string, script: string, o
 }
 
 const mappedBreeds = (Object.keys(breedArt) as Breed[]).filter((id): id is FrontBreed => id !== 'CC01');
-const currentTypingAtlas = typingAtlases['reference-v2'];
+const typingV2Atlas = typingAtlases['reference-v2'];
+const fallingTypingGroups = (['gentle', 'frenzy'] as const).map(mode => {
+  const parts: (keyof typeof frontTypingEffects)[] = mode === 'gentle' ? [mode] : [mode, 'paws', 'heat', 'air', 'sparks', 'steam', 'sweat'];
+  const args: Record<string, string | number> = { mode, frames: frontTyping.frames, columns: frontTyping.columns };
+  const files = parts.map(part => {
+    const { x, y, width, height, frames } = frontTypingEffects[part];
+    args[part] = [x, y, width, height, frames].join(',');
+    return { key: frontTypingEffectsPath + part, width: width * frontTyping.columns, height: height * frames / frontTyping.columns };
+  });
+  if (mode === 'frenzy') files.push(...pngs(withPrefix(frontTypingEffectsPath, ['mouth', 'mouth_orange'])));
+  const source = mode === 'gentle' ? 'typing-gentle-falling' : 'typing-frenzy';
+  return scriptGroup(`cat.typing.front-v4.${mode}`, 'current', `art/cat-shared/${source}.aseprite`,
+    'export-cat-typing-falling', frontTypingEffectsPath, files, args);
+});
 const oldModes = ['gentle', 'fast'] as const;
 const legacyTailIds = Object.keys(retiredTailStyles).filter(id => id !== 'CT01');
 const newTailIds = Object.keys(sharedTailStyles);
@@ -342,19 +370,29 @@ export const assetGroups: readonly AssetGroup[] = [
       ...pngs(withPrefix(typingReferencePath,
         mode === 'fast' ? ['mouth_flat', 'mouth_smile', 'mouth_region'] : mode === 'frenzy' ? ['effort_eyes'] : [])),
     ], { mode, frames: typingAtlases.reference.frames })),
-  scriptGroup('cat.typing.reference-v2.shared', 'current', 'art/cat-shared/typing-v2/gentle.aseprite',
-    'export-cat-typing-v2', currentTypingAtlas.path, [
-      ...pngs(withPrefix(currentTypingAtlas.path, Object.values(sharedTypingGeometry)), CAT_SIZE, currentTypingAtlas.frames),
-      ...pngs(withPrefix(currentTypingAtlas.path, Object.values(typingInkPatches))),
+  scriptGroup('cat.typing.front-v3', 'current', 'art/cat-shared/typing-front.aseprite',
+    'export-cat-typing-front', frontTyping.path, [
+      ...pngs([frontTyping.path + 'laptop']),
+      ...(['paws', 'letters'] as const).map(part => ({
+        key: frontTyping.path + part,
+        width: frontTyping.region.width * frontTyping.columns,
+        height: frontTyping.region.height * (part === 'paws' ? frontTyping.pawFrames : frontTyping.frames) / frontTyping.columns,
+      })),
+    ], { frames: frontTyping.frames, pawFrames: frontTyping.pawFrames, columns: frontTyping.columns, ...frontTyping.region }),
+  ...fallingTypingGroups,
+  scriptGroup('cat.typing.reference-v2.shared', 'compatibility', 'art/cat-shared/typing-v2/gentle.aseprite',
+    'export-cat-typing-v2', typingV2Atlas.path, [
+      ...pngs(withPrefix(typingV2Atlas.path, Object.values(sharedTypingGeometry)), CAT_SIZE, typingV2Atlas.frames),
+      ...pngs(withPrefix(typingV2Atlas.path, Object.values(typingInkPatches))),
     ],
-    { mode: 'shared', frames: currentTypingAtlas.frames, ...sharedTypingGeometry }),
+    { mode: 'shared', frames: typingV2Atlas.frames, ...sharedTypingGeometry }),
   ...(['fast', 'frenzy'] as const).map(mode => scriptGroup('cat.typing.reference-v2.' + mode, 'current',
-    'art/cat-shared/typing-v2/' + mode + '.aseprite', 'export-cat-typing-v2', currentTypingAtlas.path, [
-      ...pngs([currentTypingAtlas.path + 'sweat_' + mode], CAT_SIZE, currentTypingAtlas.frames),
-      ...pngs(withPrefix(currentTypingAtlas.path,
+    'art/cat-shared/typing-v2/' + mode + '.aseprite', 'export-cat-typing-v2', typingV2Atlas.path, [
+      ...pngs([typingV2Atlas.path + 'sweat_' + mode], CAT_SIZE, typingV2Atlas.frames),
+      ...pngs(withPrefix(typingV2Atlas.path,
         mode === 'fast' ? ['mouth_flat', 'mouth_smile', 'mouth_region'] : ['effort_eyes'])),
-    ], { mode, frames: currentTypingAtlas.frames })),
-  layerGroup('cat.typing.laptop', 'current', 'art/cat-shared/typing-laptop.aseprite', 'laptop', typingReferencePath + 'laptop'),
+    ], { mode, frames: typingV2Atlas.frames })),
+  layerGroup('cat.typing.laptop', 'compatibility', 'art/cat-shared/typing-laptop.aseprite', 'laptop', typingReferencePath + 'laptop'),
   scriptGroup('cat.typing.effects', 'compatibility', 'art/cat-shared/typing-effects.aseprite', 'export-cat-typing-effects',
     typingEffectPath, pngs(withPrefix(typingEffectPath, ['effort_eyes', 'orange_eye_patch', 'sweat_0', 'sweat_1', 'sweat_2']))),
   group('cat.typing.breed-laptop', 'compatibility', pngs([breedLaptop]), [], {
