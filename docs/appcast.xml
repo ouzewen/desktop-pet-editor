@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>桌宠更新</title>
+    <link>https://github.com/ouzewen/desktop-pet-editor/releases</link>
+    <description>桌宠 macOS 稳定版更新</description>
+    <language>zh-CN</language>
+  </channel>
+</rss>
