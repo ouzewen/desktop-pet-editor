@@ -1,0 +1,60 @@
+{
+  "approved_composite_diff": 0,
+  "approved_composite_scope": "Original motion artwork before the two local ink cleanup layers",
+  "arms_identical_across_modes": true,
+  "paws_identical_across_modes": true,
+  "existing_expression_pixel_diff": 0,
+  "sweat_resampled_from_existing": true,
+  "alpha_values": [
+    0,
+    255
+  ],
+  "frame_count": 32,
+  "frame_duration_ms": {
+    "gentle": 70,
+    "fast": 40,
+    "frenzy": 20
+  },
+  "approved_candidate_sha256": "fde458d06d75bf16c44047e4462813f424769d392d2a64cda8182d49dc629026",
+  "exported_files": {
+    "arms.png": "6ad5d4d7827baed7525ebb9849bec3c4c8743c92d7e9875292f801197a7c14a3",
+    "effort_eyes.png": "6beafd867e8d1e39bb9f63d8d180c114cc31277a1aba053cf5e00f0502e7bb09",
+    "mouth_flat.png": "ef83258fed0d51771e33c61347d04fd2972300cdaae5ff26afa5f602947dee55",
+    "mouth_region.png": "b06d11baf505422c645e7313b1dbd33124733404f78419dd007aa5c4afbfe751",
+    "mouth_smile.png": "b321452397b7e3c76670ed80112344542c0f56b103e4a8dadc5047664211cd42",
+    "paws_mask.png": "a0795e1ff61e7d6a3ef069b472aa94c81f1c7784a4fef6e6b7c0d993c2776df4",
+    "forearm_ink_cleanup.png": "7b1694561994153832612455bbaf0195e01981a0bb3cdff194b446b9ffaaf555",
+    "mouth_ink_cleanup.png": "cce8cd3d8dfd4e3f93836da8276b077a1b5fa7aedf1743a31ca67c415abd1689",
+    "sweat_fast.png": "00161cce3bb9354945c855e7b33596c218b07165dd86dc00374f26d084005679",
+    "sweat_frenzy.png": "69c990d01efe21bbf3d6e4c61a2a1f34277313514a7a1c8c92ec2cc3cac84325"
+  },
+  "source_files": {
+    "fast.aseprite": "85e194d71bc13fdf2c9b8a5afa9b6cb2c744ddcecb7ab919b2304496b81a8d17",
+    "frenzy.aseprite": "2c65c6905b48baf7f5445b8aaf5859849c8f321bb374b5cc4002919a58711a5c",
+    "gentle.aseprite": "e33c110ae8c42821ca7e4c472b5b0c1096cf9d1c4629658c9c24fbefdb0be691"
+  },
+  "ink_cleanup": {
+    "forearm_pixels": 52,
+    "mouth_pixels": 9,
+    "existing_source_layers_rgba_diff": 0
+  },
+  "integration_checks": {
+    "web_build": "passed",
+    "desktop_build": "passed",
+    "native_self_test": "passed",
+    "native_three_mode_preview": "verified",
+    "old_reference_resources_unchanged": true,
+    "renderer": "be7389b1eafa146a9a1583eafc4a45561b30c594f5607f26a0b8931a2d280ead"
+  },
+  "shared_geometry": {
+    "source": "gentle.aseprite",
+    "arms": "arms.png",
+    "paws_mask": "paws_mask.png"
+  },
+  "deduplication_checks": {
+    "before_png_count": 12,
+    "after_png_count": 8,
+    "bytes_saved": 743338,
+    "identical_rendered_frames": 912
+  }
+}

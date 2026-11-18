@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "name": "柴犬",
+  "frame": "M1",
+  "accessory": null,
+  "ear": "E01",
+  "muzzle": "N01",
+  "tail": "T01",
+  "eye": "Y01",
+  "eyeColor": "natural",
+  "palette": "C01",
+  "pattern": "P06"
+}

@@ -1,4 +1,5 @@
 node_modules/
-dist/
+build/
 .playwright-cli/
 .DS_Store
+/public/assets/cat/custom/

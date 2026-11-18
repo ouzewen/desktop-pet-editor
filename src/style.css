@@ -69,3 +69,7 @@ dd { margin: 0; }
   .actions button { padding-inline: 8px; }
   .stage { min-height: 0; }
 }
+
+.preset-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.preset-list .choice { flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 8px 4px; }
+.preset-list canvas { display: block; width: min(100%, 96px); height: auto; image-rendering: pixelated; }

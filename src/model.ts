@@ -1,15 +1,20 @@
 export const options = {
   ear: { E01: '立耳', E02: '半立耳', E03: '垂耳', E04: '长垂耳' },
-  muzzle: { N01: '尖嘴', N02: '方嘴' },
+  muzzle: { N01: '尖嘴', N02: '方嘴', N03: '圆嘴' },
   tail: { T01: '卷尾', T02: '长直尾' },
   eye: { Y01: '圆眼', Y02: '开心闭眼', Y03: '眯眯眼', Y04: '亮晶晶眼' },
+  eyeColor: { natural: '原色', amber: '琥珀', blue: '蓝灰', green: '橄榄绿' },
+  pattern: { P00: '无面部花纹', P02: '眉斑与白颊', P01: '白额线', P06: '眉斑 + 白额线' },
   palette: { C01: '黄白', C02: '黑白', C03: '三色', C04: '巧克力棕', C05: '奶油白', C06: '灰白', C07: '赤棕', C08: '纯黑' },
-  pattern: { P00: '无花纹', P01: '白额线', P02: '眉斑与白颊', P03: '背部斑块', P04: '通体斑点', P05: '眼罩斑' },
 } as const;
 
 export type Part = keyof typeof options;
 type Parts = { [Key in Part]: keyof typeof options[Key] };
 export type Config = Parts & { version: 1; name: string; frame: 'M1'; accessory: null };
+
+export const irisColors: Record<Exclude<Config['eyeColor'], 'natural'>, string> = {
+  amber: '#A87133', blue: '#6794B5', green: '#7F985F',
+};
 
 export const parts = Object.keys(options) as Part[];
 
@@ -24,24 +29,19 @@ export const palettes: Record<Config['palette'], readonly [string, string, strin
   C02: ['#2E2E31', '#1E1E21', '#4A4A4E', '#FFFFFF', '#1A1A1A'],
   C03: ['#2E2E31', '#1E1E21', '#996138', '#FFFFFF', '#1A1A1A'],
   C04: ['#996138', '#784C2C', '#B57A45', '#FFF6E8', '#2E2E2E'],
-  C05: ['#FAE5C0', '#E3C99A', '#FFF9D1', '#FFFFFF', '#3A2A20'],
+  C05: ['#F2D8A0', '#D9B47A', '#FBEFC0', '#FFFFFF', '#3A2A20'],
   C06: ['#8E949A', '#6B7176', '#C2C7CC', '#FFFFFF', '#2E2E2E'],
   C07: ['#C85A28', '#9E4420', '#E08A4A', '#FFF3E6', '#2E2E2E'],
   C08: ['#232326', '#141416', '#3D3D41', '#F5F5F5', '#101010'],
 };
 
 export const presets = {
-  preset_m1_12: { name: '柴犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T01', eye: 'Y01', palette: 'C01', pattern: 'P02', accessory: null },
-  preset_m1_13: { name: '比格犬', version: 1, frame: 'M1', ear: 'E03', muzzle: 'N02', tail: 'T02', eye: 'Y01', palette: 'C03', pattern: 'P03', accessory: null },
-  preset_m1_14: { name: '中华田园犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T02', eye: 'Y01', palette: 'C01', pattern: 'P00', accessory: null },
+  preset_m1_12: { name: '柴犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T01', eye: 'Y01', eyeColor: 'natural', palette: 'C01', pattern: 'P06', accessory: null },
+  preset_m1_13: { name: '比格犬', version: 1, frame: 'M1', ear: 'E03', muzzle: 'N02', tail: 'T02', eye: 'Y01', eyeColor: 'natural', palette: 'C03', pattern: 'P00', accessory: null },
+  preset_m1_14: { name: '中华田园犬', version: 1, frame: 'M1', ear: 'E01', muzzle: 'N01', tail: 'T02', eye: 'Y01', eyeColor: 'natural', palette: 'C01', pattern: 'P00', accessory: null },
 } satisfies Record<string, Config>;
 
 export type PresetId = keyof typeof presets;
-
-export function compatible(config: Config) {
-  return !(config.pattern === 'P01' && ['C05', 'C06'].includes(config.palette))
-    && !(config.pattern === 'P02' && config.palette === 'C02');
-}
 
 const graphemes = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' });
 export function nameLength(name: string) {
@@ -57,12 +57,18 @@ export function readConfig(input: unknown): Config {
   if (typeof data.name !== 'string' || nameLength(data.name) < 1 || nameLength(data.name) > 8) {
     throw Error('name 须为 1–8 字');
   }
+  // Retired body patterns in older exports load as a plain face.
+  const pattern = typeof data.pattern === 'string' && /^P0[3-5]$/.test(data.pattern) ? 'P00' : data.pattern;
+  const choices: Record<string, unknown> = {
+    ...data,
+    eyeColor: data.eyeColor === undefined ? 'natural' : data.eyeColor,
+    pattern,
+  };
   for (const part of parts) {
-    const value = data[part];
+    const value = choices[part];
     if (typeof value !== 'string' || !Object.hasOwn(options[part], value)) throw Error(`${part} 缺失或编号无效`);
   }
   const config = { version: 1, name: data.name.trim(), frame: 'M1', accessory: null } as Config;
-  Object.assign(config, Object.fromEntries(parts.map(part => [part, data[part]])));
-  if (!compatible(config)) throw Error('pattern 与 palette 组合禁用');
+  Object.assign(config, Object.fromEntries(parts.map(part => [part, choices[part]])));
   return config;
 }
