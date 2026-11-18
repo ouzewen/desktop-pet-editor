@@ -1,8 +1,23 @@
-import { catKeepsBreedPigment, catPatternFurColors, hasShortCalicoChest, type CatRenderConfig } from './cat';
+import { sittingForelegAt } from './cat-fur-patches';
+import { catKeepsBreedPigment, catPatternFurColors, currentFurPatternColors, hasShortCalicoChest, type CatRenderConfig } from './cat';
 
 type RGB = readonly [number, number, number];
 
 export const bodyPatternChannel = { mackerel: 0, classic: 1, spotted: 2 } as const;
+
+// Green levels for the outline cutoff, main stripe and faded stripe edge in
+// the original tabby cels. Solid and point coats have no separate stripe layer.
+const nativeStripeGreen: Partial<Record<CatRenderConfig['palette'], readonly [number, number, number]>> = {
+  CC01: [82, 128, 158],
+  CC02: [51, 64, 69],
+  CC06: [116, 151, 183],
+  CC07: [51, 84, 112],
+};
+
+export function usesNativeBodyStripes(config: CatRenderConfig) {
+  return config.bodyBase === 'solid' && config.bodyPattern === 'native'
+    && (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors;
+}
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 function fromHex(hex: string): RGB {
@@ -71,10 +86,12 @@ export function paintBodyPattern(
   const solid = config.bodyBase === 'solid';
   const pigmentShade = !solid && catKeepsBreedPigment(config) ? breedPatternShade(config) : undefined;
   const colors = catPatternFurColors(config);
+  const nativeStripes = usesNativeBodyStripes(config) ? nativeStripeGreen[config.palette] : undefined;
   const base = fromHex(colors[0]), marking = fromHex(colors[1]), pale = fromHex(colors[2]);
   const channel = config.bodyPattern === 'native' || config.bodyPattern === 'plain' ? 0 : bodyPatternChannel[config.bodyPattern];
   const paleChest = !solid && config.palette !== 'CC02';
   const { data, width } = image;
+  const splitForelegs = config.forelegPatternSource === 'separate' && !typing;
 
   for (let offset = 0; offset < data.length; offset += 4) {
     if (!data[offset + 3] || !(guide[offset + 3] || original?.[offset + 3])) continue;
@@ -89,7 +106,13 @@ export function paintBodyPattern(
       || (r >= 160 && g >= 145 && b >= 130));
     if (!fur && !white && !basePigment) continue;
 
-    const ink = (pattern?.[offset + channel] ?? 0) / 255;
+    const column = offset / 4 % width, row = Math.floor(offset / 4 / width);
+    let ink = (pattern?.[offset + channel] ?? 0) / 255;
+    if (nativeStripes && original?.[offset + 3]) {
+      const [outlineCutoff, stripe, edge] = nativeStripes;
+      if (g >= outlineCutoff) ink = clamp((edge - g) / (edge - stripe));
+    }
+    if (splitForelegs && sittingForelegAt(column, row)) ink = 0;
     if (pigmentShade) {
       if (ink) shadeBreedPattern(data, offset, pigmentShade, ink);
       continue;

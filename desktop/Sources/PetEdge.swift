@@ -1,6 +1,7 @@
 import AppKit
+import ColorSync
 
-enum PetEdge: String {
+enum PetEdge: String, Codable {
     case left, right, bottom
 
     // Match the cropped sprite dimensions in render.ts, relative to the 320px canvas.
@@ -66,17 +67,95 @@ enum PetEdge: String {
     }
 }
 
-struct PetEdgePlacement {
-    enum Surface {
-        case screen(NSNumber?)
-        case dock(NSNumber?)
-    }
+struct PetEdgePlacement: Codable {
+    enum Surface: String, Codable { case screen, dock }
 
     let edge: PetEdge
     let surface: Surface
+    let displayID: String
     let anchor: CGFloat
 
-    static func displayID(for screen: NSScreen) -> NSNumber? {
-        screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    func frame(in display: PetDisplay, petSize: CGFloat) -> NSRect? {
+        guard anchor.isFinite, (0...1).contains(anchor) else { return nil }
+        switch surface {
+        case .screen:
+            return edge.frame(at: anchor, in: display.visible, display: display.frame, petSize: petSize)
+        case .dock:
+            guard edge == .bottom, let dock = PetSurface.dock(in: display.frame, visible: display.visible) else { return nil }
+            return PetSurface.peekFrame(over: dock, anchor: anchor, visible: display.visible, petSize: petSize)
+        }
+    }
+}
+
+struct PetDisplay {
+    let id: String
+    let frame: NSRect
+    let visible: NSRect
+
+    static func identifier(for screen: NSScreen) -> String {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return screen.localizedName
+        }
+        if let uuid = CGDisplayCreateUUIDFromDisplayID(number.uint32Value)?.takeRetainedValue() {
+            return CFUUIDCreateString(nil, uuid) as String
+        }
+        return number.stringValue
+    }
+
+    static var connected: [Self] {
+        NSScreen.screens.compactMap { screen in
+            let visible = screen.visibleFrame
+            guard visible.width > 0, visible.height > 0 else { return nil }
+            return Self(id: identifier(for: screen), frame: screen.frame, visible: visible)
+        }
+    }
+
+    func clampedOrigin(_ origin: NSPoint, petSize: CGFloat) -> NSPoint {
+        NSPoint(x: min(max(origin.x, visible.minX), max(visible.minX, visible.maxX - petSize)),
+                y: min(max(origin.y, visible.minY), max(visible.minY, visible.maxY - petSize)))
+    }
+}
+
+enum PetPlacement: Codable {
+    case desktop(displayID: String, x: CGFloat, y: CGFloat)
+    case peeking(PetEdgePlacement)
+
+    static func resting(at origin: NSPoint, on display: PetDisplay, petSize: CGFloat) -> Self {
+        let clamped = display.clampedOrigin(origin, petSize: petSize)
+        let width = display.visible.width - petSize, height = display.visible.height - petSize
+        return .desktop(displayID: display.id,
+                        x: width > 0 ? (clamped.x - display.visible.minX) / width : 0.5,
+                        y: height > 0 ? (clamped.y - display.visible.minY) / height : 0.5)
+    }
+
+    func resolve(in displays: [PetDisplay], petSize: CGFloat, canPeek: Bool = true) -> (frame: NSRect, edge: PetEdgePlacement?)? {
+        guard let primary = displays.first else { return nil }
+        let size = NSSize(width: petSize, height: petSize)
+        switch self {
+        case let .desktop(id, x, y):
+            guard x.isFinite, y.isFinite, (0...1).contains(x), (0...1).contains(y) else { return nil }
+            let display = displays.first { $0.id == id } ?? primary
+            let origin = NSPoint(x: display.visible.minX + x * max(0, display.visible.width - petSize),
+                                 y: display.visible.minY + y * max(0, display.visible.height - petSize))
+            return (NSRect(origin: origin, size: size), nil)
+        case .peeking(let placement):
+            let display = displays.first { $0.id == placement.displayID }
+            if canPeek, let display, let frame = placement.frame(in: display, petSize: petSize) {
+                return (frame, placement)
+            }
+            // Keep the cat nearby when a dock or screen goes away.
+            let fallback = display ?? primary
+            let fraction = placement.anchor.isFinite ? min(1, max(0, placement.anchor)) : 0.5
+            let origin: NSPoint
+            switch placement.edge {
+            case .left, .right:
+                origin = NSPoint(x: placement.edge == .left ? fallback.visible.minX + 24 : fallback.visible.maxX - petSize - 24,
+                                 y: fallback.visible.minY + fraction * fallback.visible.height - petSize / 2)
+            case .bottom:
+                origin = NSPoint(x: fallback.visible.minX + fraction * fallback.visible.width - petSize / 2,
+                                 y: fallback.visible.minY + 24)
+            }
+            return (NSRect(origin: fallback.clampedOrigin(origin, petSize: petSize), size: size), nil)
+        }
     }
 }

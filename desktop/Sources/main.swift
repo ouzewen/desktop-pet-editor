@@ -1,5 +1,8 @@
+import UniformTypeIdentifiers
 import AppKit
+import Carbon
 import CoreText
+import ServiceManagement
 import SwiftUI
 import WebKit
 
@@ -173,12 +176,13 @@ final class PetView: WKWebView {
     }
 }
 
-final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSWindowDelegate {
+final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSWindowDelegate, NSMenuDelegate {
     private let panel = PetPanel(
         contentRect: NSRect(x: 0, y: 0, width: 240, height: 240),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
     )
     private var edgePlacement: PetEdgePlacement?
+    private var restingPlacement: PetPlacement?
     private var fileActionReturnPlacement: PetEdgePlacement?
     private var fileActionRun = 0
     private let web: PetView = {
@@ -206,14 +210,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
     private var previewCustom: CustomSelection?
     private var appliedCustom: CustomSelection?
+    private var pendingBrush: PixelEditSnapshot?
+    private let catPhotoClient = CatPhotoClient()
+    private let activeBrushID = "__active_appearance__"
+    private var activeBrushURL: URL {
+        PixelPresetStore.folder.deletingLastPathComponent().appendingPathComponent("active-appearance.png")
+    }
     private var customSelectionRequest = 0
     private var presetRequest = 0
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var keyboardTap: CFMachPort?
     private var tapSource: CFRunLoopSource?
-    private var localMonitor: Any?
-    private var typingRetry: Timer?
-    private var typingAlert: NSAlert?
+    private var inputRefreshTimer: Timer?
     private var requestedTypingPermission = false
     private var ready = false
     private var suppressWorkbenchReopen = false
@@ -255,6 +263,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var selectionDownPoint: NSPoint?
     private var selectionUpMonitor: Any?
     private var selectionDownMonitor: Any?
+    private var selectionReadTask: DispatchWorkItem?
+    private var translationRequest: UUID?
     private var translationDismissMonitor: Any?
     private var translationTrustRequested = false
     private let chatMemory = PetMemory()
@@ -263,7 +273,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var chatWindow: ReminderPanel?
     private var chatDismissMonitor: Any?
     private var dropView: DropView?
-    private var pixelEditorWindow: NSWindow?
     private var dropChoiceWindow: ReminderPanel?
     private var dropChoiceURL: URL?
     private var dropChoiceKind: FileKind = .unsupported
@@ -278,8 +287,20 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var trashToastWindow: ReminderPanel?
     private var trashToastHide: DispatchWorkItem?
     private var isTest: Bool { CommandLine.arguments.contains("--self-test") }
+    private var appUpdates: AppUpdates?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchReason = NSAppleEventManager.shared().currentAppleEvent?
+            .paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
+        if !isTest, Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil {
+            do {
+                let updates = AppUpdates()
+                try updates.start()
+                appUpdates = updates
+            } catch {
+                NSLog("Failed to start Sparkle: %@", error.localizedDescription)
+            }
+        }
         registerPixelFont()
         installApplicationMenu()
         panel.isExcludedFromWindowsMenu = true
@@ -323,12 +344,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let prefs = UserDefaults.standard
         eyeFollow = prefs.object(forKey: "shibaEyeFollow") as? Bool ?? true
         workbenchState.eyeFollow = eyeFollow
+        workbenchState.typingAnimationEnabled = prefs.bool(forKey: "typingAnimationEnabled")
+        workbenchState.typingStatsEnabled = prefs.bool(forKey: "typingStatsEnabled")
+        workbenchState.showTypingStats = prefs.object(forKey: "showTypingStats") as? Bool ?? true
+        workbenchState.selectionTranslationEnabled = TranslationEngine.isAvailable && prefs.bool(forKey: "selectionTranslationEnabled")
         loadReminders()
         workbenchState.visible = prefs.object(forKey: "shibaVisible") as? Bool ?? (prefs.string(forKey: "shibaConfig") != nil)
         let savedSize = prefs.object(forKey: "shibaSize") as? Double ?? 240
         workbenchState.petSize = min(320, max(120, savedSize))
         panel.setContentSize(NSSize(width: workbenchState.petSize, height: workbenchState.petSize))
-        resetPosition()
+        if !isTest, let data = prefs.data(forKey: "petRestingPlacement"),
+           let saved = try? JSONDecoder().decode(PetPlacement.self, from: data) {
+            restorePetPlacement(saved)
+        } else {
+            resetPosition()
+        }
         reminderObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification, object: panel, queue: .main
         ) { [weak self] _ in
@@ -361,29 +391,28 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         preview.setValue(false, forKey: "drawsBackground")
         preview.navigationDelegate = self
         preview.loadFileURL(resources.appendingPathComponent("pet.html"), allowingReadAccessTo: resources)
-        if isTest { createWorkbench() } else { openWorkbench() }
+        if isTest {
+            createWorkbench()
+        } else if launchReason != keyAELaunchedAsLogInItem {
+            openWorkbench()
+        }
         runChatSmokeIfRequested()
         startWeatherTimer()
         music.start()
         clipboard.start()
-        startSelectionWatcher()
         if !isTest { startQuickBarTimer() }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if let self, !self.hasActiveKeyboardTap { self.recordKey(event) }
-            return event
-        }
         reminderClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             self?.dismissTransientReminderUI(at: NSEvent.mouseLocation)
             return event
         }
         if !isTest {
-            setupTypingSync()
+            setupInputFeatures()
             startGazeTimer()
         }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        if !isTest { refreshTypingListener() }
+        if !isTest { refreshInputFeatures() }
     }
 
     func applicationDidResignActive(_ notification: Notification) {
@@ -395,7 +424,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     func applicationDidChangeScreenParameters(_ notification: Notification) {
-        if edgePlacement != nil { layoutEdgePet(size: workbenchState.petSize) }
+        guard !web.isDragging, !PetDisplay.connected.isEmpty else { return }
+        hideQuickBar()
+        hideReminderInput()
+        fileActionReturnPlacement = nil
+        if let restingPlacement {
+            restorePetPlacement(restingPlacement)
+        } else {
+            resetPosition()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -418,10 +455,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             send("setListening(\(music.activeApp != nil))")
             if let appliedConfig { configurePet(appliedConfig) }
             if let appliedCustom { applyCustomOverlay(appliedCustom.snapshot, in: web) }
-            if !isTest && workbenchState.visible {
-                panel.orderFrontRegardless()
-                if !reminderList.items.isEmpty { showReminders() }
-            }
+            if let edge = edgePlacement?.edge { send("setEdge('\(edge.rawValue)')") }
+            if !isTest { refreshPetVisibility() }
             runSelfTestIfReady()
         }
     }
@@ -435,7 +470,16 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.choosePreset = { [weak self] id in
             self?.choosePreset(id)
         }
-        workbenchState.openPixelEditor = { [weak self] in self?.showPixelEditor() }
+        workbenchState.renderCoatThumbnails = { [weak self] in
+            await self?.renderCoatThumbnails() ?? [:]
+        }
+        workbenchState.changeCustomMode = { [weak self] mode in self?.changeCustomMode(mode) }
+        workbenchState.chooseCatPhoto = { [weak self] slot in self?.chooseCatPhoto(slot: slot) }
+        workbenchState.generateFromCatPhoto = { [weak self] in self?.generateFromCatPhoto() }
+        workbenchState.saveCustomAppearance = { [weak self] name, done in
+            guard let self else { done(false); return }
+            self.saveCustomAppearance(name, completion: done)
+        }
         workbenchState.chooseCustom = { [weak self] preset in self?.previewCustomPreset(preset) }
         workbenchState.clearCustom = { [weak self] in self?.clearCustomPreview() }
         workbenchState.deleteCustom = { [weak self] preset in self?.confirmDeleteCustom(preset) }
@@ -448,9 +492,23 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         reloadCustomPresets()
         workbenchState.refresh = { [weak self] in self?.refreshPreview() }
-        workbenchState.apply = { [weak self] in self?.applyDraft() }
+        workbenchState.apply = { [weak self] in
+            guard let self else { return }
+            self.stageBrush(nextMode: nil) { staged in
+                if staged { self.applyDraft() }
+            }
+        }
         workbenchState.reset = { [weak self] in self?.resetPosition() }
-        workbenchState.enableTyping = { [weak self] in self?.enableTyping() }
+        workbenchState.setTypingAnimation = { [weak self] enabled in self?.setTypingAnimation(enabled) }
+        workbenchState.setTypingStats = { [weak self] enabled in self?.setTypingStats(enabled) }
+        workbenchState.setShowTypingStats = { [weak self] visible in
+            self?.workbenchState.showTypingStats = visible
+            UserDefaults.standard.set(visible, forKey: "showTypingStats")
+            if visible { self?.typingActivity.refreshToday() }
+        }
+        workbenchState.setSelectionTranslation = { [weak self] enabled in self?.setSelectionTranslation(enabled) }
+        workbenchState.openInputSettings = { [weak self] in self?.openInputMonitoringSettings() }
+        workbenchState.openAccessibilitySettings = { [weak self] in self?.openAccessibilitySettings() }
         workbenchState.setSize = { [weak self] size in self?.resizePet(size) }
         workbenchState.setVisibility = { [weak self] visible in self?.showPet(visible) }
         workbenchState.setEyeFollow = { [weak self] enabled in self?.setEyeFollow(enabled) }
@@ -489,6 +547,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let appMenu = NSMenu(title: "桌宠")
         let open = appMenu.addItem(withTitle: "打开工作台", action: #selector(openWorkbench), keyEquivalent: "0")
         open.target = self
+        addUpdateItem(to: appMenu)
         appMenu.addItem(.separator())
         let quitItem = appMenu.addItem(withTitle: "退出桌宠", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.target = NSApp
@@ -541,7 +600,45 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.appliedConfig = config
             self.configurePet(config)
             self.restoreCustomOverlay()
+            self.loadAppearanceThumbnails()
             self.runSelfTestIfReady()
+        }
+    }
+
+    private func loadAppearanceThumbnails() {
+        guard workbenchState.thumbnails == nil else { return }
+        preview.callAsyncJavaScript("return JSON.stringify(await window.pet.appearanceThumbnails())",
+                                    arguments: [:], in: nil, in: .page) { [weak self] result in
+            do {
+                guard let json = try result.get() as? String else {
+                    NSLog("Workbench thumbnail renderer returned an invalid response")
+                    return
+                }
+                self?.workbenchState.thumbnails = try AppearanceThumbnails(data: Data(json.utf8))
+            } catch {
+                NSLog("Could not load workbench thumbnails: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    @MainActor
+    private func renderCoatThumbnails() async -> [String: NSImage] {
+        guard previewReady, !draftTemplate.isEmpty else { return [:] }
+        var config = draftConfig()
+        config["name"] = "预览"
+        do {
+            let value: Any = try await withCheckedThrowingContinuation { continuation in
+                preview.callAsyncJavaScript(
+                    "return JSON.stringify(await window.pet.coatThumbnails(config))",
+                    arguments: ["config": config], in: nil, in: .page
+                ) { continuation.resume(with: $0) }
+            }
+            guard let json = value as? String else { return [:] }
+            let pngs = try JSONDecoder().decode([String: Data].self, from: Data(json.utf8))
+            return pngs.compactMapValues(NSImage.init(data:))
+        } catch {
+            NSLog("Could not load workbench coat thumbnails: %@", error.localizedDescription)
+            return [:]
         }
     }
 
@@ -1503,7 +1600,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func focusSessionChanged() {
         status.menu = makeMenu()
-        if focus.showsCard {
+        if focus.showsCard && !workbenchState.temporarilyHidden {
             showFocusCard()
         } else {
             hideFocusCard()
@@ -1614,6 +1711,134 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return image
     }
 
+    // MARK: Photo appearance
+
+    private func chooseCatPhoto(slot: Int) {
+        guard let window = workbenchWindow, !workbenchState.editingCustom, !workbenchState.applying else { return }
+        let picker = NSOpenPanel()
+        picker.title = slot == 0 ? "选择猫咪首图" : "选择同一只猫的补图 \(slot)"
+        picker.prompt = "选取照片"
+        picker.allowedContentTypes = [.image]
+        picker.canChooseDirectories = false
+        picker.allowsMultipleSelection = false
+        picker.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = picker.url else { return }
+            guard let input = CatPhotoInput(url: url) else {
+                self.workbenchState.photoStatus = "无法读取这张图。请选择一张清晰的猫照。"
+                return
+            }
+            if self.workbenchState.catPhotos.enumerated().contains(where: { $0.offset != slot && $0.element?.jpeg == input.jpeg }) {
+                self.workbenchState.photoStatus = "这张照片已经选过。补图请选能看清其他部位的角度。"
+                return
+            }
+            self.workbenchState.catPhotos[slot] = input
+            self.workbenchState.photoStatus = ""
+        }
+    }
+
+    private func generateFromCatPhoto() {
+        guard previewReady, workbenchState.catPhotos[0] != nil, !workbenchState.editingCustom,
+              !workbenchState.loadingCustom, !workbenchState.applying, workbenchState.pixelEditor == nil else { return }
+        workbenchState.editingCustom = true
+        workbenchState.generatingPhoto = true
+        catPhotoClient.analyze(photos: workbenchState.catPhotos.compactMap { $0?.jpeg }, progress: { [weak self] phase in
+            self?.workbenchState.photoStatus = phase
+        }) { [weak self] response in
+            guard let self else { return }
+            switch response {
+            case .failure(let error): self.finishPhotoGeneration(error.localizedDescription)
+            case .success(let analysis): self.loadPhotoAppearance(analysis)
+            }
+        }
+    }
+
+    private func loadPhotoAppearance(_ analysis: CatPhotoClient.Analysis) {
+        preview.callAsyncJavaScript(
+            "return window.pet.appearanceFromPhotos(observations, views, individual, coatPattern)",
+            arguments: ["observations": analysis.observations, "views": analysis.views,
+                        "individual": analysis.individual, "coatPattern": analysis.coatPattern as Any? ?? NSNull()], in: nil, in: .page
+        ) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let value):
+                guard let match = value as? [String: Any], let config = match["config"] as? [String: Any],
+                      let breed = match["breed"] as? String, let setName = match["setName"] as? String else {
+                    self.finishPhotoGeneration("识别结果无法生成桌宠，请重试。")
+                    return
+                }
+                // A new photo starts its own preview draft. The currently
+                // applied pet and saved local appearances are untouched.
+                self.cancelBreedSelection()
+                self.customSelectionRequest += 1
+                self.previewCustom = nil
+                self.clearPendingBrush()
+                self.workbenchState.customSelected = nil
+                self.workbenchState.customMode = nil
+                self.workbenchState.showingManualTools = false
+                self.workbenchState.preset = breed
+                self.workbenchState.action = "sit"
+                self.applyCustomOverlay(nil, in: self.preview)
+                self.setDraft(config)
+                let pawNames = ["white-paw": "白脚尖", "white-forearm": "白前肢下段", "white-leg": "整段白前肢",
+                                "distal-dark-patch": "深斑", "colored": "爪部底色"]
+                let pawSources = (match["pawRecoveries"] as? [[String: Any]] ?? []).compactMap { paw -> String? in
+                    guard let side = paw["side"] as? String, let photo = paw["photo"] as? Int,
+                          let feature = paw["feature"] as? String, let marking = pawNames[feature] else { return nil }
+                    return "首图画面\(side == "left" ? "左" : "右")前爪：\(marking)来自补图 \(photo - 1)（第 \(photo) 张）"
+                }
+                let recovery = pawSources.isEmpty ? "" : pawSources.joined(separator: "，") + "。"
+                self.finishPhotoGeneration("已生成 · \(setName)。" + recovery + "可切换打字预览或应用到桌宠。")
+            case .failure(let error):
+                let detail = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String
+                self.finishPhotoGeneration(detail ?? "无法解析照片特征，请重试。")
+            }
+        }
+    }
+
+    private func finishPhotoGeneration(_ message: String) {
+        workbenchState.photoStatus = message
+        workbenchState.generatingPhoto = false
+        workbenchState.editingCustom = false
+    }
+
+    /// Saves the current workbench preview as a 320×320 PNG (nearest-neighbour).
+    private func exportAppearancePNG() {
+        let js = """
+        (() => {
+          const canvas = document.querySelector('canvas');
+          if (!canvas) return null;
+          const side = 320;
+          const out = document.createElement('canvas');
+          out.width = side;
+          out.height = side;
+          const ctx = out.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(canvas, 0, 0, side, side);
+          return out.toDataURL('image/png');
+        })()
+        """
+        preview.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { [weak self] result in
+            guard let self, case .success(let value) = result, let dataURL = value as? String,
+                  let comma = dataURL.firstIndex(of: ","),
+                  let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else {
+                self?.workbenchState.message = "导出失败：无法读取预览"
+                return
+            }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            let name = self.workbenchState.appearance["name", default: ""]
+            panel.nameFieldStringValue = (name.isEmpty ? "桌宠" : name) + ".png"
+            if panel.runModal() == .OK, let url = panel.url {
+                do {
+                    try data.write(to: url)
+                    self.workbenchState.message = "已导出 PNG"
+                } catch {
+                    self.workbenchState.message = "导出失败"
+                }
+            }
+        }
+    }
+
     // MARK: Pixel editor
 
     private func capturePixelPreview(completion: @escaping (PixelEditSnapshot?) -> Void) {
@@ -1665,45 +1890,132 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
-    private func showPixelEditor() {
-        if let window = pixelEditorWindow, window.isVisible {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+    private func changeCustomMode(_ mode: CustomAppearanceMode?) {
+        guard previewReady, !draftTemplate.isEmpty, !workbenchState.editingCustom,
+              !workbenchState.loadingCustom, !workbenchState.applying,
+              mode != workbenchState.customMode else { return }
+        guard mode == .brush else {
+            stageBrush(nextMode: mode) { _ in }
             return
         }
-        guard previewReady, !draftTemplate.isEmpty, !workbenchState.openingPixelEditor,
-              !workbenchState.loadingCustom else { return }
-        workbenchState.openingPixelEditor = true
+        workbenchState.editingCustom = true
         capturePixelPreview { [weak self] snapshot in
             guard let self else { return }
-            self.workbenchState.openingPixelEditor = false
-            guard self.workbenchWindow?.isVisible == true else { return }
+            self.workbenchState.editingCustom = false
             guard let snapshot, let model = self.makePixelEditor(snapshot: snapshot) else {
                 self.workbenchState.message = "无法读取左侧预览，请重试"
                 return
             }
-            self.openPixelEditor(model)
+            self.workbenchState.pixelEditor = model
+            self.workbenchState.customMode = .brush
+            self.workbenchState.message = ""
         }
     }
 
-    private func openPixelEditor(_ model: PixelEditorModel) {
-        let host = NSHostingView(rootView: PixelEditorView(model: model, onSaved: { [weak self] _ in
-            self?.reloadCustomPresets()
-        }))
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        let window = NSWindow(
-            contentRect: host.frame,
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "像素编辑"
-        window.contentView = host
-        window.isReleasedWhenClosed = false
-        window.center()
-        pixelEditorWindow = window
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+    private func stageBrush(nextMode: CustomAppearanceMode?, completion: @escaping (Bool) -> Void) {
+        guard !workbenchState.editingCustom, !workbenchState.loadingCustom, !workbenchState.applying else {
+            completion(false)
+            return
+        }
+        guard let editor = workbenchState.pixelEditor, editor.hasChanges else {
+            finishBrushEditing(nextMode)
+            completion(true)
+            return
+        }
+        workbenchState.editingCustom = true
+        editor.resolveSnapshot { [weak self] snapshot in
+            guard let self else { completion(false); return }
+            guard let snapshot else {
+                self.workbenchState.editingCustom = false
+                self.workbenchState.message = "无法合成画笔笔迹，请重试"
+                completion(false)
+                return
+            }
+            self.applyCustomOverlay(snapshot, in: self.preview) { resolved in
+                self.workbenchState.editingCustom = false
+                guard let source = resolved?["source"] as? String else {
+                    self.applyCustomOverlay(self.pendingBrush ?? self.previewCustom?.snapshot, in: self.preview)
+                    self.workbenchState.message = "无法合成画笔笔迹，请重试"
+                    completion(false)
+                    return
+                }
+                self.pendingBrush = PixelEditSnapshot(png: snapshot.png, source: Data(source.utf8))
+                self.workbenchState.hasPendingBrush = true
+                self.finishBrushEditing(nextMode)
+                completion(true)
+            }
+        }
+    }
+
+    private func finishBrushEditing(_ nextMode: CustomAppearanceMode?) {
+        workbenchState.pixelEditor = nil
+        workbenchState.customMode = nextMode
+        if nextMode != .patches && workbenchState.selectedFurPatchID != nil {
+            workbenchState.selectFurPatch(nil)
+        }
+    }
+
+    private func saveCustomAppearance(_ name: String, completion: @escaping (Bool) -> Void) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard previewReady, !PixelPresetStore.slugify(trimmed).isEmpty else {
+            workbenchState.message = "请输入含文字或数字的形象名称"
+            completion(false)
+            return
+        }
+        stageBrush(nextMode: workbenchState.customMode == .brush ? nil : workbenchState.customMode) { [weak self] staged in
+            guard let self, staged else { completion(false); return }
+            self.workbenchState.editingCustom = true
+            self.capturePixelPreview { snapshot in
+                guard let snapshot else {
+                    self.workbenchState.editingCustom = false
+                    self.workbenchState.message = "无法读取左侧预览，请重试"
+                    completion(false)
+                    return
+                }
+                if let source = snapshot.source {
+                    self.resolvePixelEdits(source: source, changes: []) { resolved in
+                        self.workbenchState.editingCustom = false
+                        guard let resolved else {
+                            self.workbenchState.message = "无法保存形象笔迹，请重试"
+                            completion(false)
+                            return
+                        }
+                        completion(self.storeCustomAppearance(trimmed, snapshot: PixelEditSnapshot(png: snapshot.png, source: resolved)))
+                    }
+                } else {
+                    self.workbenchState.editingCustom = false
+                    completion(self.storeCustomAppearance(trimmed, snapshot: snapshot))
+                }
+            }
+        }
+    }
+
+    private func storeCustomAppearance(_ requested: String, snapshot: PixelEditSnapshot) -> Bool {
+        var name = requested
+        let identifiers = Set(workbenchState.customPresets.map { $0.id.lowercased() })
+        var copy = 2
+        while identifiers.contains(PixelPresetStore.slugify(name).lowercased()) {
+            let suffix = " \(copy)"
+            name = String(PixelPresetStore.slugify(requested).prefix(40 - suffix.count)) + suffix
+            copy += 1
+        }
+        guard let url = PixelPresetStore.save(name: name, snapshot: snapshot) else {
+            workbenchState.message = "保存形象失败，请重试"
+            return false
+        }
+        let id = url.deletingPathExtension().lastPathComponent
+        previewCustom = CustomSelection(id: id, url: url, snapshot: snapshot)
+        workbenchState.customSelected = id
+        savedCustomAppearances[id] = draftConfig().merging(["breed": workbenchState.preset]) { _, new in new }
+        clearPendingBrush()
+        reloadCustomPresets()
+        workbenchState.message = "已保存形象「\(name)」"
+        return true
+    }
+
+    private func clearPendingBrush() {
+        pendingBrush = nil
+        workbenchState.hasPendingBrush = false
     }
 
     private var savedCustomAppearances: [String: [String: Any]] {
@@ -1713,7 +2025,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func reloadCustomPresets() {
         workbenchState.customPresets = PixelPresetStore.load()
-        if let selected = workbenchState.customSelected,
+        if let selected = workbenchState.customSelected, selected != activeBrushID,
            !workbenchState.customPresets.contains(where: { $0.id == selected }) {
             clearCustomPreview()
         }
@@ -1752,7 +2064,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func selectCustom(
         _ snapshot: PixelEditSnapshot, id: String, url: URL, label: String? = nil, restoring: Bool = false
     ) {
-        presetRequest += 1
+        cancelBreedSelection()
         customSelectionRequest += 1
         let request = customSelectionRequest
         let saved = savedCustomAppearances[id]
@@ -1762,7 +2074,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.workbenchState.loadingCustom = false
             guard let reference = selection?["source"] as? String,
                   var config = selection?["appearance"] as? [String: Any] else {
-                self.applyCustomOverlay(self.previewCustom?.snapshot, in: self.preview)
+                self.applyCustomOverlay(self.pendingBrush ?? self.previewCustom?.snapshot, in: self.preview)
                 self.workbenchState.message = "无法显示自定义形象"
                 return
             }
@@ -1777,6 +2089,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             config["name"] = self.appliedConfig?["name"] ?? config["name"]
             let chosen = CustomSelection(id: id, url: url, snapshot: resolved)
             self.previewCustom = chosen
+            self.clearPendingBrush()
             self.workbenchState.customSelected = id
             self.workbenchState.preset = breed
             self.setDraft(config)
@@ -1797,6 +2110,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     ) {
         let png = snapshot.map { "data:image/png;base64,\($0.png.base64EncodedString())" }
         let source = snapshot?.source.flatMap { String(data: $0, encoding: .utf8) }
+        let updatesPreview = view === preview
         view.callAsyncJavaScript(
             """
             let decoded;
@@ -1817,7 +2131,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             in: nil, in: .page
         ) { [weak self] result in
             switch result {
-            case .success(let value): completion?(value as? [String: Any])
+            case .success(let value):
+                if updatesPreview { self?.workbenchState.coatOverlayRevision += 1 }
+                completion?(value as? [String: Any])
             case .failure:
                 if let completion { completion(nil) }
                 else { self?.workbenchState.message = "无法显示自定义形象" }
@@ -1828,6 +2144,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func clearCustomPreview() {
         customSelectionRequest += 1
         previewCustom = nil
+        clearPendingBrush()
         workbenchState.customSelected = nil
         workbenchState.loadingCustom = false
         if previewReady { applyCustomOverlay(nil, in: preview) }
@@ -1847,7 +2164,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let listed = workbenchState.customPresets.first { $0.id == id }?.url
         let privateFolder = PixelPresetStore.folder.standardizedFileURL.path
         let privateCopy = previousPath.flatMap { url in
-            url.standardizedFileURL.deletingLastPathComponent().path == privateFolder ? url : nil
+            if id == activeBrushID, url.standardizedFileURL == activeBrushURL.standardizedFileURL { return url }
+            return url.standardizedFileURL.deletingLastPathComponent().path == privateFolder ? url : nil
         }
         guard let url = listed ?? privateCopy else { return }
         guard let snapshot = try? PixelPresetStore.read(url) else { return }
@@ -1868,7 +2186,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     /// Visible only while the pointer is on the pet (or on the bar itself).
     private func quickBarTick(at point: NSPoint) {
-        guard workbenchState.visible, !web.isDragging else {
+        guard workbenchState.petIsVisible, !web.isDragging else {
             hideQuickBar()
             return
         }
@@ -1911,7 +2229,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         panel.setContentSize(host.frame.size)
         panel.contentView = host
         quickBarWindow = panel
-        layoutQuickBar()
+        layoutQuickBar(showing: true)
         layoutDropChoice()
         panel.orderFrontRegardless()
     }
@@ -1928,8 +2246,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
-    private func layoutQuickBar() {
-        guard let card = quickBarWindow,
+    private func layoutQuickBar(showing: Bool = false) {
+        guard let card = quickBarWindow, showing || card.isVisible,
               let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
         guard !quickBarAdjusting, !web.isDragging else { return }
         let size = card.frame.size
@@ -2242,34 +2560,76 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     // MARK: Selection translation
 
-    private func startSelectionWatcher() {
-        guard selectionUpMonitor == nil else { return }
-        selectionDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
-            self?.selectionDownPoint = NSEvent.mouseLocation
-            self?.hideTranslateButton()
-        }
-        selectionUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                self?.handleSelectionMouseUp()
-            }
+    private func setSelectionTranslation(_ enabled: Bool) {
+        guard TranslationEngine.isAvailable else { return }
+        workbenchState.selectionTranslationEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "selectionTranslationEnabled")
+        refreshSelectionWatcher()
+        if enabled, workbenchState.translationNeedsPermission, !translationTrustRequested {
+            translationTrustRequested = true
+            SelectionReader.requestTrust()
         }
     }
 
-    private func handleSelectionMouseUp() {
-        let upPoint = NSEvent.mouseLocation
+    private func refreshSelectionWatcher() {
+        let enabled = workbenchState.selectionTranslationEnabled
+        let trusted = enabled && SelectionReader.isTrusted
+        let needsPermission = enabled && !trusted
+        if workbenchState.translationNeedsPermission != needsPermission {
+            workbenchState.translationNeedsPermission = needsPermission
+        }
+        if trusted {
+            startSelectionWatcher()
+        } else if selectionDownMonitor != nil || selectionUpMonitor != nil {
+            stopSelectionWatcher()
+        }
+    }
+
+    private func startSelectionWatcher() {
+        guard selectionUpMonitor == nil else { return }
+        selectionDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            guard let self else { return }
+            self.selectionReadTask?.cancel()
+            self.selectionDownPoint = NSEvent.mouseLocation
+            self.pendingSelection = nil
+            self.hideTranslateButton()
+        }
+        selectionUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            guard let self else { return }
+            let point = NSEvent.mouseLocation
+            let task = DispatchWorkItem { [weak self] in
+                self?.handleSelectionMouseUp(at: point)
+            }
+            self.selectionReadTask?.cancel()
+            self.selectionReadTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: task)
+        }
+        if selectionDownMonitor == nil || selectionUpMonitor == nil {
+            stopSelectionWatcher()
+        }
+    }
+
+    private func stopSelectionWatcher() {
+        if let selectionDownMonitor { NSEvent.removeMonitor(selectionDownMonitor) }
+        if let selectionUpMonitor { NSEvent.removeMonitor(selectionUpMonitor) }
+        selectionDownMonitor = nil
+        selectionUpMonitor = nil
+        selectionReadTask?.cancel()
+        selectionReadTask = nil
+        selectionDownPoint = nil
+        pendingSelection = nil
+        hideTranslateButton()
+        hideTranslation()
+    }
+
+    private func handleSelectionMouseUp(at upPoint: NSPoint) {
+        selectionReadTask = nil
         let downPoint = selectionDownPoint
         selectionDownPoint = nil
         // Only a drag looks like a selection; plain clicks should stay quiet.
         guard let downPoint,
               hypot(upPoint.x - downPoint.x, upPoint.y - downPoint.y) >= 3 else { return }
-        guard translationEngine.isAvailable else { return }
-        guard SelectionReader.isTrusted else {
-            if !translationTrustRequested {
-                translationTrustRequested = true
-                SelectionReader.requestTrust()
-            }
-            return
-        }
+        guard workbenchState.selectionTranslationEnabled, SelectionReader.isTrusted else { return }
         guard let text = SelectionReader.selectedText(), SelectionText.isEnglish(text) else { return }
         pendingSelection = text
         showTranslateButton(at: upPoint)
@@ -2303,14 +2663,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func beginTranslation() {
-        guard let raw = pendingSelection else { return }
+        guard workbenchState.selectionTranslationEnabled, SelectionReader.isTrusted, let raw = pendingSelection else { return }
         hideTranslateButton()
+        pendingSelection = nil
         let (text, truncated) = SelectionText.prepare(raw)
+        let request = UUID()
+        translationRequest = request
         currentTranslation = nil
         showTranslation(.loading)
         translationEngine.translate(text) { [weak self] result in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, self.translationRequest == request else { return }
                 let translated = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if translated.isEmpty {
                     self.showTranslation(.failure)
@@ -2389,6 +2752,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func hideTranslation() {
         translationWindow?.orderOut(nil)
         currentTranslation = nil
+        translationRequest = nil
+        translationEngine.cancel()
         if let translationDismissMonitor {
             NSEvent.removeMonitor(translationDismissMonitor)
             self.translationDismissMonitor = nil
@@ -2511,7 +2876,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func weatherTick() {
         guard weather.shouldRemind() else { return }
         // Keep focus time quiet; the next minute retries once the session ends.
-        guard !focus.isActive else { return }
+        guard !focus.isActive, !workbenchState.temporarilyHidden else { return }
         if let weatherRetryAt, Date() < weatherRetryAt { return }
         fetchWeather(remind: true)
     }
@@ -2519,7 +2884,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func fetchWeather(remind: Bool) {
         weather.refresh { [weak self] result in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, !remind || !self.workbenchState.temporarilyHidden else { return }
                 switch result {
                 case .success(let snapshot):
                     self.weatherRetryAt = nil
@@ -2860,11 +3225,19 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             ?? (config["frame"] as? String == "CAT" ? "preset_cat_orange" : "preset_m1_12")
     }
 
+    private func cancelBreedSelection() {
+        presetRequest += 1
+        workbenchState.choosingBreed = false
+    }
+
     private func choosePreset(_ id: String, completion: ((Bool) -> Void)? = nil) {
         presetRequest += 1
+        workbenchState.choosingBreed = true
         let request = presetRequest
         preview.callAsyncJavaScript("return window.pet.preset(id)", arguments: ["id": id], in: nil, in: .page) { [weak self] result in
-            guard let self, request == self.presetRequest, case .success(let value) = result,
+            guard let self, request == self.presetRequest else { completion?(false); return }
+            self.workbenchState.choosingBreed = false
+            guard case .success(let value) = result,
                   let config = value as? [String: Any] else { completion?(false); return }
             // Selecting a breed starts from all of its appearance defaults.
             // Profile fields and independent custom paint are handled separately.
@@ -2895,6 +3268,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         for (field, value) in workbenchState.appearance {
             draft[field] = value
         }
+        if draft["frame"] as? String == "CAT" {
+            draft["furPatches"] = workbenchState.furPatches.map(\.config)
+        }
         return draft
     }
 
@@ -2903,15 +3279,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         var config = draftConfig()
         // Name validation belongs to Apply; appearance stays live while editing it.
         config["name"] = "预览"
-        preview.callAsyncJavaScript("window.pet.preview(config, action)",
-            arguments: ["config": config, "action": workbenchState.action], in: nil, in: .page)
+        preview.callAsyncJavaScript("window.pet.preview(config, action, freeze)",
+            arguments: ["config": config, "action": workbenchState.action,
+                        "freeze": workbenchState.selectedFurPatchID != nil], in: nil, in: .page)
     }
 
     private func applyDraft(completion: @escaping (Bool) -> Void = { _ in }) {
-        guard ready, !workbenchState.applying, !workbenchState.loadingCustom else { completion(false); return }
+        guard ready, !workbenchState.applying, !workbenchState.loadingCustom, !workbenchState.choosingBreed
+        else { completion(false); return }
         var draft = draftConfig()
         draft["breed"] = workbenchState.preset
-        let selection = previewCustom
+        let hasDraftBrush = pendingBrush != nil
+        let selection = pendingBrush.map { CustomSelection(id: activeBrushID, url: activeBrushURL, snapshot: $0) } ?? previewCustom
         let snapshot = selection?.snapshot
         let updateOverlay = selection?.id != appliedCustom?.id
             || snapshot?.png != appliedCustom?.snapshot.png
@@ -2954,12 +3333,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     }
                 }
                 self.storeAppliedCustom(selection)
+                if hasDraftBrush {
+                    self.previewCustom = selection
+                    self.workbenchState.customSelected = selection?.id
+                    self.clearPendingBrush()
+                }
                 config["breed"] = draft["breed"]
                 self.storeAppliedAppearance(config, customID: selection?.id)
-                if !self.isTest {
-                    self.workbenchState.visible = true
-                    self.showPet(true)
-                }
+                if !self.isTest { self.showPet(true) }
                 self.workbenchState.message = "已应用到桌宠"
                 completion(true)
             case .failure(let error):
@@ -2982,6 +3363,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard ready else { return }
         if edgePlacement != nil, config["frame"] as? String != "CAT" {
             undockPet(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY), keepOnScreen: true)
+            rememberDesktopPosition()
         }
         web.callAsyncJavaScript("window.pet.configure(config)", arguments: ["config": config], in: nil, in: .page)
     }
@@ -3048,51 +3430,83 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func finishPetDrag(at point: NSPoint) {
-        guard appliedConfig?["frame"] as? String == "CAT",
-              let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? panel.screen else { return }
-        let visible = screen.visibleFrame
-        let displayID = PetEdgePlacement.displayID(for: screen)
+        let displays = PetDisplay.connected
+        guard let screen = displays.first(where: { $0.frame.contains(point) }) ?? desktopDisplay(in: displays) else { return }
+        guard appliedConfig?["frame"] as? String == "CAT" else {
+            rememberDesktopPosition(on: screen)
+            return
+        }
+        let visible = screen.visible
         let anchorPoint = NSPoint(x: panel.frame.midX, y: point.y)
         let screenEdge = PetEdge.near(point, pet: panel.frame, visible: visible, display: screen.frame,
-                                     neighbors: NSScreen.screens.filter { $0 != screen }.map(\.frame))
+                                     neighbors: displays.filter { $0.id != screen.id }.map(\.frame))
         let reach = min(22, panel.frame.width * 0.09)
         let atDisplayBorder = screenEdge != nil
             && min(point.y - screen.frame.minY, point.x - visible.minX, visible.maxX - point.x) <= reach
         if !atDisplayBorder,
            let dock = PetSurface.dock(in: screen.frame, visible: visible),
            PetSurface.nearTop(of: dock, point: point, pet: panel.frame) {
-            placePet(.init(edge: .bottom, surface: .dock(displayID), anchor: PetEdge.bottom.anchor(at: anchorPoint, in: dock)))
+            placePet(.init(edge: .bottom, surface: .dock, displayID: screen.id,
+                           anchor: PetEdge.bottom.anchor(at: anchorPoint, in: dock)))
             return
         }
-        guard let screenEdge else { return }
-        placePet(.init(edge: screenEdge, surface: .screen(displayID), anchor: screenEdge.anchor(at: anchorPoint, in: visible)))
+        if let screenEdge {
+            placePet(.init(edge: screenEdge, surface: .screen, displayID: screen.id,
+                           anchor: screenEdge.anchor(at: anchorPoint, in: visible)))
+        } else {
+            rememberDesktopPosition(on: screen)
+        }
     }
 
     private func placePet(_ placement: PetEdgePlacement) {
-        edgePlacement = placement
-        send("setEdge('\(placement.edge.rawValue)')")
-        petGaze = nil
-        layoutEdgePet(size: workbenchState.petSize)
+        restorePetPlacement(.peeking(placement))
     }
 
-    private func layoutEdgePet(size: CGFloat) {
-        guard let placement = edgePlacement else { return }
-        let screens = NSScreen.screens
-        let frame: NSRect
-        switch placement.surface {
-        case .screen(let displayID):
-            guard let screen = screens.first(where: { PetEdgePlacement.displayID(for: $0) == displayID }) else { resetPosition(); return }
-            frame = placement.edge.frame(at: placement.anchor, in: screen.visibleFrame, display: screen.frame, petSize: size)
-        case .dock(let displayID):
-            guard let screen = screens.first(where: { PetEdgePlacement.displayID(for: $0) == displayID }),
-                  let dock = PetSurface.dock(in: screen.frame, visible: screen.visibleFrame),
-                  let above = PetSurface.peekFrame(over: dock, anchor: placement.anchor,
-                                                   visible: screen.visibleFrame, petSize: size) else { resetPosition(); return }
-            frame = above
+    private func restorePetPlacement(_ placement: PetPlacement) {
+        let displays = PetDisplay.connected
+        guard !displays.isEmpty else { return }
+        let size = workbenchState.petSize
+        guard let resolved = placement.resolve(in: displays, petSize: size, canPeek: appliedConfig?["frame"] as? String != "M1") else {
+            resetPosition()
+            return
         }
-        guard panel.frame != frame else { return }
-        panel.setFrame(frame, display: true)
+        if let edge = resolved.edge {
+            edgePlacement = edge
+            send("setEdge('\(edge.edge.rawValue)')")
+            petGaze = nil
+        } else if edgePlacement != nil {
+            clearEdgePlacement()
+        }
+        if panel.frame != resolved.frame { panel.setFrame(resolved.frame, display: true) }
+        if let edge = resolved.edge {
+            saveRestingPlacement(.peeking(edge))
+        } else if let display = desktopDisplay(in: displays) {
+            saveRestingPlacement(.resting(at: panel.frame.origin, on: display, petSize: size))
+        }
         layoutReminder()
+    }
+
+    private func desktopDisplay(in displays: [PetDisplay]) -> PetDisplay? {
+        let center = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        return displays.first { $0.frame.contains(center) }
+            ?? panel.screen.flatMap { screen in displays.first { $0.id == PetDisplay.identifier(for: screen) } }
+            ?? displays.first
+    }
+
+    private func rememberDesktopPosition(on display: PetDisplay? = nil) {
+        guard let display = display ?? desktopDisplay(in: PetDisplay.connected) else { return }
+        let size = workbenchState.petSize
+        let origin = display.clampedOrigin(panel.frame.origin, petSize: size)
+        if origin != panel.frame.origin { panel.setFrameOrigin(origin) }
+        saveRestingPlacement(.resting(at: panel.frame.origin, on: display, petSize: size))
+        layoutReminder()
+    }
+
+    private func saveRestingPlacement(_ placement: PetPlacement) {
+        restingPlacement = placement
+        if !isTest, let data = try? JSONEncoder().encode(placement) {
+            UserDefaults.standard.set(data, forKey: "petRestingPlacement")
+        }
     }
 
     private func clearEdgePlacement() {
@@ -3114,8 +3528,16 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showPet(_ visible: Bool) {
+        workbenchState.visible = visible
+        workbenchState.temporarilyHidden = false
         UserDefaults.standard.set(visible, forKey: "shibaVisible")
-        if visible {
+        refreshPetVisibility()
+    }
+
+    private func refreshPetVisibility() {
+        status.menu?.items.first { $0.action == #selector(toggleTemporaryPetVisibility) }?.title = petVisibilityMenuTitle
+        if workbenchState.petIsVisible {
+            guard ready else { return }
             panel.orderFrontRegardless()
             if !reminderList.items.isEmpty { showReminders() }
             if focus.showsCard { showFocusCard() }
@@ -3126,35 +3548,38 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             focus.unpin()
             hideFocusCard()
             hideQuickBar()
+            hideDropChoice()
+            hideTrashToast()
+            hideWeatherCard()
         }
     }
 
     private func resizePet(_ size: Double) {
         UserDefaults.standard.set(size, forKey: "shibaSize")
-        if edgePlacement != nil {
-            layoutEdgePet(size: size)
+        hideQuickBar()
+        hideReminderInput()
+        if let edgePlacement {
+            placePet(edgePlacement)
             return
         }
+        let display = desktopDisplay(in: PetDisplay.connected)
         let corner = NSPoint(x: panel.frame.maxX, y: panel.frame.minY)
         panel.setContentSize(NSSize(width: size, height: size))
         panel.setFrameOrigin(NSPoint(x: corner.x - size, y: corner.y))
-        layoutReminder()
+        if fileActionReturnPlacement == nil { rememberDesktopPosition(on: display) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        typingRetry?.invalidate()
+        inputRefreshTimer?.invalidate()
         typingActivity.flush()
         gazeTimer?.invalidate()
         weatherTimer?.invalidate()
         music.stop()
         clipboard.stop()
         stopListening()
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         if let reminderClickMonitor { NSEvent.removeMonitor(reminderClickMonitor) }
         if let clipboardClickMonitor { NSEvent.removeMonitor(clipboardClickMonitor) }
-        if let selectionUpMonitor { NSEvent.removeMonitor(selectionUpMonitor) }
-        if let selectionDownMonitor { NSEvent.removeMonitor(selectionDownMonitor) }
-        if let translationDismissMonitor { NSEvent.removeMonitor(translationDismissMonitor) }
+        stopSelectionWatcher()
         if let chatDismissMonitor { NSEvent.removeMonitor(chatDismissMonitor) }
         LocalRuntime.shared.shutdown()
         trashToastHide?.cancel()
@@ -3173,15 +3598,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return CGEvent.tapIsEnabled(tap: keyboardTap)
     }
 
-    private func recordKey(_ event: NSEvent) {
-        if event.modifierFlags.intersection([.command, .control]).isEmpty && !event.isARepeat {
-            handleTypingKey()
-        }
-    }
-
     private func handleTypingKey() {
-        if !isTest { typingActivity.recordKey() }
-        send("key()")
+        guard workbenchState.typingStatus == .active else { return }
+        if workbenchState.typingStatsEnabled { typingActivity.recordKey() }
+        if workbenchState.typingAnimationEnabled { send("key()") }
     }
 
     @discardableResult
@@ -3199,7 +3619,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 guard let context else { return Unmanaged.passUnretained(event) }
                 let pet = Unmanaged<DesktopPet>.fromOpaque(context).takeUnretainedValue()
                 if kind == .tapDisabledByTimeout || kind == .tapDisabledByUserInput {
-                    if let tap = pet.keyboardTap { CGEvent.tapEnable(tap: tap, enable: true) }
+                    if pet.workbenchState.needsKeyboardMonitoring, let tap = pet.keyboardTap {
+                        CGEvent.tapEnable(tap: tap, enable: true)
+                    }
                 } else if kind == .keyDown,
                           event.flags.intersection([.maskCommand, .maskControl]).isEmpty,
                           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
@@ -3224,60 +3646,77 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         keyboardTap = nil
     }
 
-    private func setupTypingSync() {
-        refreshTypingListener()
+    private func setupInputFeatures() {
+        refreshInputFeatures()
         let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
-            self?.refreshTypingListener()
+            self?.refreshInputFeatures()
         }
         RunLoop.main.add(timer, forMode: .common)
-        typingRetry = timer
+        inputRefreshTimer = timer
+    }
 
-        if workbenchState.typingStatus == .needsPermission {
-            DispatchQueue.main.async { [weak self] in self?.showTypingPermissionReminder() }
-        }
+    private func refreshInputFeatures() {
+        if workbenchState.showTypingStats { typingActivity.refreshToday() }
+        refreshTypingListener()
+        refreshSelectionWatcher()
     }
 
     private func refreshTypingListener() {
-        typingActivity.refreshToday()
-        let allowed = CGPreflightListenEventAccess()
-        if !allowed { stopListening() }
-        let next: TypingSyncStatus = allowed ? (startListening() ? .active : .unavailable) : .needsPermission
-        if next != workbenchState.typingStatus { workbenchState.typingStatus = next }
-        if next == .active, let alert = typingAlert {
-            alert.window.sheetParent?.endSheet(alert.window)
+        let next: TypingSyncStatus
+        if !workbenchState.needsKeyboardMonitoring {
+            next = .off
+        } else if CGPreflightListenEventAccess() {
+            next = startListening() ? .active : .unavailable
+        } else {
+            next = .needsPermission
         }
+        if next != .active { stopListening() }
+        if next == workbenchState.typingStatus { return }
+        if workbenchState.typingStatus == .active && next != .active {
+            if workbenchState.typingStatsEnabled { typingActivity.pauseRecording() }
+            if workbenchState.typingAnimationEnabled { send("stopTyping()") }
+        }
+        workbenchState.typingStatus = next
     }
 
-    private func showTypingPermissionReminder() {
-        guard workbenchState.typingStatus == .needsPermission,
-              typingAlert == nil, let window = workbenchWindow else { return }
-        let alert = NSAlert()
-        alert.messageText = "开启桌宠打字同步"
-        alert.informativeText = "允许「输入监控」后，小猫会跟着你在其他应用里的按键动起来。桌宠只在本机按天保存活跃打字时长和按键次数。"
-        alert.addButton(withTitle: "打开输入监控")
-        alert.addButton(withTitle: "稍后")
-        typingAlert = alert
-        alert.beginSheetModal(for: window) { [weak self] result in
-            guard let self else { return }
-            self.typingAlert = nil
-            if result == .alertFirstButtonReturn { self.requestTypingPermission() }
-        }
-    }
-
-    private func requestTypingPermission() {
-        if !requestedTypingPermission {
-            requestedTypingPermission = true
-            _ = CGRequestListenEventAccess()
-        }
+    private func setTypingAnimation(_ enabled: Bool) {
+        workbenchState.typingAnimationEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "typingAnimationEnabled")
+        if !enabled { send("stopTyping()") }
         refreshTypingListener()
-        if workbenchState.typingStatus == .needsPermission,
-           let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+        if enabled { requestTypingPermissionIfNeeded() }
+    }
+
+    private func setTypingStats(_ enabled: Bool) {
+        workbenchState.typingStatsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "typingStatsEnabled")
+        if !enabled { typingActivity.pauseRecording() }
+        refreshTypingListener()
+        if enabled { requestTypingPermissionIfNeeded() }
+    }
+
+    private func requestTypingPermissionIfNeeded() {
+        guard workbenchState.typingStatus == .needsPermission, !requestedTypingPermission else { return }
+        requestedTypingPermission = true
+        _ = CGRequestListenEventAccess()
+        refreshTypingListener()
+    }
+
+    private func openInputMonitoringSettings() {
+        if let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
             NSWorkspace.shared.open(settings)
         }
     }
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
+        menu.addItem(menuItem(petVisibilityMenuTitle, #selector(toggleTemporaryPetVisibility)))
+        menu.addItem(menuItem("登录时启动", #selector(toggleLoginLaunch)))
+        let approval = menuItem("在系统设置中确认登录项…", #selector(openLoginItemSettings))
+        approval.isHidden = true
+        menu.addItem(approval)
+        menu.addItem(.separator())
         let reminderItem = menu.addItem(withTitle: "添加重要提醒…", action: #selector(addReminder), keyEquivalent: "")
         reminderItem.target = self
         if !reminderList.items.isEmpty {
@@ -3305,9 +3744,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         organize.submenu = organizationOptions
         menu.addItem(organize)
         menu.addItem(.separator())
+        addUpdateItem(to: menu)
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
-            ("打字同步设置…", #selector(enableTyping)),
             ("将桌宠移回屏幕", #selector(resetPosition)),
             ("退出桌宠", #selector(quit)),
         ] {
@@ -3315,6 +3754,60 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             item.target = self
         }
         return menu
+    }
+
+    private var petVisibilityMenuTitle: String {
+        workbenchState.petIsVisible ? "暂时隐藏小猫" : "唤回小猫"
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard let item = menu.items.first(where: { $0.action == #selector(toggleLoginLaunch) }) else { return }
+        let state = SMAppService.mainApp.status
+        item.state = state == .enabled ? .on : state == .requiresApproval ? .mixed : .off
+        menu.items.first { $0.action == #selector(openLoginItemSettings) }?.isHidden = state != .requiresApproval
+    }
+
+    @objc private func toggleTemporaryPetVisibility() {
+        guard workbenchState.visible else {
+            showPet(true)
+            return
+        }
+        workbenchState.temporarilyHidden.toggle()
+        refreshPetVisibility()
+    }
+
+    @objc private func toggleLoginLaunch() {
+        let service = SMAppService.mainApp
+        let registered = service.status == .enabled || service.status == .requiresApproval
+        do {
+            if registered {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = registered ? "无法关闭登录时启动" : "无法开启登录时启动"
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: "打开登录项设置")
+            alert.addButton(withTitle: "关闭")
+            if alert.runModal() == .alertFirstButtonReturn { openLoginItemSettings() }
+        }
+    }
+
+    @objc private func openLoginItemSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    private func addUpdateItem(to menu: NSMenu) {
+        let item = NSMenuItem(
+            title: "检查更新…",
+            action: #selector(AppUpdates.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        item.target = appUpdates
+        item.isEnabled = appUpdates != nil
+        menu.addItem(item)
     }
 
     @objc private func organizeDesktopFiles() { fileOrganizer.organizeDesktop() }
@@ -3409,31 +3902,22 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return item
     }
 
-    @objc private func enableTyping() {
-        refreshTypingListener()
-        switch workbenchState.typingStatus {
-        case .needsPermission:
-            requestTypingPermission()
-        case .active:
-            workbenchState.message = "已连接，可以到其他应用里打字测试。"
-        case .checking, .unavailable:
-            workbenchState.message = "输入监控已授权，正在重试键盘监听。"
-        }
-    }
-
     @objc private func resetPosition() {
         fileActionReturnPlacement = nil
-        guard let screen = NSScreen.main?.visibleFrame else { return }
+        guard let display = PetDisplay.connected.first else { return }
+        hideQuickBar()
+        hideReminderInput()
+        let size = workbenchState.petSize
         if edgePlacement != nil {
             clearEdgePlacement()
-            let size = workbenchState.petSize
-            panel.setContentSize(NSSize(width: size, height: size))
         }
+        panel.setContentSize(NSSize(width: size, height: size))
         // Leave room for the wider focus card so it is not clamped at rest and
         // can keep a fixed offset while the pet is dragged.
         let petWidth = panel.frame.width
         let cardInset = max(24, (FocusCard.width - petWidth) / 2 + 8)
-        panel.setFrameOrigin(NSPoint(x: screen.maxX - petWidth - cardInset, y: screen.minY + 58))
+        panel.setFrameOrigin(NSPoint(x: display.visible.maxX - petWidth - cardInset, y: display.visible.minY + 58))
+        rememberDesktopPosition(on: display)
     }
 
     @objc private func quit() { NSApp.terminate(nil) }

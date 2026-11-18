@@ -1,3 +1,4 @@
+import { readFurPatches, type FurPatch } from './cat-fur-patches';
 import { irisColors, nameLength, options, readConfig, type Config } from './model';
 import { catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles } from './pet-assets';
 import { colorCatBreed, colorCatBreeds, type CatArtPalette, type CatFurColors, type ColorCatBreedId } from './cat-breeds';
@@ -66,7 +67,9 @@ const standardCat = {
 // The workbench catalog lists the built-in presets in this order.
 const drawnCatPresets = {
   preset_cat_orange: { ...standardCat, name: '橘猫', innerPupil: 'none', eyeColor: 'natural', palette: 'CC01', pattern: 'P00' },
-  preset_cat_black: { ...standardCat, name: '黑猫', eyeColor: 'natural', palette: 'CC02', pattern: 'P00' },
+  preset_cat_black: {
+    ...standardCat, name: '黑猫', eyeColor: 'natural', palette: 'CC02', coat: 'jetBlack', pattern: 'P03', mouthContrast: 'light',
+  },
   preset_cat_british_blue: { ...standardCat, name: '英短蓝猫', eyeColor: 'natural', palette: 'CC05', pattern: 'P00' },
   preset_cat_american_shorthair: { ...standardCat, name: '美短', eyeColor: 'natural', palette: 'CC06', pattern: 'P00' },
   preset_cat_li_hua: { ...standardCat, name: '狸花猫', eyeColor: 'natural', palette: 'CC07', pattern: 'P00' },
@@ -83,9 +86,12 @@ const breedCoatSchemes = Object.fromEntries([
 
 // Base fur, markings, and pale fur. Shadows and highlights follow these three colors.
 export const catCoatSchemes = Object.assign({ native: { name: '品种原色', colors: [] } } as const, breedCoatSchemes, {
+  jetBlack: { name: '纯黑', colors: ['#1A191B', '#121113', '#333236'] },
+  ivory: { name: '象牙白', colors: ['#F0EAE5', '#D6CEC8', '#FFFDF8'] },
   honey: { name: '蜂蜜黄', colors: ['#EFC466', '#B78336', '#FFF5D9'] },
   cream: { name: '奶油杏', colors: ['#EBD4AB', '#BE956C', '#FFF8E8'] },
   cocoa: { name: '可可棕', colors: ['#B48364', '#80513F', '#F6E6D8'] },
+  darkTabby: { name: '深灰褐虎斑', colors: ['#61584E', '#37332F', '#8E8171'] },
   silver: { name: '银灰', colors: ['#B4B9C2', '#747E8F', '#F5F7FB'] },
   blue: { name: '雾蓝灰', colors: ['#8EA9BF', '#556C91', '#ECF4FA'] },
   sage: { name: '鼠尾草绿', colors: ['#A3AE88', '#667650', '#F1F3E2'] },
@@ -93,6 +99,10 @@ export const catCoatSchemes = Object.assign({ native: { name: '品种原色', co
   lavender: { name: '雾紫', colors: ['#B2A1C9', '#7A668E', '#F4EDF9'] },
   rose: { name: '玫瑰豆沙', colors: ['#CB939F', '#955D72', '#FBE9ED'] },
   deepSea: { name: '深海蓝', colors: ['#627D9D', '#364863', '#E1ECF7'] },
+  orangeHoney: { name: '蜜橘', colors: ['#F6BD73', '#CF8A50', '#FFF7E8'] },
+  orangeCream: { name: '奶油橘', colors: ['#F1D5AF', '#D8A87D', '#FFF9F0'] },
+  siameseWarm: { name: '暖棕重点', colors: ['#ECC7A2', '#9B5F40', '#FFF0D9'] },
+  siameseCool: { name: '冷灰重点', colors: ['#C0BDC4', '#625D72', '#FAF3ED'] },
 } as const);
 export type CatCoatScheme = keyof typeof catCoatSchemes;
 
@@ -123,6 +133,7 @@ const localMarkings = { native: '品种原纹', plain: '无', mackerel: '细虎�
 export const catMarkingOptions = {
   faceBase: { native: '品种原底', solid: '均匀底色' },
   cheekPattern: localMarkings,
+  forelegPatternSource: { native: '沿用身体纹', separate: '只用独立前肢纹' },
   bodyBase: { native: '品种原底', solid: '纯色身体' },
   tailPattern: { ...localMarkings, plain: '纯色', mackerel: '细尾环', classic: '宽尾环' },
 } as const;
@@ -138,14 +149,15 @@ type CatPupilOverrides = Partial<{
   [Field in keyof CatPupilStyle as `${EyeSide}${Capitalize<Field>}`]: CatPupilStyle[Field];
 }>;
 export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail'> & CatPupilOverrides & LocalCatMarkings & {
-  version: 1; name: string; frame: 'CAT';
+  version: 1; name: string; frame: 'CAT'; furPatches?: FurPatch[];
+  eyeRim?: 'none'; mouthContrast?: 'light';
   nose: CatParts['nose'] | keyof typeof retiredNoseStyles;
   mouth: CatParts['mouth'] | keyof typeof retiredMouthStyles;
   tail: CatParts['tail'] | keyof typeof retiredTailStyles;
 };
 export type PetConfig = Config | CatConfig;
-export const currentFurPatternColors = 'clean-face' as const;
-export type FurPatternColors = typeof currentFurPatternColors | 'breed-pigment' | 'calico-chest' | 'matched' | 'original';
+export const currentFurPatternColors = 'independent-fur' as const;
+export type FurPatternColors = typeof currentFurPatternColors | 'connected-chest' | 'clean-face' | 'breed-pigment' | 'calico-chest' | 'matched' | 'original';
 export type CatRenderConfig = Omit<CatConfig, 'palette' | 'coat'> & {
   palette: CatArtPalette; coat: CatCoatScheme; furPatternColors?: FurPatternColors;
 };
@@ -159,15 +171,28 @@ export function catPupilStyle(config: CatPupilStyle & CatPupilOverrides, side: E
 }
 
 const localMarkingDefaults = {
-  faceBase: 'native', cheekPattern: 'native', bodyBase: 'native', tailPattern: 'native',
+  faceBase: 'native', cheekPattern: 'native', bodyBase: 'native', tailPattern: 'native', forelegPatternSource: 'native',
 } as const satisfies LocalCatMarkings;
 const legacyNose = { CN01: 'NO01', CN02: 'NO02', CN03: 'NO03', CN04: 'NO04' } as const satisfies
   Record<keyof typeof retiredMouthStyles, CatConfig['nose']>;
 const defaultCatByPalette = new Map(Object.values(drawnCatPresets).map(config => [config.palette, config]));
 const colorCatPresets = Object.fromEntries(colorBreedEntries.map(([id, breed]) => [
-  `preset_cat_${id}`, { ...defaultCatByPalette.get(breed.template ?? 'CC01')!, name: breed.name, palette: id },
+  `preset_cat_${id}`, {
+    ...defaultCatByPalette.get(breed.template ?? 'CC01')!, ...breed.appearance,
+    name: breed.name, palette: id, coat: 'native',
+  },
 ])) as Record<`preset_cat_${ColorCatBreedId}`, CatConfig>;
 export const catPresets = { ...drawnCatPresets, ...colorCatPresets } satisfies Record<string, CatConfig>;
+
+const breedCoatVariants: Partial<Record<CatConfig['palette'], readonly CatCoatScheme[]>> = {
+  CC01: ['orangeHoney', 'orangeCream'],
+  CC04: ['siameseWarm', 'siameseCool'],
+};
+
+export const catCoatCards = Object.fromEntries(Object.values(catPresets).map(({ palette, coat }) => [palette, [
+  { id: coat, name: '品种原色' },
+  ...(breedCoatVariants[palette] ?? []).map(id => ({ id, name: catCoatSchemes[id].name })),
+]]));
 
 export function catRenderConfig(config: CatConfig | CatRenderConfig, furPatternColors?: FurPatternColors): CatRenderConfig {
   const breed = colorCatBreed(config.palette);
@@ -316,7 +341,11 @@ export function readPetConfig(input: unknown, {
       pupilOverrides[field] = value;
     }
   }
+  const furPatches = readFurPatches(data.furPatches);
   return {
+    ...(furPatches.length ? { furPatches } : {}),
+    ...(data.eyeRim === 'none' ? { eyeRim: 'none' } : {}),
+    ...(data.mouthContrast === 'light' ? { mouthContrast: 'light' } : {}),
     ...Object.fromEntries(Object.keys(catalog).map(field => [field, choices[field]])),
     ...markings,
     ...pupilOverrides,

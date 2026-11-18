@@ -91,7 +91,7 @@ enum SelectionReader {
 final class TranslationEngine {
     private var service: AnyObject?
 
-    var isAvailable: Bool {
+    static var isAvailable: Bool {
         if #available(macOS 15.0, *) { return true }
         return false
     }
@@ -104,13 +104,18 @@ final class TranslationEngine {
         if service == nil { service = TranslationService() }
         (service as? TranslationService)?.translate(text, completion: completion)
     }
+
+    func cancel() {
+        if #available(macOS 15.0, *) { (service as? TranslationService)?.cancel() }
+    }
 }
 
 @available(macOS 15.0, *)
 final class TranslationBridgeModel: ObservableObject {
     @Published var configuration: TranslationSession.Configuration?
     @Published var text = ""
-    var onResult: ((String?) -> Void)?
+    var request: UUID?
+    var onResult: ((UUID, String?) -> Void)?
 }
 
 @available(macOS 15.0, *)
@@ -122,12 +127,12 @@ struct TranslationBridgeView: View {
             .frame(width: 1, height: 1)
             .translationTask(model.configuration) { session in
                 let text = model.text
-                guard !text.isEmpty else { return }
+                guard let request = model.request, !text.isEmpty else { return }
                 do {
                     let response = try await session.translate(text)
-                    await MainActor.run { model.onResult?(response.targetText) }
+                    await MainActor.run { model.onResult?(request, response.targetText) }
                 } catch {
-                    await MainActor.run { model.onResult?(nil) }
+                    await MainActor.run { model.onResult?(request, nil) }
                 }
             }
     }
@@ -141,8 +146,8 @@ final class TranslationService {
     private var completion: ((String?) -> Void)?
 
     init() {
-        model.onResult = { [weak self] result in
-            guard let self else { return }
+        model.onResult = { [weak self] request, result in
+            guard let self, self.model.request == request else { return }
             let block = self.completion
             self.completion = nil
             block?(result)
@@ -152,6 +157,7 @@ final class TranslationService {
     func translate(_ text: String, completion: @escaping (String?) -> Void) {
         ensureWindow()
         self.completion = completion
+        model.request = UUID()
         model.text = text
         if model.configuration == nil {
             model.configuration = TranslationSession.Configuration(
@@ -161,6 +167,14 @@ final class TranslationService {
         } else {
             model.configuration?.invalidate()
         }
+    }
+
+    func cancel() {
+        guard model.request != nil else { return }
+        completion = nil
+        model.request = nil
+        model.text = ""
+        model.configuration = nil
     }
 
     private func ensureWindow() {

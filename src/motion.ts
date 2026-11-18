@@ -39,6 +39,10 @@ export class Motion {
   setConfig(config: PetConfig) {
     this.config = config;
     this.jelly.reset();
+    this.stopTyping();
+  }
+
+  stopTyping() {
     this.rendered = '';
     this.lastKey = -Infinity;
     this.recentKeys = [];

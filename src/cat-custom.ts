@@ -83,7 +83,8 @@ function readSource(value: unknown): CatEditSource | undefined {
       || (action === 'typing' && referenceAnimation && typingLayout !== 'aligned')
       || (earLayout !== 'shared' && earLayout !== 'legacy')
       || (markingLayout !== 'clean-forehead' && markingLayout !== 'shared' && markingLayout !== 'legacy')
-      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'breed-pigment' && furPatternColors !== 'calico-chest'
+      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'connected-chest' && furPatternColors !== 'clean-face'
+        && furPatternColors !== 'breed-pigment' && furPatternColors !== 'calico-chest'
         && furPatternColors !== 'matched' && furPatternColors !== 'original')
       || !Number.isInteger(gaze.x) || !Number.isInteger(gaze.y)) return;
     if (gaze.space === 'pointer') {
@@ -202,7 +203,9 @@ export function seedCatInkForEditor(
 function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, fallback: PetConfig) {
   // Older saves are just PNGs. Match their closest built-in coat and pose once
   // when selected, while keeping the saved image bytes intact.
-  const choices = Object.values(catPresets);
+  const { mouthContrast: _mouthContrast, ...black } = catPresets.preset_cat_black;
+  const originalBlack = { ...black, coat: 'native', pattern: 'P00' } as const;
+  const choices = [...Object.values(catPresets), originalBlack];
   const candidates: CatConfig[] = fallback.frame === 'CAT' ? [fallback, ...choices] : choices;
   if (fallback.frame === 'CAT' && fallback.faceBase === 'native' && fallback.bodyBase === 'native'
     && fallback.cheekPattern === fallback.bodyPattern
@@ -274,6 +277,7 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
     // Native coats retain their original pixels in either version.
     const outlineVersions: readonly OutlineVersion[] = config.coat === 'native' ? ['adaptive'] : ['adaptive', 'original'];
     const colorVersions: FurPatternColors[] = [currentFurPatternColors];
+    if (config.bodyBase === 'solid') colorVersions.push('connected-chest', 'clean-face');
     if (hasShortCalicoChest(catRenderConfig(config, 'calico-chest'))) colorVersions.push('calico-chest');
     if (config.bodyPattern !== 'native' || config.pattern !== 'P00') {
       if (catKeepsBreedPigment(catRenderConfig(config))) colorVersions.push('matched');
@@ -338,6 +342,16 @@ function inferHistoricalDetails(edited: Uint32Array, layer: ReturnType<typeof ma
       source = candidate;
       baseline = alternative;
     }
+  }
+  if (source.config.eyeRim === 'none') {
+    const { eyeRim: _eyeRim, ...config } = source.config;
+    consider({ ...source, config });
+  } else if (source.config.palette === 'CC09') {
+    consider({ ...source, config: { ...source.config, eyeRim: 'none' } });
+  }
+  if (source.config.mouthContrast === 'light') {
+    const { mouthContrast: _mouthContrast, ...config } = source.config;
+    consider({ ...source, config });
   }
   if (source.markingLayout === 'clean-forehead') consider({ ...source, markingLayout: 'shared' });
   if (source.markingLayout !== 'legacy') {

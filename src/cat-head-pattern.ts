@@ -31,6 +31,71 @@ function furDepth(x: number, y: number) {
     + 0.055 * clamp((py - 135) / 40);
 }
 
+function isChestWhite(pixels: Uint8ClampedArray, index: number) {
+  const offset = index * 4;
+  const red = pixels[offset]!, green = pixels[offset + 1]!, blue = pixels[offset + 2]!;
+  const low = Math.min(red, green, blue);
+  return pixels[offset + 3] === 255 && low >= 224 && Math.max(red, green, blue) - low <= 20;
+}
+
+/** Map only the white chest fringe in the head cel to nearby fur pixels. */
+export function chestFringeSamples(head: Uint8ClampedArray, body: Uint8ClampedArray, width: number) {
+  const left = 96, right = 205, top = 162, seam = 176;
+  const visited = new Set<number>();
+  const samples: [target: number, fur: number][] = [];
+  const neighbors = (at: number) => [at - 1, at + 1, at - width, at + width];
+  const inNeck = (at: number) => {
+    const x = at % width, y = Math.floor(at / width);
+    return x >= left && x <= right && y >= top && y < seam;
+  };
+  function furAbove(at: number, fringe: ReadonlySet<number>) {
+    const covered = (index: number) => fringe.has(index) || isChestWhite(head, index);
+    let fur = at - width;
+    while (covered(fur)) fur -= width;
+    const upper = fur - 2 * width;
+    return head[upper * 4 + 3] === 255 && !covered(upper) ? upper : fur;
+  }
+  for (let x = left; x <= right; x++) {
+    const start = (seam - 1) * width + x;
+    if (visited.has(start) || !isChestWhite(head, start) || !isChestWhite(body, start + width)) continue;
+    const connected = [start];
+    visited.add(start);
+    let extendsIntoFace = false;
+    for (let i = 0; i < connected.length; i++) {
+      const at = connected[i]!;
+      const column = at % width, row = Math.floor(at / width);
+      if (row === top || column === left || column === right) extendsIntoFace = true;
+      for (const next of neighbors(at)) {
+        if (!inNeck(next) || visited.has(next) || !isChestWhite(head, next)) continue;
+        visited.add(next);
+        connected.push(next);
+      }
+    }
+    // A large facial marking can touch the bib without belonging to it.
+    if (extendsIntoFace) continue;
+    const core = new Set(connected);
+    const fringe = new Set(connected);
+    // Include the one-pixel tinted rim where it is much lighter than the
+    // surrounding fur. The gradual cream shading on point coats stays intact.
+    for (const at of connected) {
+      const reference = furAbove(at, core) * 4;
+      if (head[reference + 3] !== 255) continue;
+      for (const next of neighbors(at)) {
+        if (!inNeck(next) || fringe.has(next) || isChestWhite(head, next)) continue;
+        const offset = next * 4;
+        const red = head[offset]!, green = head[offset + 1]!, blue = head[offset + 2]!;
+        if (head[offset + 3] === 255 && red >= 232 && green >= 218 && blue >= 185 && red - blue <= 75
+          && green - head[reference + 1]! >= 25 && blue - head[reference + 2]! >= 45) fringe.add(next);
+      }
+    }
+    for (const at of fringe) {
+      const fur = furAbove(at, fringe);
+      if (head[fur * 4 + 3] === 255) samples.push([at * 4, fur * 4]);
+    }
+  }
+  return samples;
+}
+
 export function paintSolidFace(
   image: ImageData, guide: Uint8ClampedArray, config: CatRenderConfig,
   forehead?: Uint8ClampedArray, cheeks?: Uint8ClampedArray, atlas?: Uint8ClampedArray, nativeHead?: Uint8ClampedArray,
@@ -72,6 +137,22 @@ export function clearForeheadFur(
     if (!data[offset + 3] || !region[offset + 3] || !isFur(guide, offset)) continue;
     const depth = furDepth(offset / 4 % width, Math.floor(offset / 4 / width));
     for (let c = 0; c < 3; c++) data[offset + c] = base[c]! + (marking[c]! - base[c]!) * depth;
+  }
+}
+
+export function paintGoldenTipping(image: ImageData, config: CatRenderConfig) {
+  const { data, width } = image;
+  const [, tip] = tones(config);
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    if (!data[i + 3] || r < 158 || g - b < 22 || r - g < 24) continue;
+    const x = Math.floor((i / 4 % width) / 2), y = Math.floor(i / 4 / width / 2);
+    // The dark tips concentrate near the crown and recede toward the face.
+    // Step the transition on the same grid as the fur drawing.
+    const grain = ((x * 7 + y * 11) % 9 - 4) / 2;
+    const depth = clamp((48 - y + Math.min(7, Math.abs(x - 75) / 5) + grain) / 27);
+    const shade = Math.round(depth * 5) / 10;
+    for (let c = 0; c < 3; c++) data[i + c] = data[i + c]! + (tip[c]! - data[i + c]!) * shade;
   }
 }
 

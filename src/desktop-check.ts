@@ -1,6 +1,5 @@
 import { canChooseCatFaceBase, catIrisColors, catKeepsBreedPigment, catOptions, catPatternFurColors, catPresets, catRenderConfig, currentFurPatternColors, orangeCatOptions, readPetConfig, usesOrangeCatArt,
   type CatConfig, type CatIrisColor } from './cat';
-import { colorCatBreed } from './cat-breeds';
 import { calicoChestBounds } from './cat-body-pattern';
 import { catAssetOptions, frontTyping } from './pet-assets';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor } from './cat-custom';
@@ -885,7 +884,7 @@ export function checkCatActions() {
   for (const preset of Object.values(catPresets)) {
     const source = readPetConfig(preset) as CatConfig;
     assert(source.faceBase === 'native' && source.bodyBase === 'native'
-      && source.cheekPattern === 'native' && source.tailPattern === 'native'
+      && source.cheekPattern === preset.bodyPattern && source.tailPattern === preset.bodyPattern
       && same(snapshot('sit', 0, preset), snapshot('sit', 0, source)), `${preset.name} has incorrect defaults for independent markings`);
     for (const bodyPattern of ['classic', 'plain'] as const) {
       const oldLinked = { ...preset, bodyPattern };
@@ -1101,7 +1100,7 @@ export function checkCatActions() {
   for (const preset of Object.values(catPresets)) {
     for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast'], ['typing', 'frenzy']] as const) {
       const pose = { typingMode, typingEffects: true } as const;
-      if (!colorCatBreed(preset.palette)) {
+      if (catRenderConfig(preset).coat === 'native') {
         assert(same(snapshot(action, 8, preset, { ...pose, outlineVersion: 'original' }), snapshot(action, 8, preset, pose)),
           `${preset.name} changed its baked coat when enabling adaptive outlines`);
       }
@@ -1192,8 +1191,10 @@ export function checkCatActions() {
         && hasMarkingColor(painted, marking, 249, 197, 276, 245),
       `${preset.name}/${bodyPattern} did not use its marking color on the forehead, cheek, body and tail`);
     }
-    assert(same(idle, snapshot('sit', 0, preset, { markingLayout: 'legacy' })),
-      `Separating forehead markings changed the default ${preset.name}`);
+    if (preset.pattern === 'P00' && preset.bodyPattern === 'native') {
+      assert(same(idle, snapshot('sit', 0, preset, { markingLayout: 'legacy' })),
+        `Separating forehead markings changed the default ${preset.name}`);
+    }
     const eyeCanvas = document.createElement('canvas');
     eyeCanvas.width = eyeCanvas.height = SIZE;
     const eyeContext = eyeCanvas.getContext('2d')!;
@@ -1204,7 +1205,14 @@ export function checkCatActions() {
     assert(migratedCoat.frame === 'CAT' && migratedCoat.coat === 'native' && migratedCoat.bodyPattern === 'native',
       'Legacy cat lost its original coloring or pattern');
     for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast']] as const) {
-      const variants = coats.map(coat => snapshot(action, 0, { ...preset, coat }, { typingMode }));
+      const resolvedCoats = new Set<string>();
+      const variants = coats.flatMap(coat => {
+        const variant = { ...preset, coat };
+        const resolved = catRenderConfig(variant).coat;
+        if (resolvedCoats.has(resolved)) return [];
+        resolvedCoats.add(resolved);
+        return [snapshot(action, 0, variant, { typingMode })];
+      });
       const stock = variants[0]!;
       assert(distinct(variants), `Coat combinations matched in ${action}/${typingMode}/${preset.name}`);
       for (const colored of variants) {

@@ -183,12 +183,15 @@ enum PixelPresetStore {
 
     @discardableResult
     static func save(name: String, cells: [UInt32], source: Data?, in folder: URL = PixelPresetStore.folder) -> URL? {
+        guard let png = renderPNG(cells: cells) else { return nil }
+        return save(name: name, snapshot: PixelEditSnapshot(png: png, source: source), in: folder)
+    }
+
+    static func save(name: String, snapshot: PixelEditSnapshot, in folder: URL = PixelPresetStore.folder) -> URL? {
         let slug = slugify(name)
         guard !slug.isEmpty else { return nil }
         let file = "\(slug).png"
         let url = folder.appendingPathComponent(file)
-        guard let png = renderPNG(cells: cells) else { return nil }
-        let snapshot = PixelEditSnapshot(png: png, source: source)
         do {
             var list = try readManifest(in: folder)
             try write(snapshot, to: url)
@@ -310,6 +313,8 @@ final class PixelEditorModel: ObservableObject {
     private let source: Data?
     private let resolveSource: SourceResolver?
 
+    var hasChanges: Bool { !ink.isEmpty }
+
     var pixelChanges: [[UInt32]] {
         ink.sorted { $0.key < $1.key }.map { [UInt32($0.key), $0.value] }
     }
@@ -415,26 +420,31 @@ final class PixelEditorModel: ObservableObject {
             completion(nil)
             return
         }
-        if source != nil, resolveSource == nil {
-            message = "无法读取这份形象的笔迹，请重新打开像素编辑"
-            completion(nil)
-            return
+        resolveSnapshot { snapshot in
+            guard let snapshot, let url = PixelPresetStore.save(name: trimmed, snapshot: snapshot, in: folder) else {
+                if snapshot != nil { self.message = "保存失败，请重试" }
+                completion(nil)
+                return
+            }
+            self.message = "已保存：\(trimmed)"
+            completion(url)
         }
-        let draft = cells
+    }
+
+    func resolveSnapshot(completion: @escaping (PixelEditSnapshot?) -> Void) {
+        guard !isSaving, let png = PixelPresetStore.renderPNG(cells: cells) else { completion(nil); return }
         let changes = pixelChanges
         endStroke()
         isSaving = true
         message = ""
         let finish: (Data?) -> Void = { resolved in
             self.isSaving = false
-            guard self.source == nil || resolved != nil,
-                  let url = PixelPresetStore.save(name: trimmed, cells: draft, source: resolved, in: folder) else {
-                self.message = "保存失败，请重试"
+            guard self.source == nil || resolved != nil else {
+                self.message = "无法保存笔迹，请重试"
                 completion(nil)
                 return
             }
-            self.message = "已保存：\(trimmed)"
-            completion(url)
+            completion(PixelEditSnapshot(png: png, source: resolved))
         }
         if let source, let resolveSource { resolveSource(source, changes, finish) }
         else { finish(nil) }
@@ -443,69 +453,19 @@ final class PixelEditorModel: ObservableObject {
 
 // MARK: - View
 
-struct PixelEditorView: View {
+struct PixelDrawingCanvas: View {
     @ObservedObject var model: PixelEditorModel
-    var onSaved: (URL) -> Void = { _ in }
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var palette: PixelPalette { .of(colorScheme) }
-    private var brushColor: Color { Color(nsColor: PixelEditorPalette.color(model.paintColor)) }
-    private let gridSide: CGFloat = 320
+    let side: CGFloat
+    let palette: PixelPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text("像素编辑")
-                    .font(PixelFont.font(13))
-                    .foregroundStyle(palette.ink)
-                Spacer()
-                Button("撤销") { model.undo() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-                Button("清空") { model.clear() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-                Button(model.isSaving ? "保存中…" : "保存") {
-                    model.save { url in
-                        if let url { onSaved(url) }
-                    }
-                }
-                .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-            }
-
-            grid
-
-            brushControls
-
-            colorControls
-
-            HStack(spacing: 6) {
-                TextField("给这个形象起个名字", text: $model.name)
-                    .textFieldStyle(.plain)
-                    .font(PixelFont.font(12))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
-                    .background(PixelBox(corner: 2).fill(palette.panelAlt))
-                    .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
-                Text(model.message)
-                    .font(PixelFont.font(10))
-                    .foregroundStyle(model.message.hasPrefix("已保存") ? palette.green : palette.inkSoft)
-                    .lineLimit(1)
-            }
-        }
-        .padding(12)
-        .frame(width: gridSide + 24)
-        .background(palette.panel)
-        .disabled(model.isSaving)
-    }
-
-    private var grid: some View {
         Canvas { context, size in
             if let image = PixelPresetStore.image(cells: model.cells) {
                 let sprite = Image(decorative: image, scale: 1).interpolation(.none)
                 context.draw(sprite, in: CGRect(origin: .zero, size: size))
             }
         }
-        .frame(width: gridSide, height: gridSide)
+        .frame(width: side, height: side)
         .background { PixelChecker(even: palette.panelAlt, odd: palette.panelDeep, cell: 10) }
         .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2).allowsHitTesting(false))
         .contentShape(Rectangle())
@@ -513,13 +473,38 @@ struct PixelEditorView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    let cell = gridSide / CGFloat(PixelEditorModel.side)
-                    let column = Int(floor(value.location.x / cell))
-                    let row = Int(floor(value.location.y / cell))
-                    model.paint(column: column, row: row)
+                    let cell = side / CGFloat(PixelEditorModel.side)
+                    model.paint(column: Int(floor(value.location.x / cell)), row: Int(floor(value.location.y / cell)))
                 }
                 .onEnded { _ in model.endStroke() }
         )
+        .disabled(model.isSaving)
+    }
+}
+
+struct PixelEditorTools: View {
+    @ObservedObject var model: PixelEditorModel
+    let palette: PixelPalette
+
+    private var brushColor: Color { Color(nsColor: PixelEditorPalette.color(model.paintColor)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            brushControls
+            colorControls
+            HStack(spacing: 6) {
+                Button("撤销") { model.undo() }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                Button("清空画布") { model.clear() }
+                    .buttonStyle(PixelButtonStyle(palette: palette))
+                    .help("擦除当前画面，可撤销")
+                Text(model.message)
+                    .font(PixelFont.font(10))
+                    .foregroundStyle(palette.inkSoft)
+                    .lineLimit(1)
+            }
+        }
+        .disabled(model.isSaving)
     }
 
     private var brushControls: some View {
