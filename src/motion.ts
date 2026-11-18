@@ -1,6 +1,8 @@
 import { frameCount, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
 import { usesOrangeCatArt, type PetConfig } from './cat';
 import type { CatCustomization } from './cat-custom';
+import { catListeningFrameAt } from './cat-listening';
+import { catFileActionDuration, catFileActionFrameAt, type CatFileAction, type CatFileActionPose } from './cat-file-action';
 import { CatJellyMotion } from './cat-jelly';
 import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
 
@@ -28,6 +30,9 @@ export class Motion {
   private gaze: Gaze = { x: 0, y: 0 };
   private custom?: CatCustomization;
   private edge: CatEdge | null = null;
+  private listening = false;
+  private listeningSince?: number;
+  private fileAction?: { kind: CatFileAction; started: number };
 
   constructor(private canvas: HTMLCanvasElement, private config: PetConfig) {}
 
@@ -49,6 +54,19 @@ export class Motion {
     if (this.gaze.x === gaze.x && this.gaze.y === gaze.y && this.gaze.space === gaze.space) return;
     this.gaze = gaze;
     this.rendered = '';
+  }
+
+  setListening(active: boolean) {
+    this.listening = active;
+    if (!active) this.listeningSince = undefined;
+  }
+
+  playFileAction(kind: CatFileAction, now = performance.now()) {
+    if (this.config.frame !== 'CAT') return 0;
+    this.fileAction = { kind, started: now };
+    this.rendered = '';
+    this.tick(now);
+    return catFileActionDuration(kind);
   }
 
   setEdge(edge: CatEdge | null) {
@@ -145,12 +163,22 @@ export class Motion {
   tick(now = performance.now()) {
     let action: Action = 'sit';
     let frame: number;
+    let listeningFrame: number | undefined;
     const config = this.config;
     const cat = config.frame === 'CAT';
     const edge = cat ? this.edge ?? undefined : undefined;
     const jellyCat = usesOrangeCatArt(config);
     const jelly = !edge && jellyCat ? this.jelly.pose(now) : undefined;
-    if (edge) {
+    let fileAction: CatFileActionPose | undefined;
+    if (this.fileAction) {
+      const { kind, started } = this.fileAction;
+      const fileFrame = cat && !edge ? catFileActionFrameAt(kind, now - started) : undefined;
+      if (fileFrame === undefined) this.fileAction = undefined;
+      else fileAction = { kind, frame: fileFrame };
+    }
+    if (fileAction) {
+      frame = 0;
+    } else if (edge) {
       const idle = Math.floor(Math.max(0, now - this.idleSince) / 90) % 80;
       frame = idle >= 25 && idle <= 26 ? 25 : 0;
     } else if (this.pressing && cat) {
@@ -171,6 +199,10 @@ export class Motion {
       }
     } else if (jelly) {
       frame = 0;
+    } else if (cat && this.listening) {
+      this.listeningSince ??= now;
+      listeningFrame = catListeningFrameAt(now - this.listeningSince);
+      frame = 0;
     } else {
       frame = Math.floor(Math.max(0, now - this.idleSince) / 90) % 80;
     }
@@ -179,13 +211,15 @@ export class Motion {
       this.stretch = elapsed < 600
         ? this.releaseStretch * Math.cos(elapsed / 53) * Math.exp(-elapsed / 150) : 0;
     }
+    if (listeningFrame === undefined) this.listeningSince = undefined;
     const stretch = cat && !jellyCat && action === 'sit' ? Math.round(this.stretch * 32) / 32 : 0;
     const frenzyHeatFrame = cat && action === 'typing' && this.typingMode === 'frenzy'
       ? frenzyHeatFrameAt(now - this.frenzyStarted) : undefined;
-    const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}/${edge}/${jelly?.head}/${jelly?.body}/${jelly?.tail}`;
+    const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}/${edge}/${jelly?.head}/${jelly?.body}/${jelly?.tail}/${listeningFrame}/${fileAction?.kind}/${fileAction?.frame}`;
     if (pose !== this.rendered) {
       render(this.canvas, config, action, frame, this.gaze, {
-        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, edge, jelly, custom: this.custom,
+        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, edge, jelly,
+        listeningFrame, fileAction, custom: this.custom,
       });
       this.rendered = pose;
     }

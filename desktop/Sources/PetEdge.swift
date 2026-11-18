@@ -70,11 +70,10 @@ struct PetEdgePlacement {
     enum Surface {
         case screen(NSNumber?)
         case dock(NSNumber?)
-        case browser(PetBrowserWindow, follows: Bool)
     }
 
     let edge: PetEdge
-    var surface: Surface
+    let surface: Surface
     let anchor: CGFloat
 
     static func displayID(for screen: NSScreen) -> NSNumber? {

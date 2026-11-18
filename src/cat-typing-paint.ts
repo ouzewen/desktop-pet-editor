@@ -51,12 +51,12 @@ export function createTypingArmPainter(orange: ImageData, colored: ImageData) {
     return result;
   }
 
-  return (image: ImageData, paws: Uint8ClampedArray) => {
+  return (image: ImageData, paws?: Uint8ClampedArray) => {
     const pixels = image.data;
     for (let offset = 0; offset < pixels.length; offset += 4) {
       if (!pixels[offset + 3]) continue;
       const red = pixels[offset]!, green = pixels[offset + 1]!, blue = pixels[offset + 2]!;
-      const paw = Boolean(paws[offset + 3]);
+      const paw = Boolean(paws?.[offset + 3]);
       if (!paw && reference[offset + 3] && mapped[offset + 3]
         && red === reference[offset] && green === reference[offset + 1] && blue === reference[offset + 2]) {
         pixels.set(mapped.subarray(offset, offset + 3), offset);

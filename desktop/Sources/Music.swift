@@ -175,27 +175,3 @@ final class MusicWatcher {
         }
     }
 }
-
-// MARK: - Badge
-
-struct MusicBadge: View {
-    let appName: String
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var palette: PixelPalette { .of(colorScheme) }
-
-    var body: some View {
-        HStack(spacing: 5) {
-            PixelGlyph(kind: .note, color: palette.accent, size: 11)
-            Text("听歌中 · \(appName)")
-                .font(PixelFont.font(11))
-                .foregroundStyle(palette.ink)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(PixelBox(corner: 2).fill(palette.panel.opacity(0.96)))
-        .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
-    }
-}

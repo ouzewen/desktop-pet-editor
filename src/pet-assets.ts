@@ -90,6 +90,48 @@ export const tailPath = 'cat/hd/tails/';
 export const initialTailPath = tailPath + 'initial/';
 export const referenceTailPath = tailPath + 'reference/';
 export const typingEffectPath = 'cat/hd/typing-effects/';
+export const catListening = {
+  path: 'cat/hd/listening/', frames: 23, columns: 6, frameDuration: 75,
+  regions: {
+    headband: { x: 43, y: 13, width: 216, height: 96 },
+    earcups: { x: 34, y: 55, width: 234, height: 89 },
+    closed_eyes: { x: 88, y: 97, width: 126, height: 31 },
+    notes: { x: 10, y: 37, width: 289, height: 84 },
+  },
+} as const;
+export const catShredder = {
+  path: 'cat/hd/shredder/', columns: 6,
+  durations: [225, 95, 90, 90, 80, 125, 80, 80, 80, 190, 120, 330],
+  closedFrames: [6, 8, 9, 10, 11] as readonly number[],
+  regions: {
+    arms: { x: 76, y: 176, width: 151, height: 38 },
+    props: { x: 48, y: 151, width: 208, height: 168 },
+    paws: { x: 78, y: 164, width: 146, height: 50 },
+  },
+} as const;
+export const catFileActions = {
+  shredder: catShredder,
+  zip: {
+    path: 'cat/hd/zip/', columns: 6,
+    durations: [220, 85, 85, 90, 95, 120, 90, 85, 100, 125, 165, 85, 55, 65, 100, 55, 55, 340],
+    closedFrames: [17] as readonly number[],
+    regions: {
+      arms: { x: 79, y: 174, width: 144, height: 83 },
+      props: { x: 48, y: 173, width: 208, height: 125 },
+      paws: { x: 84, y: 166, width: 135, height: 96 },
+    },
+  },
+  convert: {
+    path: 'cat/hd/convert/', columns: 5,
+    durations: [220, 70, 90, 85, 95, 85, 95, 125, 110, 115, 100, 90, 80, 85, 95, 90, 255, 80, 80, 420],
+    closedFrames: [19] as readonly number[],
+    regions: {
+      arms: { x: 79, y: 174, width: 144, height: 65 },
+      props: { x: 71, y: 162, width: 157, height: 153 },
+      paws: { x: 83, y: 184, width: 136, height: 55 },
+    },
+  },
+} as const;
 export const frontTyping = {
   path: 'cat/hd/typing-front/', frames: 64, pawFrames: 16, columns: 8,
   region: { x: 48, y: 140, width: 208, height: 49 },
@@ -383,6 +425,26 @@ export const assetGroups: readonly AssetGroup[] = [
       })),
     ], { frames: frontTyping.frames, pawFrames: frontTyping.pawFrames, columns: frontTyping.columns, ...frontTyping.region }),
   ...fallingTypingGroups,
+  scriptGroup('cat.listening', 'current', 'art/cat-shared/listening.aseprite',
+    'export-cat-listening', catListening.path, Object.entries(catListening.regions).map(([part, { width, height }]) => ({
+      key: catListening.path + part,
+      width: width * catListening.columns,
+      height: height * Math.ceil(catListening.frames / catListening.columns),
+    })), {
+      frames: catListening.frames, columns: catListening.columns,
+      duration: catListening.frameDuration,
+      ...Object.fromEntries(Object.entries(catListening.regions).map(([part, region]) => [part, Object.values(region).join(',')])),
+    }),
+  ...Object.entries(catFileActions).map(([action, { path, columns, durations, closedFrames, regions }]) =>
+    scriptGroup('cat.' + action, 'current', `art/cat-shared/${action}.aseprite`,
+      'export-cat-file-action', path, Object.entries(regions).map(([part, { width, height }]) => ({
+        key: path + part,
+        width: width * columns,
+        height: height * durations.length / columns,
+      })), {
+        action, columns, durations: durations.join(','), closed: closedFrames.join(','),
+        ...Object.fromEntries(Object.entries(regions).map(([part, region]) => [part, Object.values(region).join(',')])),
+      })),
   scriptGroup('cat.typing.reference-v2.shared', 'compatibility', 'art/cat-shared/typing-v2/gentle.aseprite',
     'export-cat-typing-v2', typingV2Atlas.path, [
       ...pngs(withPrefix(typingV2Atlas.path, Object.values(sharedTypingGeometry)), CAT_SIZE, typingV2Atlas.frames),

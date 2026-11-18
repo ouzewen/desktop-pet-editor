@@ -139,7 +139,10 @@ final class WorkbenchState: ObservableObject {
     }
 
     func resetUnavailablePreview() {
-        if appearance["frame"] != "CAT" && (action == "typing-gentle" || action == "typing-fast") { action = "typing" }
+        if appearance["frame"] != "CAT" {
+            if action == "typing-gentle" || action == "typing-fast" { action = "typing" }
+            if action == "listening" { action = "sit" }
+        }
     }
 }
 
@@ -265,8 +268,26 @@ private struct PixelColorSelect: View {
     }
 }
 
-private struct PupilColorPicker: View {
-    let title: String
+private struct EyeChoiceStyle: ButtonStyle {
+    let palette: PixelPalette
+    let selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(PixelFont.font(12))
+            .foregroundStyle(palette.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .frame(minHeight: 25)
+            .background(PixelBox(corner: 2).fill(
+                palette.accent.opacity(selected ? 0.24 : configuration.isPressed ? 0.12 : 0)
+            ))
+            .overlay(PixelBox(corner: 2).stroke(selected ? palette.accentDeep : .clear, lineWidth: 1))
+            .contentShape(Rectangle())
+    }
+}
+
+private struct PupilColorEditor: View {
     let side: String
     let colors: [AppearanceOption]
     let naturalSwatches: [String: String]
@@ -274,51 +295,41 @@ private struct PupilColorPicker: View {
     @Binding var layers: String
     @Binding var outer: String
     @Binding var inner: String
-    @State private var isPresented = false
+    @State private var editingInner = false
 
     private var isDouble: Bool { layers == "round" }
-    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
-
-    private var summary: String {
-        let outerName = colors.first { $0.id == outer }?.name ?? "原色"
-        let innerName = colors.first { $0.id == inner }?.name ?? "原色"
-        return isDouble ? "双瞳 · \(outerName) / \(innerName)" : "单瞳 · \(outerName)"
-    }
+    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.inkSoft)
-            Button {
-                isPresented.toggle()
-            } label: {
-                HStack(spacing: 4) {
-                    Text(summary)
-                    Spacer(minLength: 4)
-                    PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 10)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                Text("瞳孔")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+                HStack(spacing: 2) {
+                    modeButton("单瞳", value: "none")
+                    modeButton("双瞳", value: "round")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(2)
+                .background(PixelBox(corner: 2).fill(palette.panelDeep.opacity(0.45)))
+                Spacer(minLength: 3)
+                if isDouble {
+                    layerButton("外层", color: outer, inner: false)
+                    layerButton("内层", color: inner, inner: true)
+                } else {
+                    Text(layers.isEmpty ? "左右瞳孔不同" : "瞳色 · \(colorName(outer))")
+                        .font(PixelFont.font(11))
+                        .foregroundStyle(palette.inkSoft)
+                        .lineLimit(1)
+                }
             }
-            .buttonStyle(PixelButtonStyle(palette: palette))
-            .accessibilityLabel(title)
-            .accessibilityValue(summary)
-            .accessibilityIdentifier("\(side)-eye-pupil-picker")
-            .popover(isPresented: $isPresented, arrowEdge: .top) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 6) {
-                        modeButton("单瞳", value: "none")
-                        modeButton("双瞳", value: "round")
-                    }
-                    colorGrid(isDouble ? "外层瞳色" : "瞳色", id: "outer", selection: $outer,
-                              naturalKey: isDouble ? "eyeColor" : "singleEyeColor")
-                    if isDouble {
-                        colorGrid("内层瞳色", id: "inner", selection: $inner, naturalKey: "innerEyeColor")
-                    }
-                }
-                .padding(12)
-                .frame(width: 380)
-                .background(palette.panel)
+            Rectangle().fill(palette.borderSoft.opacity(0.62)).frame(height: 1)
+            if isDouble && editingInner {
+                colorGrid("内层瞳色", id: "inner", selection: $inner, naturalKey: "innerEyeColor")
+            } else {
+                colorGrid(isDouble ? "外层瞳色" : "瞳色", id: "outer", selection: $outer,
+                          naturalKey: isDouble ? "eyeColor" : "singleEyeColor")
             }
         }
     }
@@ -326,33 +337,72 @@ private struct PupilColorPicker: View {
     private func modeButton(_ title: String, value: String) -> some View {
         Button {
             layers = value
-        } label: {
-            Text(title).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(PixelButtonStyle(palette: palette, prominent: layers == value))
+            editingInner = false
+        } label: { Text(title) }
+        .buttonStyle(EyeChoiceStyle(palette: palette, selected: layers == value))
         .accessibilityAddTraits(layers == value ? .isSelected : [])
         .accessibilityIdentifier("\(side)-eye-mode-\(value)")
     }
 
+    private func colorName(_ id: String) -> String {
+        colors.first { $0.id == id }?.name ?? "左右不同"
+    }
+
+    private func layerButton(_ title: String, color: String, inner: Bool) -> some View {
+        let summary = colorName(color)
+        return Button("\(title) · \(summary)") { editingInner = inner }
+            .buttonStyle(EyeChoiceStyle(palette: palette, selected: editingInner == inner))
+            .accessibilityLabel("\(title)瞳色")
+            .accessibilityValue(summary)
+            .accessibilityAddTraits(editingInner == inner ? .isSelected : [])
+            .accessibilityIdentifier("\(side)-eye-layer-\(inner ? "inner" : "outer")")
+    }
+
     private func colorGrid(_ title: String, id: String, selection: Binding<String>, naturalKey: String) -> some View {
         let defaultSwatch = WBTheme.swatchColors(naturalSwatches[naturalKey].map { [$0] })
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.inkSoft)
-            LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 6) {
-                ForEach(colors, id: \.id) { option in
-                    Button {
-                        selection.wrappedValue = option.id
-                    } label: {
-                        ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette, size: 10)
-                    }
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: selection.wrappedValue == option.id))
-                    .accessibilityLabel("\(title) \(option.name)")
-                    .accessibilityAddTraits(selection.wrappedValue == option.id ? .isSelected : [])
-                    .accessibilityIdentifier("\(side)-eye-\(id)-\(option.id)")
+        return LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 3) {
+            ForEach(colors, id: \.id) { option in
+                let selected = selection.wrappedValue == option.id
+                Button {
+                    selection.wrappedValue = option.id
+                } label: {
+                    ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette, size: 12)
                 }
+                .buttonStyle(EyeChoiceStyle(palette: palette, selected: selected))
+                .accessibilityLabel("\(title) \(option.name)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("\(side)-eye-\(id)-\(option.id)")
             }
+        }
+    }
+}
+
+private enum AppearanceEditor: String {
+    case ears, eyes, nose, mouth, tail, coat, accessories
+
+    var title: String {
+        switch self {
+        case .ears: "耳朵"
+        case .eyes: "眼睛"
+        case .nose: "鼻子"
+        case .mouth: "嘴巴"
+        case .tail: "尾巴"
+        case .coat: "毛色与花纹"
+        case .accessories: "配饰"
+        }
+    }
+
+    static let rows: [[Self]] = [[.ears, .eyes], [.nose, .mouth], [.tail, .coat], [.accessories]]
+}
+
+private enum EyeEditScope: String, CaseIterable {
+    case both, left, right
+
+    var title: String {
+        switch self {
+        case .both: "双眼一起"
+        case .left: "左眼"
+        case .right: "右眼"
         }
     }
 }
@@ -400,6 +450,8 @@ struct WorkbenchView: View {
     let preview: WKWebView
     let typingActivity: TypingActivity
     @Environment(\.colorScheme) private var colorScheme
+    @State private var expandedAppearance: AppearanceEditor?
+    @State private var eyeScope = EyeEditScope.both
 
     private var palette: PixelPalette { .of(colorScheme) }
 
@@ -425,7 +477,7 @@ struct WorkbenchView: View {
     // offered here.
     private var actionOptions: [(String, String)] {
         if state.appearance["frame"] == "CAT" {
-            return [("sit", "待机"), ("typing-gentle", "慢敲键盘"), ("typing-fast", "比较快"), ("typing", "特别快")]
+            return [("sit", "待机"), ("typing-gentle", "慢敲键盘"), ("typing-fast", "比较快"), ("typing", "特别快"), ("listening", "听音乐")]
         }
         return [
             ("sit", "待机"),
@@ -538,15 +590,23 @@ struct WorkbenchView: View {
     @ViewBuilder
     private var detailPane: some View {
         if state.catalog != nil {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
-                    namePanel
-                    breedPanel
-                    appearancePanel
-                    customPanel
+            ScrollViewReader { scroll in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 12) {
+                        namePanel
+                        breedPanel
+                        appearancePanel
+                        customPanel
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 6)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 6)
+                .onChange(of: expandedAppearance) { editor in
+                    guard let editor, let row = AppearanceEditor.rows.first(where: { $0.contains(editor) }) else { return }
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        scroll.scrollTo(row, anchor: .top)
+                    }
+                }
             }
         } else {
             PixelPanel(palette: palette) {
@@ -902,46 +962,8 @@ struct WorkbenchView: View {
                         .foregroundStyle(palette.inkSoft)
 
                     if frame == "CAT" {
-                        partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fieldsForFrame)
-                        pupilControls(options: fieldsForFrame)
-                        partColorRow("nose", shapeTitle: "鼻形", colorTitle: "鼻色", fields: fieldsForFrame)
-                        if let mouths = fieldsForFrame["mouth"] {
-                            fieldPicker(title: "嘴巴", key: "mouth", options: mouths)
-                        }
-                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-                            if let tails = fieldsForFrame["tail"] {
-                                fieldPicker(title: "尾形", key: "tail", options: tails)
-                            }
-                            if let options = localMarkings["tailPattern"] {
-                                fieldPicker(title: "尾纹", key: "tailPattern", options: options)
-                            }
-                        }
-                        HStack(alignment: .top, spacing: 10) {
-                            if let foreheadPatterns = fieldsForFrame["pattern"] {
-                                fieldPicker(title: "额头花纹", key: "pattern", options: foreheadPatterns)
-                            }
-                            if catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"]),
-                               let options = localMarkings["faceBase"] {
-                                fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
-                            } else {
-                                staticField(title: "脸部底纹", value: "均匀底色")
-                            }
-                            if let options = localMarkings["cheekPattern"] {
-                                fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options)
-                            }
-                        }
-                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-                            if let options = localMarkings["bodyBase"] {
-                                fieldPicker(title: "身体底色", key: "bodyBase", options: options)
-                            }
-                            if let bodyPatterns = fieldsForFrame["bodyPattern"] {
-                                fieldPicker(title: "身体花纹", key: "bodyPattern", options: bodyPatterns)
-                            }
-                        }
-                        if let accessories = fieldsForFrame["accessory"] {
-                            accessoryRow(accessories)
-                        }
-                        coatPicker(options: fieldsForFrame["coat"] ?? [], palettes: fieldsForFrame["palette"] ?? [])
+                        let canChooseFaceBase = catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"])
+                        catAppearance(fields: fieldsForFrame, markings: localMarkings, canChooseFaceBase: canChooseFaceBase)
                     } else {
                         LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
                             ForEach(dogFields, id: \.0) { key, title in
@@ -954,6 +976,127 @@ struct WorkbenchView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func catAppearance(
+        fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
+    ) -> some View {
+        VStack(spacing: 6) {
+            ForEach(AppearanceEditor.rows, id: \.self) { row in
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(row, id: \.self) { editor in
+                            appearanceTile(editor, summary: appearanceSummary(editor, fields: fields, markings: markings))
+                        }
+                    }
+                    if let editor = expandedAppearance, row.contains(editor) {
+                        appearanceEditor(editor, fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(PixelBox(corner: 2).fill(palette.panelAlt.opacity(0.55)))
+                            .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
+                    }
+                }
+                .id(row)
+            }
+        }
+    }
+
+    private func appearanceTile(_ editor: AppearanceEditor, summary: String) -> some View {
+        let expanded = expandedAppearance == editor
+        return Button {
+            expandedAppearance = expanded ? nil : editor
+        } label: {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(editor.title)
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.ink)
+                    Text(summary)
+                        .font(PixelFont.font(11))
+                        .foregroundStyle(palette.inkSoft)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 2)
+                PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 10)
+                    .rotationEffect(.degrees(expanded ? 180 : -90))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PixelBox(corner: 2).fill(expanded ? palette.accent.opacity(0.28) : palette.panelAlt))
+            .overlay(PixelBox(corner: 2).stroke(expanded ? palette.accent : palette.borderSoft, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(editor.title)
+        .accessibilityValue(summary)
+        .accessibilityAddTraits(expanded ? .isSelected : [])
+        .accessibilityIdentifier("appearance-\(editor.rawValue)")
+    }
+
+    private func appearanceSummary(
+        _ editor: AppearanceEditor, fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]]
+    ) -> String {
+        func name(_ key: String) -> String? {
+            (fields[key] ?? markings[key])?.first { $0.id == state.appearance[key] }?.name
+        }
+        let keys: [String]
+        switch editor {
+        case .ears: keys = ["ear", "earColor"]
+        case .eyes:
+            let colors = fields["eyeColor"] ?? []
+            let left = pupilSummary(side: .left, colors: colors)
+            let right = pupilSummary(side: .right, colors: colors)
+            return left == right ? left : "左右眼分别设置"
+        case .nose: keys = ["nose", "noseColor"]
+        case .mouth: keys = ["mouth"]
+        case .tail: keys = ["tail", "tailPattern"]
+        case .coat: keys = ["coat", "bodyPattern"]
+        case .accessories: keys = ["accessory"]
+        }
+        return keys.compactMap(name).joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func appearanceEditor(
+        _ editor: AppearanceEditor, fields: [String: [AppearanceOption]],
+        markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
+    ) -> some View {
+        switch editor {
+        case .ears:
+            partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fields)
+        case .eyes:
+            pupilControls(colors: fields["eyeColor"] ?? [])
+        case .nose:
+            partColorRow("nose", shapeTitle: "鼻形", colorTitle: "鼻色", fields: fields)
+        case .mouth:
+            if let options = fields["mouth"] { fieldPicker(title: "嘴形", key: "mouth", options: options) }
+        case .tail:
+            HStack(alignment: .top, spacing: 10) {
+                if let options = fields["tail"] { fieldPicker(title: "尾形", key: "tail", options: options) }
+                if let options = markings["tailPattern"] { fieldPicker(title: "尾纹", key: "tailPattern", options: options) }
+            }
+        case .coat:
+            VStack(alignment: .leading, spacing: 10) {
+                if let options = fields["coat"] { coatPicker(options: options, palettes: fields["palette"] ?? []) }
+                HStack(alignment: .top, spacing: 10) {
+                    if let options = fields["pattern"] { fieldPicker(title: "额头花纹", key: "pattern", options: options) }
+                    if canChooseFaceBase, let options = markings["faceBase"] {
+                        fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
+                    } else {
+                        staticField(title: "脸部底纹", value: "均匀底色")
+                    }
+                    if let options = markings["cheekPattern"] { fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options) }
+                }
+                HStack(alignment: .top, spacing: 10) {
+                    if let options = markings["bodyBase"] { fieldPicker(title: "身体底色", key: "bodyBase", options: options) }
+                    if let options = fields["bodyPattern"] { fieldPicker(title: "身体花纹", key: "bodyPattern", options: options) }
+                }
+            }
+        case .accessories:
+            if let options = fields["accessory"] { accessoryRow(options) }
         }
     }
 
@@ -1029,28 +1172,57 @@ struct WorkbenchView: View {
         }
     }
 
-    private func pupilControls(options: [String: [AppearanceOption]]) -> some View {
-        let colors = options["eyeColor"] ?? []
-        return LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-            pupilPicker(title: "左眼瞳色", side: "left", colors: colors)
-            pupilPicker(title: "右眼瞳色", side: "right", colors: colors)
+    private func pupilControls(colors: [AppearanceOption]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(EyeEditScope.allCases, id: \.self) { scope in
+                    Button {
+                        eyeScope = scope
+                    } label: {
+                        Text(scope.title).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(EyeChoiceStyle(palette: palette, selected: eyeScope == scope))
+                    .accessibilityAddTraits(eyeScope == scope ? .isSelected : [])
+                    .accessibilityIdentifier("\(scope.rawValue)-eye-pupil-picker")
+                }
+            }
+            .padding(3)
+            .background(PixelBox(corner: 2).fill(palette.panelDeep.opacity(0.45)))
+            PupilColorEditor(
+                side: eyeScope.rawValue, colors: colors, naturalSwatches: naturalSwatches, palette: palette,
+                layers: pupilBinding("InnerPupil", inherited: "innerPupil", defaultValue: "round"),
+                outer: pupilBinding("EyeColor", inherited: "eyeColor", defaultValue: "natural"),
+                inner: pupilBinding("InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural")
+            )
+            .id(eyeScope)
         }
     }
 
-    private func pupilPicker(title: String, side: String, colors: [AppearanceOption]) -> some View {
-        PupilColorPicker(
-            title: title, side: side, colors: colors, naturalSwatches: naturalSwatches, palette: palette,
-            layers: pupilBinding("\(side)InnerPupil", inherited: "innerPupil", defaultValue: "round"),
-            outer: pupilBinding("\(side)EyeColor", inherited: "eyeColor", defaultValue: "natural"),
-            inner: pupilBinding("\(side)InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural")
-        )
+    private func pupilSummary(side: EyeEditScope, colors: [AppearanceOption]) -> String {
+        let prefix = side.rawValue
+        let isDouble = (state.appearance[prefix + "InnerPupil"] ?? state.appearance["innerPupil"] ?? "round") == "round"
+        let outer = state.appearance[prefix + "EyeColor"] ?? state.appearance["eyeColor"]
+        let outerName = colors.first { $0.id == outer }?.name ?? "原色"
+        guard isDouble else { return "单瞳 · \(outerName)" }
+        let inner = state.appearance[prefix + "InnerEyeColor"] ?? state.appearance["innerEyeColor"]
+        let innerName = colors.first { $0.id == inner }?.name ?? "原色"
+        return "双瞳 · \(outerName) / \(innerName)"
     }
 
-    private func pupilBinding(_ key: String, inherited: String, defaultValue: String) -> Binding<String> {
-        let selection = appearanceBinding(key)
+    private func pupilBinding(_ suffix: String, inherited: String, defaultValue: String) -> Binding<String> {
+        let keys = (eyeScope == .both ? ["left", "right"] : [eyeScope.rawValue]).map { $0 + suffix }
         return Binding(
-            get: { state.appearance[key] ?? state.appearance[inherited] ?? defaultValue },
-            set: { selection.wrappedValue = $0 }
+            get: {
+                let values = keys.map { state.appearance[$0] ?? state.appearance[inherited] ?? defaultValue }
+                guard let first = values.first, values.allSatisfy({ $0 == first }) else { return "" }
+                return first
+            },
+            set: { value in
+                var appearance = state.appearance
+                for key in keys { appearance[key] = value }
+                state.appearance = appearance
+                state.refresh()
+            }
         )
     }
 

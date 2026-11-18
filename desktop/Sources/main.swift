@@ -179,7 +179,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
     )
     private var edgePlacement: PetEdgePlacement?
-    private var browserFollowTimer: Timer?
+    private var fileActionReturnPlacement: PetEdgePlacement?
+    private var fileActionRun = 0
     private let web: PetView = {
         let config = WKWebViewConfiguration()
         // The bundled renderer compares custom edits to its local sprite layers.
@@ -243,7 +244,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var weatherTimer: Timer?
     private var weatherRetryAt: Date?
     private let music = MusicWatcher()
-    private var musicWindow: ReminderPanel?
     private let clipboard = ClipboardStore()
     private var clipboardWindow: ReminderPanel?
     private var clipboardClickMonitor: Any?
@@ -346,12 +346,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         music.onChange = { [weak self] name in
             guard let self else { return }
+            self.send("setListening(\(name != nil))")
             self.status.menu = self.makeMenu()
-            if let name {
-                self.showMusicBadge(app: name)
-            } else {
-                self.hideMusicBadge()
-            }
         }
 
         status.button?.title = ""
@@ -419,6 +415,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             loadAppearance()
         } else if webView === web {
             ready = true
+            send("setListening(\(music.activeApp != nil))")
             if let appliedConfig { configurePet(appliedConfig) }
             if let appliedCustom { applyCustomOverlay(appliedCustom.snapshot, in: web) }
             if !isTest && workbenchState.visible {
@@ -1116,11 +1113,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         watcher.evaluate(names: [])
         guard watcher.activeApp == nil, changes == ["Apple Music", nil] else { return false }
 
-        showMusicBadge(app: "QQ音乐")
-        guard let badge = musicWindow, badge.isVisible else { return false }
-        guard !badge.frame.intersects(panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
-        hideMusicBadge()
-        guard !(musicWindow?.isVisible ?? false) else { return false }
         return true
     }
 
@@ -2022,22 +2014,53 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func performTrash() {
         guard let url = dropChoiceURL else { return }
-        let ok = FileTools.trash(url)
         hideDropChoice()
+        let ok = FileTools.trash(url)
+        if ok { playFileAction("shredder") }
         showTrashToast(ok ? "已移到垃圾桶" : "操作失败", tone: ok ? .normal : .failure, autoHide: 2.4)
+    }
+
+    private func playFileAction(_ action: String) {
+        guard ready, appliedConfig?["frame"] as? String == "CAT" else { return }
+        fileActionRun += 1
+        let run = fileActionRun
+        if let placement = edgePlacement {
+            fileActionReturnPlacement = placement
+            undockPet(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY), keepOnScreen: true)
+        }
+        web.callAsyncJavaScript(
+            "return await window.pet.playFileAction(action)", arguments: ["action": action], in: nil, in: .page
+        ) { [weak self] result in
+            guard let self, self.fileActionRun == run, self.fileActionReturnPlacement != nil else { return }
+            let duration: TimeInterval
+            if case .success(let value) = result, let milliseconds = value as? NSNumber {
+                duration = milliseconds.doubleValue / 1000
+            } else {
+                duration = 0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+                guard let self, self.fileActionRun == run, let placement = self.fileActionReturnPlacement else { return }
+                self.fileActionReturnPlacement = nil
+                if self.edgePlacement == nil && !self.web.isDragging && self.appliedConfig?["frame"] as? String == "CAT" {
+                    self.placePet(placement)
+                }
+            }
+        }
     }
 
     private func performZip() {
         guard let url = dropChoiceURL else { return }
-        let ok = FileTools.zip(url) != nil
         hideDropChoice()
+        let ok = FileTools.zip(url) != nil
+        if ok { playFileAction("zip") }
         showTrashToast(ok ? "已压缩" : "操作失败", tone: ok ? .normal : .failure, autoHide: 2.4)
     }
 
     private func performConvert(_ format: ConvertFormat) {
         guard let url = dropChoiceURL else { return }
-        let ok = FileTools.convert(url, to: format) != nil
         hideDropChoice()
+        let ok = FileTools.convert(url, to: format) != nil
+        if ok { playFileAction("convert") }
         showTrashToast(
             ok ? "已转换" : "操作失败",
             tone: ok ? .normal : .failure,
@@ -2460,46 +2483,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         card.setFrameOrigin(origin)
     }
 
-    // MARK: Music
-
-    private func showMusicBadge(app: String) {
-        let host = ReminderHostingView(rootView: MusicBadge(appName: app))
-        fitCardHost(host, fallback: NSSize(width: 150, height: 30))
-        let card = musicWindow ?? makeReminderPanel()
-        card.ignoresMouseEvents = true
-        card.setContentSize(host.frame.size)
-        card.contentView = host
-        musicWindow = card
-        card.orderFrontRegardless()
-        layoutMusicBadge()
-    }
-
-    private func hideMusicBadge() {
-        musicWindow?.orderOut(nil)
-    }
-
-    private func layoutMusicBadge() {
-        guard let card = musicWindow,
-              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
-        let size = card.frame.size
-        // Beside the pet, not above it: the cards (weather, focus, reminders) all
-        // stack above the pet and would otherwise collide with this chip.
-        var origin = NSPoint(
-            x: panel.frame.minX - size.width - 8,
-            y: panel.frame.midY - size.height / 2
-        )
-        if origin.x < screen.minX + 8 {
-            origin.x = panel.frame.maxX + 8
-        }
-        if origin.x + size.width > screen.maxX - 8 {
-            origin.x = panel.frame.midX - size.width / 2
-            origin.y = panel.frame.maxY + 8
-        }
-        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
-        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
-        card.setFrameOrigin(origin)
-    }
-
     @objc private func openChat() {
         showChat()
     }
@@ -2510,11 +2493,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     @objc private func toggleMusicWatch() {
         music.enabled.toggle()
-        if !music.enabled {
-            hideMusicBadge()
-        } else if let app = music.activeApp {
-            showMusicBadge(app: app)
-        }
         status.menu = makeMenu()
     }
 
@@ -2875,7 +2853,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         layoutWeatherCard()
         layoutWeatherCityInput()
         layoutClipboard()
-        layoutMusicBadge()
     }
 
     private func matchingPreset(_ config: [String: Any]) -> String {
@@ -3010,6 +2987,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func beginPetDrag(at point: NSPoint) {
+        fileActionReturnPlacement = nil
         hideQuickBar()
         hideReminderInput()
         if edgePlacement != nil { undockPet(at: point) }
@@ -3026,7 +3004,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let nearBottom = NSPoint(x: secondDisplay.midX, y: secondDisplay.minY + 2)
         guard let dock = PetSurface.dock(in: secondDisplay, visible: areaAboveDock),
               PetSurface.nearTop(of: dock, point: nearDock, pet: petAboveDock),
-              PetSurface.peekFrame(over: dock, anchor: 0.5, visibleScreens: [areaAboveDock], petSize: size)?.minY == areaAboveDock.minY,
+              PetSurface.peekFrame(over: dock, anchor: 0.5, visible: areaAboveDock, petSize: size)?.minY == areaAboveDock.minY,
               PetEdge.near(nearDock, pet: petAboveDock, visible: areaAboveDock, display: secondDisplay, neighbors: []) == nil,
               PetEdge.near(nearBottom, pet: petAboveDock, visible: areaAboveDock, display: secondDisplay, neighbors: []) == .bottom,
               PetEdge.bottom.frame(at: 0.5, in: areaAboveDock, display: secondDisplay, petSize: size).minY == secondDisplay.minY
@@ -3080,21 +3058,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let reach = min(22, panel.frame.width * 0.09)
         let atDisplayBorder = screenEdge != nil
             && min(point.y - screen.frame.minY, point.x - visible.minX, visible.maxX - point.x) <= reach
-        if !atDisplayBorder {
-            let dock = PetSurface.dock(in: screen.frame, visible: visible)
-                .flatMap { PetSurface.nearTop(of: $0, point: point, pet: panel.frame) ? $0 : nil }
-            let pointerNearDock = dock.map { abs(point.y - $0.maxY) <= reach } ?? false
-            if !pointerNearDock,
-               let window = PetBrowserWindow.near(point, pet: panel.frame, visibleScreens: NSScreen.screens.map(\.visibleFrame)) {
-                placePet(.init(edge: .bottom, surface: .browser(window, follows: false),
-                               anchor: PetEdge.bottom.anchor(at: anchorPoint, in: window.frame)))
-                if !isTest { offerBrowserAttachment(window) }
-                return
-            }
-            if let dock {
-                placePet(.init(edge: .bottom, surface: .dock(displayID), anchor: PetEdge.bottom.anchor(at: anchorPoint, in: dock)))
-                return
-            }
+        if !atDisplayBorder,
+           let dock = PetSurface.dock(in: screen.frame, visible: visible),
+           PetSurface.nearTop(of: dock, point: point, pet: panel.frame) {
+            placePet(.init(edge: .bottom, surface: .dock(displayID), anchor: PetEdge.bottom.anchor(at: anchorPoint, in: dock)))
+            return
         }
         guard let screenEdge else { return }
         placePet(.init(edge: screenEdge, surface: .screen(displayID), anchor: screenEdge.anchor(at: anchorPoint, in: visible)))
@@ -3105,40 +3073,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         send("setEdge('\(placement.edge.rawValue)')")
         petGaze = nil
         layoutEdgePet(size: workbenchState.petSize)
-        status.menu = makeMenu()
-    }
-
-    private func offerBrowserAttachment(_ window: PetBrowserWindow) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, case .browser(let target, false) = self.edgePlacement?.surface, target.id == window.id else { return }
-            let menu = NSMenu()
-            menu.addItem(self.menuItem("吸附到「\(window.name)」上沿", #selector(self.toggleBrowserAttachment)))
-            let stay = menu.addItem(withTitle: "仅停在这里", action: #selector(NSMenu.cancelTracking), keyEquivalent: "")
-            stay.target = menu
-            menu.popUp(positioning: nil, at: NSPoint(x: self.panel.frame.midX, y: self.panel.frame.maxY), in: nil)
-        }
-    }
-
-    @objc private func toggleBrowserAttachment() {
-        guard var placement = edgePlacement, case .browser(let window, let isFollowing) = placement.surface else { return }
-        placement.surface = .browser(window, follows: !isFollowing)
-        edgePlacement = placement
-        browserFollowTimer?.invalidate()
-        browserFollowTimer = nil
-        if !isFollowing {
-            let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-                guard let self, self.workbenchState.visible else { return }
-                self.layoutEdgePet(size: self.workbenchState.petSize)
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            browserFollowTimer = timer
-            layoutEdgePet(size: workbenchState.petSize)
-        }
-        status.menu = makeMenu()
     }
 
     private func layoutEdgePet(size: CGFloat) {
-        guard var placement = edgePlacement else { return }
+        guard let placement = edgePlacement else { return }
         let screens = NSScreen.screens
         let frame: NSRect
         switch placement.surface {
@@ -3149,22 +3087,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             guard let screen = screens.first(where: { PetEdgePlacement.displayID(for: $0) == displayID }),
                   let dock = PetSurface.dock(in: screen.frame, visible: screen.visibleFrame),
                   let above = PetSurface.peekFrame(over: dock, anchor: placement.anchor,
-                                                   visibleScreens: [screen.visibleFrame], petSize: size) else { resetPosition(); return }
-            frame = above
-        case .browser(var window, let follows):
-            if follows {
-                switch window.state() {
-                case .visible(let current): window.frame = current
-                case .hidden: return
-                case .closed:
-                    undockPet(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY), keepOnScreen: true)
-                    return
-                }
-            }
-            guard let above = PetSurface.peekFrame(over: window.frame, anchor: placement.anchor,
-                                                   visibleScreens: screens.map(\.visibleFrame), petSize: size) else { return }
-            placement.surface = .browser(window, follows: follows)
-            edgePlacement = placement
+                                                   visible: screen.visibleFrame, petSize: size) else { resetPosition(); return }
             frame = above
         }
         guard panel.frame != frame else { return }
@@ -3174,11 +3097,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func clearEdgePlacement() {
         edgePlacement = nil
-        browserFollowTimer?.invalidate()
-        browserFollowTimer = nil
         send("setEdge(null)")
         petGaze = nil
-        status.menu = makeMenu()
     }
 
     private func undockPet(at point: NSPoint, keepOnScreen: Bool = false) {
@@ -3199,14 +3119,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             panel.orderFrontRegardless()
             if !reminderList.items.isEmpty { showReminders() }
             if focus.showsCard { showFocusCard() }
-            if let app = music.activeApp { showMusicBadge(app: app) }
         } else {
             panel.orderOut(nil)
             hideReminders()
             hideReminderInput()
             focus.unpin()
             hideFocusCard()
-            hideMusicBadge()
             hideQuickBar()
         }
     }
@@ -3224,7 +3142,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        browserFollowTimer?.invalidate()
         typingRetry?.invalidate()
         typingActivity.flush()
         gazeTimer?.invalidate()
@@ -3388,9 +3305,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         organize.submenu = organizationOptions
         menu.addItem(organize)
         menu.addItem(.separator())
-        if case .browser(let window, let follows) = edgePlacement?.surface {
-            menu.addItem(menuItem(follows ? "解除浏览器吸附" : "吸附到「\(window.name)」上沿", #selector(toggleBrowserAttachment)))
-        }
         for (title, action) in [
             ("打开工作台", #selector(openWorkbench)),
             ("打字同步设置…", #selector(enableTyping)),
@@ -3508,6 +3422,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     @objc private func resetPosition() {
+        fileActionReturnPlacement = nil
         guard let screen = NSScreen.main?.visibleFrame else { return }
         if edgePlacement != nil {
             clearEdgePlacement()

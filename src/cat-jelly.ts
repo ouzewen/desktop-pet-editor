@@ -5,13 +5,13 @@ type SpringState = { position: number; velocity: number };
 type Spring = { stiffness: number; damping: number };
 
 const follow = {
-  head: { stiffness: 4900, damping: 130, delay: 0 },
-  body: { stiffness: 400, damping: 30, delay: 100 },
-  tail: { stiffness: 130, damping: 17, delay: 155 },
+  head: { stiffness: 2500, damping: 80, delay: 0 },
+  body: { stiffness: 400, damping: 30, delay: 140 },
+  tail: { stiffness: 100, damping: 17, delay: 200 },
 };
-const recovery = { stiffness: 180, damping: 12 };
+const recovery = { stiffness: 180, damping: 6.8 };
 const mass = 1;
-const settleTime = 780;
+const settleTime = 1200;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 function stepSpring({ position, velocity }: SpringState, goal: number, seconds: number, spring: Spring): SpringState {
@@ -48,7 +48,8 @@ export class CatJellyMotion {
     if (this.time === undefined || this.releasedAt !== undefined) return;
     this.advanceDrag(now);
     const speed = dx * 1000 / Math.max(1, elapsed);
-    const value = Math.sign(speed) * clamp((Math.abs(speed) - 45) / (900 - 45), 0, 1);
+    const strength = clamp((Math.abs(speed) - 8) / (900 - 45), 0, 1);
+    const value = Math.sign(speed) * Math.pow(strength, 0.72);
     this.samples.push({ at: now, value });
     while (this.samples[1] && this.samples[1].at < now - 300) this.samples.shift();
   }
@@ -68,11 +69,17 @@ export class CatJellyMotion {
     }
     if (release === undefined) this.advanceDrag(now);
     const position = (part: keyof JellyPose, delay: number) => {
-      const initial = clamp(this.state[part].position, -1, 1);
+      const state = this.state[part];
+      const initial = clamp(state.position, -1, 1);
       const elapsed = release === undefined ? 0 : Math.max(0, now - release - delay);
-      const value = elapsed === 0 ? initial : elapsed >= settleTime ? 0
-        : stepSpring({ position: initial, velocity: 0 }, 0, elapsed / 1000, recovery).position;
-      return Math.round(value * 128) / 128;
+      if (elapsed >= settleTime) return 0;
+      // Give the slower layers time to catch up even when a short swipe ends
+      // before the drag sample reaches them.
+      const velocity = clamp(state.velocity * 0.28 + (this.state.head.position - state.position) * 4, -5, 5);
+      const value = elapsed === 0 ? initial
+        : stepSpring({ position: initial, velocity }, 0, elapsed / 1000, recovery).position
+          * (1 - smooth(1020, settleTime, elapsed));
+      return Math.round(clamp(value, -1, 1) * 128) / 128;
     };
     const pose = { head: position('head', 50), body: position('body', 0), tail: position('tail', 90) };
     if (pose.head || pose.body || pose.tail) return pose;
@@ -146,36 +153,44 @@ export function warpJellySprite(sprite: JellySprite, pose: JellyPose, front: Ima
   const foreground = new Uint32Array(front.data.buffer);
   const background = new Uint32Array(tail.data.buffer);
   background.fill(0);
-  const center = 150, neck = 176;
-  const angle = pose.head * 5 * Math.PI / 180;
-  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const center = 150;
   for (let y = 0; y < size; y++) {
     const row = y * size;
-    // Blend the head and body at the neck and pin the lower legs and paws.
-    const bodyWeight = 1 - smooth(196, 242, y);
-    const scale = 1 + 0.15 * Math.abs(pose.body) * bodyWeight;
-    const bodyShift = pose.body * 6 * bodyWeight;
-    const headWeight = 1 - smooth(148, 185, y);
-    const dy = y + 0.5 - neck;
+    // Keep every pixel on its original row and stretch the face evenly.
+    // The chest yields on the leading side before tapering into the pinned paws.
+    const headWeight = 1 - smooth(143, 204, y);
+    const bodyWeight = (1 - headWeight) * (1 - smooth(188, 236, y));
+    const head = pose.head * headWeight;
+    const body = pose.body * bodyWeight;
+    const chestShift = (pose.body * 0.84 + pose.head * 0.16) * bodyWeight * 13;
+    const shift = head * 18 + chestShift;
+    const stretch = Math.abs(head) * 0.13 + Math.abs(body) * 0.19;
+    const bias = body * 0.10;
+    const leftScale = 1 + stretch - bias;
+    const rightScale = 1 + stretch + bias;
+    const hinge = center + shift;
     for (let x = 0; x < size; x++) {
-      const dx = x + 0.5 - center;
-      const bodyX = center + (dx - bodyShift) / scale;
-      const headX = center + dx * cos + dy * sin;
-      const sx = Math.floor(bodyX + (headX - bodyX) * headWeight);
-      const sy = Math.floor(y + 0.5 + (dy * (cos - 1) - dx * sin) * headWeight);
-      const source = sy * size + sx;
-      foreground[row + x] = sx >= 0 && sx < size && sy >= 0 && sy < size && !tailMask?.[source] ? pixels[source]! : 0;
+      const dx = x + 0.5 - hinge;
+      const sx = Math.floor(center + dx / (dx < 0 ? leftScale : rightScale));
+      const source = row + sx;
+      foreground[row + x] = sx >= 0 && sx < size && !tailMask?.[source] ? pixels[source]! : 0;
     }
     const tailRow = rows[y];
     if (!tailRow) continue;
     // The exposed tip can swing freely. At the attachment, keep the edge
     // against the torso and bend the visible tail away from that anchor.
-    const bend = pose.tail * 23 * (1 - smooth(top, Math.max(top + 1, root), y));
+    const bend = pose.tail * 22 * (1 - smooth(top, Math.max(top + 1, root), y));
     const span = tailRow.right - tailRow.left;
     const attached = 1 - tailRow.free;
-    const mountScale = 1 + (scale - 1) * attached;
-    const left = center + (tailRow.left - center) * mountScale + bodyShift * attached + bend * tailRow.free;
-    const tailScale = clamp(mountScale + bend * attached / span, 0.85, 1.15);
+    const mountScale = 1 + (rightScale - 1) * attached;
+    const desiredLeft = center + (tailRow.left - center) * mountScale + shift * attached + bend * tailRow.free;
+    const desiredWidth = span * clamp(mountScale + bend * attached / span, 0.85, 1.17);
+    // Longer tail styles can reach the frame edge. Ease a free tip inward
+    // and let an attached row compress while its root stays on the body.
+    const limit = Math.max(size - 4, tailRow.right);
+    const excess = Math.max(0, desiredLeft + desiredWidth - limit);
+    const left = Math.min(desiredLeft - excess * tailRow.free, limit - 1);
+    const tailScale = Math.min(desiredWidth, limit - left) / span;
     const start = Math.max(0, Math.ceil(left - 0.5));
     const end = Math.min(size, Math.ceil(left + span * tailScale - 0.5));
     for (let x = start; x < end; x++) {
