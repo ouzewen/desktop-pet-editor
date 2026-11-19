@@ -10,7 +10,28 @@ enum CatPhotoFurEvidence {
         guard #available(macOS 14.0, *) else { return nil }
         guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-        return measure(image)
+        var evidence = measure(image) ?? [:]
+        if evidence["crownFrontal"] == nil, let padded = letterboxedFace(image), let face = measure(padded),
+           face["crownFrontal"] as? Bool == true {
+            // Close head crops can miss the animal-pose detector. Use the
+            // padded retry only for the local shape measurements around the eyes.
+            for key in ["leftCrownLayout", "rightCrownLayout"] { evidence[key] = face[key] }
+        }
+        return evidence.isEmpty ? nil : evidence
+    }
+
+    private static func letterboxedFace(_ image: CGImage) -> CGImage? {
+        let size = 640
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let canvas = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+                                     space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        canvas.setFillColor(red: 0.50, green: 0.47, blue: 0.43, alpha: 1)
+        canvas.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        let scale = 0.73 * CGFloat(size) / CGFloat(max(image.width, image.height))
+        let width = CGFloat(image.width) * scale, height = CGFloat(image.height) * scale
+        canvas.draw(image, in: CGRect(x: (CGFloat(size) - width) / 2, y: (CGFloat(size) - height) / 2,
+                                      width: width, height: height))
+        return canvas.makeImage()
     }
 
     @available(macOS 14.0, *)
@@ -94,6 +115,20 @@ enum CatPhotoFurEvidence {
             return result
         }
 
+        if let neck = point(.neck, minimum: 0.38), let rump = point(.tailBottom, minimum: 0.42),
+           hypot(rump.x - neck.x, rump.y - neck.y) >= separation * 1.35 {
+            let torso = [0.36, 0.56, 0.76].map { fraction in
+                let center = CGPoint(x: neck.x + fraction * (rump.x - neck.x),
+                                     y: neck.y + fraction * (rump.y - neck.y))
+                return region(center, 0, 0.15, 0.42, 0.43)
+            }.filter { $0.total >= 60 }
+            if torso.count >= 2 {
+                evidence["torsoVisible"] = true
+                evidence["torsoSpan"] = Double(abs(rump.x - neck.x) / separation)
+                evidence["torsoWhite"] = torso.allSatisfy { $0.share($0.white) >= 0.66 }
+            }
+        }
+
         let leftJoint: VNAnimalBodyPoseObservation.JointName = viewerLeftIsAnatomicalLeft ? .leftFrontPaw : .rightFrontPaw
         let rightJoint: VNAnimalBodyPoseObservation.JointName = viewerLeftIsAnatomicalLeft ? .rightFrontPaw : .leftFrontPaw
         let paired = [(side: "left", joint: leftJoint, other: rightJoint), (side: "right", joint: rightJoint, other: leftJoint)]
@@ -172,6 +207,8 @@ enum CatPhotoFurEvidence {
             }
         }
         if faceAligned, abs(cross) < 1.1 * separation {
+            let noseSide = (nose.x - midpoint.x) * across.x + (nose.y - midpoint.y) * across.y
+            evidence["crownFrontal"] = abs(noseSide) <= 0.23 * separation
             let earJoints: [(VNAnimalBodyPoseObservation.JointName, VNAnimalBodyPoseObservation.JointName)] =
                 [(.leftEarTop, .leftEarBottom), (.rightEarTop, .rightEarBottom)]
             if earJoints.allSatisfy({ top, bottom in
@@ -277,6 +314,21 @@ enum CatPhotoFurEvidence {
                 let brow = region(eye, 0, -0.30, 0.65, 0.30)
                 let cheek = region(eye, outward, 0.24, 0.55, 0.34)
                 let inside = eyeRegions[index]
+                let upperColumns: [CGFloat] = [outward * 1.5, 0, -outward]
+                let upperCrown = upperColumns.map { x in
+                    region(eye, x, -0.80, 0.28, 0.32)
+                }
+                let lowerEye = region(eye, outward * 0.6, 0.40, 0.42, 0.28)
+                if crown.count >= 7 {
+                    let browOrange = crown.reduce(0.0) { $0 + $1.share($1.ginger) } / Double(crown.count)
+                    var layout = ["browOrange": browOrange]
+                    let visibleCap = upperCrown.filter { $0.total >= 55 }
+                    if visibleCap.count >= 2 {
+                        layout["capOrange"] = visibleCap.reduce(0.0) { $0 + $1.share($1.ginger) } / Double(visibleCap.count)
+                    }
+                    if lowerEye.total >= 55 { layout["eyeWhite"] = lowerEye.share(lowerEye.white) }
+                    evidence[index == 0 ? "leftCrownLayout" : "rightCrownLayout"] = layout
+                }
                 guard brow.total >= 50, cheek.total >= 50 else { continue }
                 if brow.share(brow.orange) >= 0.45, cheek.share(cheek.orange) >= 0.43 { evidence[name] = "orange" }
                 else if brow.share(brow.dark) >= 0.64, cheek.share(cheek.dark) >= 0.56 { evidence[name] = "black" }

@@ -199,6 +199,8 @@ final class WorkbenchState: ObservableObject {
     @Published var photoStatus = ""
     @Published var generatingPhoto = false
     @Published var showingManualTools = false
+    @Published var availableUpdateVersion: String?
+    var installUpdate: () -> Void = {}
     var choosePreset: (String) -> Void = { _ in }
     var renderCoatThumbnails: () async -> [String: NSImage] = { [:] }
     var refresh: () -> Void = {}
@@ -725,6 +727,29 @@ struct WorkbenchView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
+            headerTitle
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(WindowDragArea())
+
+            if let version = state.availableUpdateVersion {
+                Text("发现新版 \(version)")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+                Button("安装并重启", action: state.installUpdate)
+                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .accessibilityIdentifier("workbench-install-update")
+            }
+
+            if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+                Text("v\(version)")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+            }
+        }
+    }
+
+    private var headerTitle: some View {
+        HStack(spacing: 12) {
             ZStack {
                 PixelBox(corner: 3).fill(palette.panel)
                 PixelBox(corner: 3).stroke(palette.border, lineWidth: 3)
@@ -745,9 +770,7 @@ struct WorkbenchView: View {
                     .foregroundStyle(palette.inkSoft)
             }
 
-            Spacer(minLength: 8)
         }
-        .overlay(WindowDragArea())
     }
 
     private let previewSize: CGFloat = 300

@@ -2,8 +2,6 @@
 
 一只像素猫桌面宠物，加一个可以调形象、预览动作、管理提醒的 macOS 工作台。工作台用 SwiftUI 写，宠物画面由 WKWebView 里的 Canvas 分层合成，和 Web 形象编辑器共用同一套渲染代码。
 
-当前默认展示猫；柴犬 M1 的代码、素材和自检仍然保留，只是工作台暂时隐藏了犬类入口。
-
 跨平台约定见 [docs/PORTABILITY.md](docs/PORTABILITY.md)：后续开发按「将来可移植到 Windows」分层，平台能力与业务逻辑分离。
 
 ## 快速开始
@@ -70,7 +68,6 @@ npm run preview
 │   ├── Resources/           # pet.html、App 图标、像素字体
 │   ├── build.sh             # 构建桌宠 App
 │   └── vite.config.ts       # 桌宠 bundle 的 Vite 配置
-├── fixtures/                # 柴犬 M1 验收对照图（不参与运行）
 ├── docs/                    # 素材、版本与历史说明
 ├── scripts/clean.sh         # 清理构建产物与缓存
 ├── VERSION                  # 源版本号
@@ -78,15 +75,14 @@ npm run preview
 ```
 
 - 构建产物统一放在 `build/`（已忽略）：`build/web` 是 Web 编辑器，`build/desktop/桌宠.app` 是 App。
-- 内置素材的源稿、导出与运行时路径统一登记在 [src/pet-assets.ts](src/pet-assets.ts)，可用 `npm run assets:list` 查询。素材目录、命名约定和新增零件流程见 [docs/ASSETS.md](docs/ASSETS.md)。
+- 内置素材的源稿、导出与运行时路径统一登记在 [src/pet-assets.ts](src/pet-assets.ts)，可用 `npm run assets:list` 查询。猫素材目录与新增零件流程见[猫桌宠素材目录与命名](docs/ASSETS.md)。照片自动生成的外观标准见[猫咪照片生成与花色验收](docs/CAT-COAT-REVIEW.md)。
 - 版本号、构建号与发布流程见 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
 ## 素材说明
 
 - 猫的基础层是 160×160；部分 HD 素材（耳、嘴、眼、毛色、打字动作）是 320×320，位于 `public/assets/cat/hd/`，文件名保留 `new_` 前缀以区分代际。
 - 毛色通过 `*_g/_s/_l/_w/_d` 遮罩实现，瞳色使用 `*_iris` 遮罩。眼神跟随使用独立的小高光图层。
-- 当前三档打字使用 `typing-v2` 素材组，共用 32 帧低抬爪动作。历史 12 帧和四帧素材保留，以便还原旧存档。
-- 柴犬 M1 的 160×160 素材仍在 `public/assets/` 根目录下的 `frames/`、`parts/`、`motion/`、`masks/` 中，历史说明见 [docs/SHIBA-NOTES.md](docs/SHIBA-NOTES.md)。
+- 当前三档打字使用 `front-v6` 正视动画。各档使用 64 帧循环，动作图层与导出命令见[共用低抬爪打字动画](docs/ASSETS.md#共用低抬爪打字动画)。
 
 ## 版本与签名
 

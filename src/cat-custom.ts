@@ -83,7 +83,8 @@ function readSource(value: unknown): CatEditSource | undefined {
       || (action === 'typing' && referenceAnimation && typingLayout !== 'aligned')
       || (earLayout !== 'shared' && earLayout !== 'legacy')
       || (markingLayout !== 'clean-forehead' && markingLayout !== 'shared' && markingLayout !== 'legacy')
-      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'connected-chest' && furPatternColors !== 'clean-face'
+      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'independent-fur'
+        && furPatternColors !== 'connected-chest' && furPatternColors !== 'clean-face'
         && furPatternColors !== 'breed-pigment' && furPatternColors !== 'calico-chest'
         && furPatternColors !== 'matched' && furPatternColors !== 'original')
       || !Number.isInteger(gaze.x) || !Number.isInteger(gaze.y)) return;
@@ -277,6 +278,7 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
     // Native coats retain their original pixels in either version.
     const outlineVersions: readonly OutlineVersion[] = config.coat === 'native' ? ['adaptive'] : ['adaptive', 'original'];
     const colorVersions: FurPatternColors[] = [currentFurPatternColors];
+    if (catRenderConfig(config).coat === 'breed:CC11') colorVersions.push('independent-fur');
     if (config.bodyBase === 'solid') colorVersions.push('connected-chest', 'clean-face');
     if (hasShortCalicoChest(catRenderConfig(config, 'calico-chest'))) colorVersions.push('calico-chest');
     if (config.bodyPattern !== 'native' || config.pattern !== 'P00') {

@@ -1,4 +1,6 @@
-# 素材目录与命名
+# 猫桌宠素材目录与命名
+
+照片自动生成与整猫花色的验收标准见[猫咪照片生成与花色验收](CAT-COAT-REVIEW.md)。
 
 运行时内置素材根目录是 `public/assets/`，由 Vite 复制到 `build/desktop/assets/` 与 `build/web/assets/`。两个构建均排除旧的用户存档路径 `public/assets/cat/custom/`，桌宠打包时也会检查暂存目录。
 
@@ -20,24 +22,18 @@ npm run assets:export -- cat.ear.folded --out /tmp/pet-review-assets
 ## 目录
 
 ```
-public/assets/
-├── cat/                  # 160×160 猫基础层（sit_ / walk_ / type_）
-│   ├── hd/               # 320×320 HD 猫素材（new_*），含 HD 眼睛遮罩
-│   │   ├── breeds/       # 各品种的正面及打字层，共用电脑
-│   │   ├── typing-v2/    # 当前32帧低抬爪、遮罩与表情
-│   │   └── typing-reference/ # 历史12帧图集与共用干净电脑
-│   ├── new_/             # 320×320 LibTV 橘猫分层，只用于橘猫待机和打字
-│   └── masks/            # 160×160 猫的换色遮罩与虹膜遮罩
-├── frames/               # 160×160 柴犬（M1）身体/头
-├── masks/                # 柴犬换色遮罩
-├── motion/               # 柴犬动作层
-├── parts/                # 柴犬零件（耳/嘴/尾/眼/花纹）
-├── palettes/C01.json     # 柴犬配色
-└── presets/preset_m1_12.json
+public/assets/cat/
+├── hd/                    # 320×320 猫素材
+│   ├── breeds/            # 各品种的正面及打字层
+│   ├── typing-front/      # 正视电脑、共用前爪与图层遮罩
+│   ├── typing-falling/    # 当前三档打字的字母、表情与特效
+│   ├── typing-v2/         # 历史 32 帧图集
+│   └── typing-reference/  # 历史 12 帧图集与共用干净电脑
+├── new_/                  # 320×320 橘猫待机与打字分层
+└── masks/                 # 160×160 猫的换色遮罩与虹膜遮罩
 ```
 
-- 猫是当前默认与主要维护对象；柴犬（根目录的 M1 素材）仍在仓库中保留，但工作台暂不展示。
-- `cat/hd/new_*.png` 是 320×320 的 HD 代素材，文件名保留 `new_` 前缀以区分代际。当前 `typing-v2/` 图集将 32 张 320×320 帧纵向排列为 320×10240；历史 `typing-reference/` 保留 12 帧、320×3840。其余单帧图层仍为 320×320，渲染器按版本校验尺寸。
+- `hd/new_*.png` 是 320×320 的 HD 代素材，文件名保留 `new_` 前缀以区分代际。多帧图集及各版本的尺寸见[共用低抬爪打字动画](#共用低抬爪打字动画)。
 - 160×160 猫素材仍用于基础坐姿/行走/打字骨架，HD 素材叠加在更高分辨率画布上。
 
 ## LibTV 橘猫素材
@@ -248,6 +244,9 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 
 自定义编辑源记录 `furPatternColors: independent-fur`。旧档的 `connected-chest` 和 `clean-face` 重建各自版本的颈部像素和原纹，`breed-pigment` 重建修整眼缘之前的底图，`calico-chest` 重建短白胸试稿。均匀脸底的眼缘使用当前脸部毛色，原眼白和瞳色仍取眼部图层。旧值 `matched` 和 `original` 也按当时的合成方式提取笔迹。
 
+### 照片生成花色验收
+
+见[猫咪照片生成与花色验收](CAT-COAT-REVIEW.md)。
 
 ### 新稿分层
 
@@ -277,7 +276,7 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 - `<view>_<part>[_<id>][_<slot>].png`
   - `view`: `sit`、`walk`、`type`
   - `part`: `body`、`head`、`ears`、`ear_CE02`、`eye_Y05`、`mouth_CN02` 等
-  - `slot`（柴犬遮罩）: `g`（主色）、`s`（阴影）、`l`（高光）、`w`/`d`（猫毛色）
+  - `slot` 用于基础猫毛色遮罩，取 `g`（主色）、`s`（阴影）、`l`（高光）、`w`（浅毛）、`d`（深毛）。
 - 虹膜遮罩统一为 `*_iris.png`，只保留 alpha，用于换瞳色。眼神跟随移动独立的小高光图层。
 - 所有分层 PNG 的单帧必须与所在代际的画布尺寸一致：基础层 160×160，`cat/hd/` 为 320×320。多帧图集按导出脚本约定排列，`typing-reference/` 的动作与汗水图集为 320×3840。
 
@@ -286,7 +285,3 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 1. 在 `src/pet-assets.ts` 登记选项编号、源稿、导出方法和输出尺寸。只有改变接缝或遮挡时，才需要调整相应的合成规则。
 2. 通过 `assets:export` 导出到审核目录，确认后更新运行时 PNG。
 3. 运行 `assets:check`、构建与自检，核对组合、动作和旧存档。
-
-## 参考图
-
-`fixtures/` 里是柴犬 M1 的验收对照图，不属于运行时素材，可在 PR/评审时引用。柴犬的耳朵/嘴鼻代工说明见 `docs/SHIBA-NOTES.md`。

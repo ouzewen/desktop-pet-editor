@@ -75,8 +75,18 @@ final class CatPhotoClient {
             let evidence = photos.map { CatPhotoFurEvidence.measure(jpeg: $0) ?? [:] }
             let dark = evidence.first?["dark"] as? Double ?? 0
             let orange = evidence.first?["orange"] as? Double ?? 1
+            let hasCrownPair = evidence.contains { view in
+                guard view["imageLeftAnatomicalSide"] is String,
+                      let left = view["leftCrown"] as? String, let right = view["rightCrown"] as? String else { return false }
+                return left != right
+            }
+            let torsoPhoto = evidence.enumerated()
+                .filter { ($0.element["torsoSpan"] as? Double ?? 0) >= 1.20 && $0.element["torsoWhite"] as? Bool != true }
+                .max { ($0.element["torsoSpan"] as? Double ?? 0) < ($1.element["torsoSpan"] as? Double ?? 0) }
+                .map { $0.offset + 1 } ?? 0
             let body: [String: Any] = ["photos": photos.map { $0.base64EncodedString() },
-                                       "checkDarkCoat": dark >= 0.52 && orange <= 0.055]
+                                       "checkDarkCoat": dark >= 0.52 && orange <= 0.055, "torsoPhoto": torsoPhoto,
+                                       "checkCrownContrast": !hasCrownPair && evidence.first?["crownFrontal"] as? Bool != false]
             var request = URLRequest(url: endpoint, timeoutInterval: photos.count > 1 ? 240 : 125)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

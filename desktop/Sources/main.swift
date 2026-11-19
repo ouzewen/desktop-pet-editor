@@ -294,9 +294,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             .paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
         if !isTest, Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil {
             do {
-                let updates = AppUpdates()
+                let updates = AppUpdates { [weak self] version in
+                    self?.workbenchState.availableUpdateVersion = version
+                }
                 try updates.start()
                 appUpdates = updates
+                workbenchState.installUpdate = { [weak updates] in updates?.installOfferedUpdate() }
             } catch {
                 NSLog("Failed to start Sparkle: %@", error.localizedDescription)
             }

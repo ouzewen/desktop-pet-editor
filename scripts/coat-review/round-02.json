@@ -1,0 +1,42 @@
+{
+  "id": "round-02",
+  "label": "第 2 轮 · 手绘花色",
+  "groups": [
+    {
+      "id": "shappo",
+      "title": "Shappo · 底毛颜色",
+      "label": "Shappo 底毛",
+      "description": "小白下巴和小胸斑已经选定。这组只比较黑色底毛的深浅。",
+      "reference": "output/cat-photo-multiview-dataset/photos/01-shappo/01.jpg",
+      "options": [
+        { "id": "A1", "label": "柔和深黑", "description": "保留较多亮部", "image": "output/aseprite-coat-parts-round2/shappo-1-试装.png" },
+        { "id": "A2", "label": "中性深黑", "description": "黑色更实，仍能看清身体明暗", "image": "output/aseprite-coat-parts-round2/shappo-2-试装.png" },
+        { "id": "A3", "label": "墨黑", "description": "这组最深的底色", "image": "output/aseprite-coat-parts-round2/shappo-3-试装.png" }
+      ]
+    },
+    {
+      "id": "push",
+      "title": "Push · 额顶黑斑",
+      "label": "Push 额顶",
+      "description": "画面左上补少量黑色，右斑收在眼睛上方。这组比较黑斑的面积和走向。",
+      "reference": "output/cat-photo-pattern-batch/van-reference.jpg",
+      "options": [
+        { "id": "B1", "label": "两侧较轻", "description": "左右黑斑都收得较小", "image": "output/aseprite-coat-parts-round2/push-1-试装.png" },
+        { "id": "B2", "label": "右上略实", "description": "右上的黑块略饱满", "image": "output/aseprite-coat-parts-round2/push-2-试装.png" },
+        { "id": "B3", "label": "向额心稍伸", "description": "黑斑朝中间多走几格", "image": "output/aseprite-coat-parts-round2/push-3-试装.png" }
+      ]
+    },
+    {
+      "id": "calico",
+      "title": "黎巴嫩三花 · 躯干",
+      "label": "三花躯干",
+      "description": "三款用同一个头部。这组比较躯干的大致深浅和色块分布。",
+      "reference": "output/cat-photo-prepainted-crown-review/photos/05-lebanon/02.jpg",
+      "options": [
+        { "id": "C1", "label": "浅暖小色块", "description": "躯干花色最轻", "image": "output/aseprite-coat-parts-round2/calico-1-试装.png" },
+        { "id": "C2", "label": "左侧鞍斑稍重", "description": "画面左侧有一块较深的毛色", "image": "output/aseprite-coat-parts-round2/calico-2-试装.png" },
+        { "id": "C3", "label": "右肩暖色更多", "description": "画面右侧的暖斑面积更大", "image": "output/aseprite-coat-parts-round2/calico-3-试装.png" }
+      ]
+    }
+  ]
+}

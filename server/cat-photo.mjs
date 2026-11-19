@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
-import { choices, catPhotoRequest, catPhotoViewRequest, catPhotoFeatureRegions, catChestRequest, catChestChoices } from '../src/cat-photo-request.ts';
+import { choices, catPhotoRequest, catPhotoViewRequest, catPhotoFeatureRegions, catChestRequest, catChestChoices, catCrownContrastRequest, catBodyPhotoRequest, catFlankPatchRequest, catVisibleTailRequest } from '../src/cat-photo-request.ts';
 
 const maxPhoto = 1024 * 1024;
 const maxBody = 3 * maxPhoto + 256;
@@ -67,7 +67,9 @@ async function readPhoto(request) {
       throw new RequestError(400, 'invalid_photo');
     }
   }
-  return { photos, checkDarkCoat: input.checkDarkCoat === true };
+  const torsoPhoto = Number.isInteger(input.torsoPhoto) && input.torsoPhoto >= 1 && input.torsoPhoto <= photos.length
+    ? input.torsoPhoto : 0;
+  return { photos, torsoPhoto, checkDarkCoat: input.checkDarkCoat === true, checkCrownContrast: input.checkCrownContrast === true };
 }
 
 function normalizeObservations(value) {
@@ -216,6 +218,48 @@ export function createCatPhotoServer({ apiKey, base = defaultEndpoint, provider 
           }
         } catch {
           calls.push({ stage: 'chest', usage: null });
+        }
+      }
+      if (input.checkCrownContrast && ['calico', 'calico-mask', 'tortie'].includes(observations.set)) {
+        const crown = {};
+        for (const pigment of ['dark', 'orange']) {
+          try {
+            const result = await recognize([photos[0]], catCrownContrastRequest(pigment), 65);
+            calls.push({ stage: `crown-${pigment}`, usage: result.usage });
+            crown[pigment] = result.value?.side;
+          } catch {
+            calls.push({ stage: `crown-${pigment}`, usage: null });
+          }
+        }
+        if ((crown.dark === 'left' && crown.orange === 'right') || (crown.dark === 'right' && crown.orange === 'left')) {
+          observations.crownMarking = {
+            photo: 1, left: crown.orange === 'left' ? 'orange' : 'black',
+            right: crown.orange === 'right' ? 'orange' : 'black',
+          };
+        }
+      }
+      if (observations.cat && ['calico', 'calico-mask', 'tortie', 'blaze-white', 'black-cap', 'white', 'orange'].includes(observations.set)) {
+        async function inspectPart(stage, selected, contract, tokens) {
+          try {
+            const result = await recognize(selected, contract, tokens);
+            calls.push({ stage, usage: result.usage });
+            return Object.fromEntries(Object.entries(contract.schema.properties)
+              .filter(([key, rule]) => rule.enum.includes(result.value?.[key]))
+              .map(([key]) => [key, result.value[key]]));
+          } catch {
+            calls.push({ stage, usage: null });
+            return {};
+          }
+        }
+        const body = await inspectPart('body-markings', photos, catBodyPhotoRequest(photos.length), 135);
+        if (body.white === 'head-tail' && body.photo) {
+          const tail = await inspectPart('visible-tail', [photos[body.photo - 1]], catVisibleTailRequest, 55);
+          body.visibleTail = tail.tail;
+        }
+        observations.bodyMarking = body;
+        if (input.torsoPhoto && ['calico', 'calico-mask', 'tortie', 'blaze-white', 'black-cap'].includes(observations.set)) {
+          const patch = await inspectPart('flank-patch', [photos[input.torsoPhoto - 1]], catFlankPatchRequest, 85);
+          observations.flankMarking = { ...patch, photo: input.torsoPhoto };
         }
       }
       send(response, 200, { model, observations, individual: individual?.map(({ value }) => normalizeObservations(value)), coatPattern, calls });

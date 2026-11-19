@@ -156,6 +156,13 @@ export function paintGoldenTipping(image: ImageData, config: CatRenderConfig) {
   }
 }
 
+export function paintHoneyGoldFur({ data }: ImageData, artwork: Uint8ClampedArray) {
+  for (let i = 0; i < data.length; i += 4) {
+    if (!artwork[i + 3] || !isFur(data, i)) continue;
+    data.set(artwork.subarray(i, i + 3), i);
+  }
+}
+
 export function paintForeheadFur(
   image: ImageData, guide: Uint8ClampedArray, region: Uint8ClampedArray,
   pattern: Uint8ClampedArray, config: CatRenderConfig,

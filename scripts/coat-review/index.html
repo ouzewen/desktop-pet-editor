@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#181b24">
+  <title>猫咪花色评审</title>
+  <link rel="stylesheet" href="/review.css">
+  <script type="module" src="/review.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="cat-icon" aria-hidden="true">🐈</span>
+        <div><p class="round" id="round-label">素材评审</p><h1>猫咪花色评审</h1></div>
+      </div>
+      <div class="progress">
+        <div class="progress-copy"><span>评审进度</span><span id="progress-text"></span></div>
+        <progress id="progress" max="1" value="0" aria-label="评审进度"></progress>
+      </div>
+      <nav id="groups" aria-label="评审分组"></nav>
+    </aside>
+    <main>
+      <section id="stage" aria-label="当前评审组"><p>正在读取候选素材…</p></section>
+      <details id="overall" class="overall" hidden>
+        <summary>补充整体意见 <span>选填</span></summary>
+        <label class="visually-hidden" for="overall-note">整体意见</label>
+        <textarea id="overall-note" rows="3" maxlength="1500" placeholder="例如，之后优先对照脸部的位置和面积。"></textarea>
+      </details>
+      <div class="actions" id="actions" hidden>
+        <p role="status" id="status"></p>
+        <div class="buttons">
+          <button type="button" class="secondary" id="next">下一组 <span aria-hidden="true">→</span></button>
+          <button type="button" class="primary" id="submit">提交评审</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  <dialog id="preview">
+    <div class="preview-head"><h2 id="preview-title"></h2><form method="dialog"><button type="submit" aria-label="关闭预览">×</button></form></div>
+    <img id="preview-image" alt="">
+  </dialog>
+</body>
+</html>

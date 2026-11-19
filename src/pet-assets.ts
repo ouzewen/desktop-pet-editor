@@ -85,6 +85,10 @@ export const mouthSkinColumns = 4;
 export const legacyNoseOutlinePath = facePartsPath + 'legacy_nose_outline';
 export const bodyPatternPath = 'cat/hd/body-patterns/';
 export const headPatternPath = 'cat/hd/head-patterns/';
+export const calicoCrownPath = 'cat/hd/calico-crown/';
+export const honeyGoldPath = 'cat/hd/breeds/CC11/';
+const honeyGoldParts = ['crown', 'cheeks', 'body', 'tail'] as const;
+export const calicoCrownLayouts = ['eye-streak', 'eye-mask', 'high-cap'] as const;
 export const earMaskPath = 'cat/hd/ear-masks/';
 export const tailPath = 'cat/hd/tails/';
 export const initialTailPath = tailPath + 'initial/';
@@ -345,6 +349,13 @@ export const assetGroups: readonly AssetGroup[] = [
   ], cat),
   scriptGroup('cat.ear-masks', 'current', 'art/cat-shared/front-ear-masks.aseprite', 'export-cat-ear-masks',
     earMaskPath, pngs(withPrefix(earMaskPath, alternativeEars))),
+  group('cat.breed.CC11', 'current', pngs(withPrefix(honeyGoldPath, honeyGoldParts)),
+    honeyGoldParts.map(layer => ({
+      source: 'art/cat-breeds/golden-shaded-fur.aseprite', layer, output: honeyGoldPath + layer,
+    })), cat),
+  scriptGroup('cat.calico-crown', 'current', 'art/cat-shared/calico-crown.aseprite', 'export-calico-crown',
+    calicoCrownPath, pngs(withPrefix(calicoCrownPath, ['head', 'ears', ...calicoCrownLayouts.flatMap(layout =>
+      ['orange-left', 'orange-right'].flatMap(side => ['head', 'ears'].map(part => `${layout}-${side}-${part}`)))]))),
   scriptGroup('cat.face-fur', 'current', 'art/cat-shared/face-fur-patterns.aseprite', 'export-cat-head-patterns',
     headPatternPath, pngs(withPrefix(headPatternPath, ['forehead_region', 'face_region', 'face_patterns']))),
   ...[...foreheadParts, ...Object.keys(retiredForeheadDesigns)].map(id =>

@@ -1,6 +1,6 @@
 import { readFurPatches, type FurPatch } from './cat-fur-patches';
 import { irisColors, nameLength, options, readConfig, type Config } from './model';
-import { catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles } from './pet-assets';
+import { calicoCrownLayouts, catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles } from './pet-assets';
 import { colorCatBreed, colorCatBreeds, type CatArtPalette, type CatFurColors, type ColorCatBreedId } from './cat-breeds';
 
 export const catIrisColors = {
@@ -151,16 +151,30 @@ type CatPupilOverrides = Partial<{
 export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail'> & CatPupilOverrides & LocalCatMarkings & {
   version: 1; name: string; frame: 'CAT'; furPatches?: FurPatch[];
   eyeRim?: 'none'; mouthContrast?: 'light';
+  calicoCrown?: 'orange-left' | 'orange-right';
+  calicoCrownLayout?: typeof calicoCrownLayouts[number];
+  calicoCrownTop?: 'split' | 'dark' | 'high-cap';
+  whiteDistribution?: 'bib' | 'shoulder' | 'head-tail';
+  coloredTail?: 'dark' | 'orange' | 'gray';
   nose: CatParts['nose'] | keyof typeof retiredNoseStyles;
   mouth: CatParts['mouth'] | keyof typeof retiredMouthStyles;
   tail: CatParts['tail'] | keyof typeof retiredTailStyles;
 };
 export type PetConfig = Config | CatConfig;
-export const currentFurPatternColors = 'independent-fur' as const;
-export type FurPatternColors = typeof currentFurPatternColors | 'connected-chest' | 'clean-face' | 'breed-pigment' | 'calico-chest' | 'matched' | 'original';
+export const currentFurPatternColors = 'honey-gold' as const;
+export type FurPatternColors = typeof currentFurPatternColors | 'independent-fur' | 'connected-chest' | 'clean-face' | 'breed-pigment' | 'calico-chest' | 'matched' | 'original';
 export type CatRenderConfig = Omit<CatConfig, 'palette' | 'coat'> & {
   palette: CatArtPalette; coat: CatCoatScheme; furPatternColors?: FurPatternColors;
 };
+
+export function hasIndependentFur(version: FurPatternColors = currentFurPatternColors) {
+  return version === currentFurPatternColors || version === 'independent-fur';
+}
+
+export function hasHoneyGoldFur(config: CatRenderConfig) {
+  return config.palette === 'CC02' && config.coat === 'breed:CC11'
+    && (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors;
+}
 
 export function catPupilStyle(config: CatPupilStyle & CatPupilOverrides, side: EyeSide): CatPupilStyle {
   return {
@@ -344,6 +358,16 @@ export function readPetConfig(input: unknown, {
   const furPatches = readFurPatches(data.furPatches);
   return {
     ...(furPatches.length ? { furPatches } : {}),
+    ...(data.palette === 'CC03' && (data.calicoCrown === 'orange-left' || data.calicoCrown === 'orange-right')
+      ? { calicoCrown: data.calicoCrown, ...((calicoCrownLayouts as readonly unknown[]).includes(data.calicoCrownLayout)
+        ? { calicoCrownLayout: data.calicoCrownLayout } : {}) } : {}),
+    ...(data.palette === 'CC03' && (data.calicoCrown === 'orange-left' || data.calicoCrown === 'orange-right')
+      && (data.calicoCrownTop === 'split' || data.calicoCrownTop === 'dark' || data.calicoCrownTop === 'high-cap')
+      ? { calicoCrownTop: data.calicoCrownTop } : {}),
+    ...(data.whiteDistribution === 'bib' || data.whiteDistribution === 'shoulder' || data.whiteDistribution === 'head-tail'
+      ? { whiteDistribution: data.whiteDistribution } : {}),
+    ...(data.whiteDistribution === 'head-tail' && (data.coloredTail === 'dark' || data.coloredTail === 'orange' || data.coloredTail === 'gray')
+      ? { coloredTail: data.coloredTail } : {}),
     ...(data.eyeRim === 'none' ? { eyeRim: 'none' } : {}),
     ...(data.mouthContrast === 'light' ? { mouthContrast: 'light' } : {}),
     ...Object.fromEntries(Object.keys(catalog).map(field => [field, choices[field]])),

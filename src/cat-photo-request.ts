@@ -89,3 +89,55 @@ Size: small if less than one-third of chest depth, medium if up to two-thirds, l
     },
   };
 }
+
+export function catCrownContrastRequest(pigment: 'dark' | 'orange') {
+  const focus = pigment === 'dark'
+    ? 'Look for a noticeably dark black or charcoal patch ABOVE the eyes on the forehead, ignoring the body, dark background and shadow.'
+    : 'Imagine a vertical center line down the forehead. Look for an orange patch of fur ABOVE the eyes, ignoring the nose, ears and body.';
+  return {
+    prompt: `${focus} On which side of the center line is the patch chiefly visible? Use the viewer's LEFT and RIGHT. Use unknown if both sides of the forehead are not discernible or the color is unclear. Return one JSON side field.`,
+    schema: {
+      type: 'object', additionalProperties: false, required: ['side'],
+      properties: { side: { type: 'string', enum: ['left', 'right', 'both', 'unknown'] } },
+    },
+  };
+}
+
+export const catBodyMarkings = ['none', 'saddle', 'flank-island', 'hip'] as const;
+export const catBodyPigments = ['dark', 'orange', 'gray', 'unknown'] as const;
+
+export function catBodyPhotoRequest(photoCount: number) {
+  const choice = (values: readonly string[]) => ({ type: 'string', enum: values });
+  return {
+    prompt: `The numbered photos show the same real cat. Use photo 1 as the reference for LEFT and RIGHT. Check only the localization of broad coat markings. Use the clearest frame and give its number. The hips are above the back legs, the flank is between the front and back legs, the shoulders are by the neck. Saddle = broad colored patch high across the back or shoulder. Flank-island = clearly bounded colored island on the side of the waist. Hip = colored patch at the rump/upper back leg. Ignore stripes, shadows, or diffuse mottling. Give only the single strongest visible patch per side. If the side cannot be matched confidently to the front of the cat in photo 1, choose none and unknown. Do not invent markings on a hidden side.
+White layout: bib = only a white chest bib on a largely colored cat; shoulder = white chest visibly joined to the white shoulders; head-tail = torso and legs almost entirely white, with obvious colored crown/ears AND colored tail. Otherwise use unknown. Look at the color of the actual cap and tail for head-tail.`,
+    schema: {
+      type: 'object', additionalProperties: false,
+      required: ['photo', 'white', 'head', 'tail', 'left', 'leftColor', 'right', 'rightColor'],
+      properties: {
+        photo: { type: 'integer', enum: Array.from({length: photoCount}, (_, i) => i + 1) },
+        white: choice(['bib', 'shoulder', 'head-tail', 'unknown']),
+        head: choice(catBodyPigments), tail: choice(catBodyPigments),
+        left: choice(catBodyMarkings), leftColor: choice(catBodyPigments),
+        right: choice(catBodyMarkings), rightColor: choice(catBodyPigments),
+      },
+    },
+  };
+}
+
+export const catVisibleTailRequest = {
+  prompt: "Does this cat's pictured TAIL have color? If the long fluffy tail is visibly ginger/orange, answer orange. If visibly dark gray/black answer dark. If white answer white. If hidden answer unknown. Look at the tail curled next to the back legs, not the body. Return one tail field.",
+  schema: { type: 'object', additionalProperties: false, required: ['tail'],
+    properties: { tail: { type: 'string', enum: ['unknown', 'orange', 'dark', 'gray', 'white'] } } },
+};
+
+export const catFlankPatchRequest = {
+  prompt: 'Describe ONLY the largest colored patch on the cat’s torso if you see one. Where is it centered: shoulder by the neck, side-waist between front and back legs, or rear-haunch near the tail? If there is no isolated patch or it is hidden, choose unknown. Do not count stripes or low light. Estimate its coverage within the visible torso side only, excluding head, legs and tail: small (under 15%), medium (15–35%), large (over 35%). Use unknown if hidden. For side choose left or right as seen from the cat’s own head facing forward; choose unknown if not sure.',
+  schema: { type: 'object', additionalProperties: false, required: ['side', 'location', 'pigment', 'coverage'],
+    properties: {
+      side: { type: 'string', enum: ['unknown', 'left', 'right'] },
+      location: { type: 'string', enum: ['unknown', 'shoulder', 'side-waist', 'rear-haunch'] },
+      pigment: { type: 'string', enum: catBodyPigments },
+      coverage: { type: 'string', enum: ['unknown', 'small', 'medium', 'large'] },
+    } },
+};

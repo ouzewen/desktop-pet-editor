@@ -1,5 +1,5 @@
 import { sittingForelegAt } from './cat-fur-patches';
-import { catKeepsBreedPigment, catPatternFurColors, currentFurPatternColors, hasShortCalicoChest, type CatRenderConfig } from './cat';
+import { catKeepsBreedPigment, catPatternFurColors, hasIndependentFur, hasShortCalicoChest, type CatRenderConfig } from './cat';
 
 type RGB = readonly [number, number, number];
 
@@ -16,7 +16,7 @@ const nativeStripeGreen: Partial<Record<CatRenderConfig['palette'], readonly [nu
 
 export function usesNativeBodyStripes(config: CatRenderConfig) {
   return config.bodyBase === 'solid' && config.bodyPattern === 'native'
-    && (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors;
+    && hasIndependentFur(config.furPatternColors);
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));

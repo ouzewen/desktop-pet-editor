@@ -2,7 +2,7 @@ import { catCoatSets } from './cat-coat-sets';
 import { catPresets, readPetConfig, type CatConfig } from './cat';
 import type { FurPatch } from './cat-fur-patches';
 
-import { catChestChoices, catPhotoFeatureRegions, choices, type PhotoObservations } from './cat-photo-request';
+import { catBodyPigments, catChestChoices, catPhotoFeatureRegions, choices, type PhotoObservations } from './cat-photo-request';
 
 const isChoice = <Key extends keyof typeof choices>(key: Key, value: unknown): value is PhotoObservations[Key] =>
   typeof value === 'string' && (choices[key] as readonly string[]).includes(value);
@@ -22,6 +22,52 @@ type PawRecovery = { side: Side; anatomicalSide: Side; photo: number; sourceSide
 const opposite = (side: Side): Side => side === 'left' ? 'right' : 'left';
 const pawFields = ['Paw', 'PawVisibility', 'ForelegWhiteCoverage', 'ForelegDarkPatch', 'WhiteToesOnly'] as const;
 
+type BodyPigment = Exclude<typeof catBodyPigments[number], 'unknown'>;
+type BodyMark = 'saddle' | 'flank-island' | 'hip';
+const bodyColors: Record<BodyPigment, string> = { dark: furDark, orange: '#D38F5B', gray: '#777787' };
+const bodyMarkBoxes: Record<BodyMark, PatchBox> = {
+  saddle: [199, 193, 96, 61], 'flank-island': [211, 235, 66, 64], hip: [207, 256, 69, 54],
+};
+const patchCoverageScale = { small: 0.76, medium: 1, large: 1.22 } as const;
+type PatchCoverage = keyof typeof patchCoverageScale;
+type BodyDesign = {
+  photo: number; headTail?: { head: BodyPigment; tail?: BodyPigment; crownAreas: readonly [number | undefined, number | undefined] };
+  marks: { side: Side; shape: BodyMark; color: BodyPigment; coverage: PatchCoverage }[];
+};
+const hasBodyPigment = (value: unknown): value is BodyPigment =>
+  typeof value === 'string' && Object.hasOwn(bodyColors, value);
+
+function selectBodyDesign(input: unknown, flank: unknown, views: readonly FurEvidence[]): BodyDesign | undefined {
+  const data = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const bodyPhoto = data.photo;
+  const bodyView = typeof bodyPhoto === 'number' && Number.isInteger(bodyPhoto) ? views[bodyPhoto - 1] : undefined;
+  if (bodyView && data.white === 'head-tail' && hasBodyPigment(data.head)) {
+    const tail = hasBodyPigment(data.visibleTail) && (data.tail === data.visibleTail || bodyView.tailVisible === true)
+      ? data.visibleTail : undefined;
+    const highWhite = bodyView.torsoWhite || (bodyView.torsoVisible !== true
+      && (bodyView.white ?? 0) >= 0.68 && (bodyView.orange ?? 1) < 0.025);
+    if (highWhite) {
+      const crownAreas = [bodyView.leftCrownLayout?.capOrange, bodyView.rightCrownLayout?.capOrange] as const;
+      const warmCap = (bodyView.leftCrown === 'orange' && (crownAreas[0] ?? 0) >= 0.40)
+        || (bodyView.rightCrown === 'orange' && (crownAreas[1] ?? 0) >= 0.40);
+      return { photo: bodyPhoto as number, headTail: { head: warmCap ? 'orange' : data.head, tail, crownAreas }, marks: [] };
+    }
+  }
+
+  if (!flank || typeof flank !== 'object') return;
+  const { photo, side, location, pigment, coverage } = flank as Record<string, unknown>;
+  const view = typeof photo === 'number' && Number.isInteger(photo) ? views[photo - 1] : undefined;
+  if (!(view?.torsoVisible && !view.torsoWhite && view.imageLeftAnatomicalSide)
+    || (side !== 'left' && side !== 'right') || !hasBodyPigment(pigment)) return;
+  const shape = location === 'shoulder' ? 'saddle' : location === 'side-waist' ? 'flank-island'
+    : location === 'rear-haunch' ? 'hip' : undefined;
+  // The torso-only review names the cat’s anatomical side. The saved pose
+  // uses the same left/right projection as the reference photo.
+  const displaySide = (views[0]?.imageLeftAnatomicalSide ?? 'right') === side ? 'left' : 'right';
+  return shape ? { photo: photo as number, marks: [{ side: displaySide, shape, color: pigment, coverage: coverage === 'small' || coverage === 'large' ? coverage : 'medium' }] } : undefined;
+}
+
+type CrownLayoutEvidence = { browOrange: number; capOrange?: number; eyeWhite?: number };
 type FacePigment = 'black' | 'orange' | 'white';
 type ChestDesign = {
   shape: Exclude<typeof catChestChoices.shape[number], 'unknown'>;
@@ -31,7 +77,7 @@ type ChestDesign = {
 };
 
 const chestTemplates = {
-  tuft: { shape: 'tuft', sizes: [[58, 45], [70, 50], [80, 54]] },
+  tuft: { shape: 'round-bib', sizes: [[61, 48], [72, 51], [83, 56]] },
   taper: { shape: 'taper', sizes: [[47, 57], [61, 71], [76, 87]] },
   bib: { shape: 'round-bib', sizes: [[68, 57], [89, 73], [113, 88]] },
   continuous: { shape: 'continuous', sizes: [[101, 75], [123, 96], [146, 114]] },
@@ -72,7 +118,11 @@ export type FurEvidence = {
   muzzleWhite?: boolean; chestWhite?: boolean; chinOnly?: boolean;
   chestExtent?: 'upper-only' | 'full'; chestChinGap?: boolean; chestDesign?: ChestDesign;
   leftFace?: FacePigment; rightFace?: FacePigment;
-  leftCrown?: 'orange' | 'black'; rightCrown?: 'orange' | 'black';
+  leftCrown?: 'orange' | 'black'; rightCrown?: 'orange' | 'black'; crownFrontal?: boolean;
+  leftCrownLayout?: CrownLayoutEvidence; rightCrownLayout?: CrownLayoutEvidence;
+  calicoCrownLayout?: CatConfig['calicoCrownLayout'];
+  calicoCrownTop?: CatConfig['calicoCrownTop'];
+  bodyDesign?: BodyDesign;
   leftShoulderWhite?: boolean; rightShoulderWhite?: boolean;
   imageLeftAnatomicalSide?: Side;
   leftPawVisibility?: 'visible' | 'occluded'; rightPawVisibility?: 'visible' | 'occluded';
@@ -84,6 +134,7 @@ export type FurEvidence = {
   warmForeleg?: 'left' | 'right';
   uprightEars?: boolean;
   tailVisible?: boolean;
+  torsoVisible?: boolean; torsoWhite?: boolean;
   coatPattern?: 'striped' | 'swirled' | 'spotted' | 'solid' | 'unknown';
 };
 
@@ -187,6 +238,19 @@ export function resolveCatPhotoViews(
     } else if (first[`${side}Paw`] !== undefined || first[`${side}ForelegWhiteCoverage`] !== undefined
       || first[`${side}ForelegDarkPatch`] !== undefined) {
       region.measured = 1;
+      if (first[`${side}Paw`] === 'white' && !first[`${side}ForelegWhiteCoverage`] && !first[`${side}WhiteToesOnly`]) {
+        const anchor = first.imageLeftAnatomicalSide;
+        for (const [index, view] of views.slice(1).entries()) {
+          if (!anchor || !view.imageLeftAnatomicalSide || individual[index + 1]?.cat !== true) continue;
+          const sourceSide = view.imageLeftAnatomicalSide === anchor ? side : opposite(side);
+          if (view[`${sourceSide}PawVisibility`] !== 'visible' || view[`${sourceSide}Paw`] !== 'white'
+            || view[`${sourceSide}ForelegWhiteCoverage`] !== 'leg') continue;
+          const darkPatch = view[`${sourceSide}ForelegDarkPatch`];
+          Object.assign(evidence, { [`${side}ForelegWhiteCoverage`]: 'leg', [`${side}ForelegDarkPatch`]: darkPatch });
+          region.measured = index + 2;
+          break;
+        }
+      }
     }
   }
   const showsWhiteShoulders = (view?: FurEvidence) => view?.chestExtent === 'full'
@@ -205,22 +269,54 @@ export function resolveCatPhotoViews(
 
   // Keep the crown and eye-surround observations independent. A tilted head
   // supplies a crown pair only when both pigments are seen in that same view.
-  const crownIndex = views.findIndex(view => first.imageLeftAnatomicalSide && view.imageLeftAnatomicalSide
-    && view.leftCrown && view.rightCrown && view.leftCrown !== view.rightCrown);
+  const hasSplitCrown = (view: FurEvidence) => view.imageLeftAnatomicalSide
+    && view.leftCrown && view.rightCrown && view.leftCrown !== view.rightCrown;
+  const frontalCrown = views.findIndex(view => view.crownFrontal && hasSplitCrown(view));
+  const crownIndex = frontalCrown >= 0 ? frontalCrown : views.findIndex(hasSplitCrown);
   const crownView = views[crownIndex];
+  const modeledCrown = input.crownMarking as { photo?: unknown; left?: unknown; right?: unknown } | undefined;
+  let crownPhoto: number | undefined;
   if (crownView) {
-    const reversed = crownView.imageLeftAnatomicalSide !== first.imageLeftAnatomicalSide;
+    const reversed = crownView.imageLeftAnatomicalSide !== (first.imageLeftAnatomicalSide ?? 'right');
     evidence.leftCrown = reversed ? crownView.rightCrown : crownView.leftCrown;
     evidence.rightCrown = reversed ? crownView.leftCrown : crownView.rightCrown;
+    crownPhoto = crownIndex + 1;
+  } else if (modeledCrown?.photo === 1 && first.crownFrontal !== false
+    && ((modeledCrown.left === 'orange' && modeledCrown.right === 'black')
+      || (modeledCrown.left === 'black' && modeledCrown.right === 'orange'))) {
+    evidence.leftCrown = modeledCrown.left;
+    evidence.rightCrown = modeledCrown.right;
+    crownPhoto = 1;
   } else {
-    delete evidence.leftCrown;
-    delete evidence.rightCrown;
+    // A white face can still have a dark cap on only one observed side.
+    evidence.leftCrown = first.leftCrown === 'black' ? 'black' : undefined;
+    evidence.rightCrown = first.rightCrown === 'black' ? 'black' : undefined;
   }
+  const layoutView = crownView ?? (crownPhoto === 1 ? first : undefined);
+  if (layoutView && evidence.leftCrown && evidence.rightCrown) {
+    const reversed = layoutView.imageLeftAnatomicalSide !== undefined
+      && layoutView.imageLeftAnatomicalSide !== (first.imageLeftAnatomicalSide ?? 'right');
+    const orangeOnLeft = (evidence.leftCrown === 'orange') !== reversed;
+    const orange = orangeOnLeft ? layoutView.leftCrownLayout : layoutView.rightCrownLayout;
+    const dark = orangeOnLeft ? layoutView.rightCrownLayout : layoutView.leftCrownLayout;
+    if (orange) {
+      // Compare warm fur high on the head to its reach above the eye.
+      // Two pale lower rims distinguish a high cap from an eye patch.
+      const highCap = (orange.capOrange ?? 0) - orange.browOrange >= 0.18
+        && (orange.eyeWhite ?? 0) >= 0.55 && (dark?.eyeWhite ?? 0) >= 0.65;
+      evidence.calicoCrownLayout = highCap ? 'high-cap' : orange.browOrange >= 0.38 ? 'eye-mask' : 'eye-streak';
+      if (orange.capOrange !== undefined) {
+        evidence.calicoCrownTop = highCap ? 'high-cap' : orange.capOrange >= 0.65 ? 'split' : 'dark';
+      }
+    }
+  }
+  const bodyDesign = selectBodyDesign(input.bodyMarking, input.flankMarking, views);
+  if (bodyDesign) evidence.bodyDesign = bodyDesign;
   if (coat) {
     sources.set!.measured = coatIndex + 1;
     sources.tone!.measured = coatIndex + 1;
   }
-  return { evidence, sources, observations, pawRecoveries, whiteShoulderPhoto, crownPhoto: crownView ? crownIndex + 1 : undefined };
+  return { evidence, sources, observations, pawRecoveries, whiteShoulderPhoto, crownPhoto, bodyPhoto: bodyDesign?.photo };
 }
 
 export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
@@ -263,6 +359,11 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
   } else if (set === 'white' && evidence && (evidence.dark ?? 0) >= 0.18 && (evidence.white ?? 1) < 0.75) {
     set = evidence.leftFace === 'white' && evidence.rightFace === 'white' ? 'black-cap' : 'blaze-white';
   }
+  // A mostly white, neutral face can have a unilateral dark cap. Avoid
+  // inheriting the orange face and body markings from a calico template.
+  const neutralFace = mixedSets.includes(set) && tone === 'white' && lacksOrange
+    && observation('face', 'unknown') === 'white-face' && (evidence?.white ?? 0) >= 0.48;
+  if (neutralFace) set = 'black-cap';
   const kit = catCoatSets.find(item => item.id === set);
   const breed = kit?.breed ?? baseFor[set];
   if (!breed) throw Error('缺少对应的猫咪底板');
@@ -346,14 +447,15 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
     if (face === 'left-dark-eye') add('eye', 'angle', [109, 104, 88, 83], furDark);
     if (face === 'right-dark-eye') add('eye', 'angle', [191, 104, 88, 83], furDark, true);
   }
-  if (splitCrown) {
-    config.faceBase = 'solid';
-    config.pattern = 'P03';
-    drop('eye');
-    const leftIsOrange = evidence.leftCrown === 'orange';
-    const orangeFur = '#D3935C';
-    add('eye', 'head-half', [94, 77, 137, 122], leftIsOrange ? orangeFur : furDark);
-    add('eye', 'head-half', [211, 77, 145, 122], leftIsOrange ? furDark : orangeFur, true);
+  const prepaintedCrown = config.palette === 'CC03' && splitCrown;
+  if (prepaintedCrown) {
+    config.calicoCrown = evidence.leftCrown === 'orange' ? 'orange-left' : 'orange-right';
+    config.calicoCrownLayout = evidence.calicoCrownLayout;
+    config.calicoCrownTop = evidence.calicoCrownTop;
+    config.faceBase = 'native';
+    config.pattern = 'P00';
+    config.cheekPattern = 'native';
+    drop('eye', 'blaze');
   } else if (coloredFace) {
     config.faceBase = 'solid';
     config.pattern = 'P03';
@@ -367,7 +469,9 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
     drop('eye', 'blaze');
     add('eye', 'mask', [151, 103, 191, 97], furDark);
   }
-  if (face === 'white-muzzle' || face === 'thin-blaze' || face === 'wide-blaze') {
+  if (prepaintedCrown) {
+    if (evidence.chestDesign?.joinChin && evidence.chinOnly) add('eye', 'chin', [151, 157, 43, 24], furWhite);
+  } else if (face === 'white-muzzle' || face === 'thin-blaze' || face === 'wide-blaze') {
     if (chinOnly) add('eye', 'chin', [151, 157, 43, 24], furWhite);
     else if (narrowMuzzle) add('eye', 'mask', [151, 152, 122, 36], furWhite);
     else add('eye', 'mask', [152, 145, coloredFace ? 141 : 184, 44], furWhite);
@@ -385,6 +489,20 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
     patches = patches.filter(patch => patch !== cap);
     patches.push(cap);
   }
+  if (neutralFace && !evidence?.bodyDesign?.headTail) {
+    const darkLeft = evidence?.leftCrown === 'black';
+    const darkRight = evidence?.rightCrown === 'black';
+    if (darkLeft !== darkRight) {
+      drop('eye', 'blaze');
+      config.coat = 'ivory';
+      config.faceBase = 'solid';
+      config.bodyBase = 'solid';
+      config.bodyPattern = 'plain';
+      config.cheekPattern = 'plain';
+      config.pattern = 'P03';
+      add('eye', 'angle', [darkLeft ? 101 : 201, 75, 94, 112], furDark, darkRight);
+    }
+  }
   const ears = evidence?.uprightEars ? 'upright' : observation('ears', 'unknown');
   if (ears !== 'unknown') config.ear = ears === 'folded' ? 'CE02' : ears === 'round' ? 'CE03' : 'CE01';
   const leftEye = observation('leftEye', 'unknown'), rightEye = observation('rightEye', 'unknown');
@@ -398,8 +516,11 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
     if (design.shape !== 'none') {
       const { shape, sizes } = chestTemplates[design.shape];
       const [width, height] = sizes[design.size === 'small' ? 0 : design.size === 'large' ? 2 : 1];
+      // The shared white uses the same pigment for the connected chest and
+      // both shoulder/foreleg surfaces. Toe-size markings stay independent.
       const whiteShoulders = design.shape === 'continuous' && evidence.leftShoulderWhite && evidence.rightShoulderWhite;
-      const top = design.joinChin ? 160 : 181;
+      config.whiteDistribution = whiteShoulders ? 'shoulder' : 'bib';
+      const top = design.joinChin ? design.shape === 'tuft' ? 152 : 160 : 181;
       patches.push({ id: 'photo-chest-shape', preset: 'chest', shape: whiteShoulders ? 'wide-shoulders' : shape,
         x: 151, y: top + Math.floor(height / 2), width: whiteShoulders ? width + 24 : width, height, color: furWhite, flipped: false, joinChin: design.joinChin });
     }
@@ -409,12 +530,28 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
     if (chest === 'white-bib') add('chest', 'bib', [151, 203, 116, 81], furWhite);
     if (chest === 'wide-white') add('chest', 'full', [151, 220, 186, 116], furWhite);
   }
+  const bodyMarks = evidence?.bodyDesign?.marks;
+  const headTail = evidence?.bodyDesign?.headTail;
+  if (bodyMarks?.length && !isTabby && !noLargeWhite && (mixedSets.includes(set) || headTail || set === 'black-cap' || set === 'blaze-white')) {
+    drop('bodySpot');
+    // Insert them below the chest, so a saddle crossing an existing white bib
+    // cannot erase the bright edge that ties the neck and front legs together.
+    const chestPatches = patches.filter(patch => patch.preset === 'chest');
+    drop('chest');
+    for (const { side, shape, color, coverage } of bodyMarks) {
+      const [x, y, width, height] = bodyMarkBoxes[shape];
+      const scale = patchCoverageScale[coverage];
+      add('bodySpot', shape, [side === 'left' ? 302 - x : x, y, Math.round(width * scale), Math.round(height * scale)],
+        bodyColors[color], side === 'left');
+    }
+    patches.push(...chestPatches);
+  }
   const flank = observation('flank', 'unknown');
   const patterns = { plain: 'plain', 'thin-stripes': 'mackerel', swirls: 'classic', spots: 'spotted' } as const;
   if (flank in patterns && (isTabby || solid) && !(flank === 'plain' && isTabby && stripeSet)) {
     config.bodyPattern = patterns[flank as keyof typeof patterns];
     config.bodyBase = 'solid';
-  } else if (!isTabby && (flank === 'left-dark' || flank === 'right-dark')) {
+  } else if (!patches.some(patch => patch.preset === 'bodySpot') && !isTabby && (flank === 'left-dark' || flank === 'right-dark')) {
     const right = flank === 'right-dark';
     add('bodySpot', 'angle', [right ? 207 : 96, 219, 65, 85], furDark, right);
   }
@@ -462,10 +599,40 @@ export function appearanceFromCatPhoto(input: unknown, evidence?: FurEvidence) {
   if (tail === 'wide-rings') config.tailPattern = 'classic';
   if (tail === 'spotted') config.tailPattern = 'spotted';
 
+  if (headTail) {
+    config.palette = 'CC02';
+    config.coat = 'ivory';
+    config.bodyBase = 'solid';
+    config.bodyPattern = 'plain';
+    config.cheekPattern = 'plain';
+    config.forelegPatternSource = 'separate';
+    config.pattern = 'P03';
+    config.faceBase = 'native';
+    config.coloredTail = headTail.tail;
+    config.whiteDistribution = 'head-tail';
+    config.tail = config.tail === 'CT01' ? 'CT05' : config.tail;
+    delete config.calicoCrown;
+    delete config.calicoCrownLayout;
+    delete config.calicoCrownTop;
+    drop('eye', 'blaze', 'chest', 'leftForeleg', 'rightForeleg', 'leftRings', 'rightRings', 'leftSock', 'rightSock');
+    const [leftArea, rightArea] = headTail.crownAreas;
+    if (headTail.head === 'orange' && (evidence?.orange ?? 1) < 0.15) {
+      for (const [side, area] of [['left', leftArea], ['right', rightArea]] as const) {
+        if (area !== undefined && area < 0.10) continue;
+        const coverage = (area ?? 0.35) < 0.45 ? 'small' : 'medium';
+        const scale = patchCoverageScale[coverage];
+        const left = side === 'left';
+        add('eye', 'ear-tip', [left ? 91 : 211, 42, Math.round(62 * scale), Math.round(54 * scale)], bodyColors.orange, !left);
+      }
+    } else {
+      add('eye', 'cap', [151, 55, 179, 72], bodyColors[headTail.head]);
+    }
+  }
+
   // The same validated config drives all live poses and editing.
   const chosen = readPetConfig({ ...config, furPatches: patches });
   const preset = config.palette === 'CC01' ? 'preset_cat_orange' : config.palette === 'CC06' ? 'preset_cat_american_shorthair' : breed;
-  const setName = set === 'blaze-white' && sampledBlaze === 'none' ? '黑白双色' : kit?.name ?? base.name;
+  const setName = headTail ? headTail.tail ? '白底有色头尾' : '白底色帽' : set === 'blaze-white' && sampledBlaze === 'none' ? '黑白双色' : kit?.name ?? base.name;
   return { config: chosen, breed: preset, setName };
 }
 
