@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>桌宠公开更新验收</title>
+    <item>
+      <title>桌宠 0.3.6 内测版</title>
+      <sparkle:version>33</sparkle:version>
+      <sparkle:shortVersionString>0.3.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/ouzewen/desktop-pet-editor/releases/download/v0.3.6/DesktopPet-v0.3.6-macos-arm64.zip"
+        sparkle:edSignature="HG++SLTzJenGGZKK0T251BQ7/4JCWsfnIuLA+jWfmYT1WtE7qbUZLcC/9YHyuceu2c0mQe3bUVrp+NfNltDBAQ==" length="10224669" type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>
