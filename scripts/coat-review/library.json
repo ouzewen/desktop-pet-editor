@@ -1,0 +1,312 @@
+{
+  "portraits": [
+    {
+      "id": "shappo",
+      "label": "Shappo",
+      "description": "墨黑底毛、小白下巴、小白胸",
+      "preview": "output/coat-library-portraits/01-shappo-sit.png",
+      "typing": "output/coat-library-portraits/01-shappo-typing.png",
+      "components": [
+        "ink-black",
+        "chin-small",
+        "chest-small"
+      ]
+    },
+    {
+      "id": "push",
+      "label": "Push",
+      "description": "象牙白底毛，额顶左小右大",
+      "preview": "output/coat-library-portraits/06-van-sit.png",
+      "typing": "output/coat-library-portraits/06-van-typing.png",
+      "components": [
+        "asymmetric-dark-crown"
+      ]
+    },
+    {
+      "id": "lebanon",
+      "label": "黎巴嫩三花",
+      "description": "左眼橘斑、深色额顶、宽白胸",
+      "preview": "output/coat-library-portraits/05-lebanon-sit.png",
+      "typing": "output/coat-library-portraits/05-lebanon-typing.png",
+      "components": [
+        "calico-wide-chest"
+      ]
+    }
+  ],
+  "components": {
+    "asymmetric-dark-crown": {
+      "label": "右重额顶深斑",
+      "variant": "Push · B3R"
+    },
+    "ink-black": {
+      "label": "墨黑底毛配色层",
+      "variant": "Shappo · A3",
+      "preview": "output/aseprite-coat-parts-round2/parts/shappo-3.png"
+    },
+    "chin-small": {
+      "label": "小白下巴",
+      "variant": "Shappo"
+    },
+    "chest-small": {
+      "label": "小白胸",
+      "variant": "Shappo"
+    },
+    "calico-wide-chest": {
+      "label": "宽连片白胸",
+      "variant": "黎巴嫩三花 · C3"
+    }
+  },
+  "studioComponents": [
+    {
+      "id": "r12-crown-wedge-left",
+      "label": "左额 · 贴顶小楔",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-wedge-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-round-left",
+      "label": "左额 · 圆弧顶斑",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-round-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-brow-left",
+      "label": "左额 · 延到眉上",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-left-brow"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-brow-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-sweep-left",
+      "label": "左额 · 斜扫额斑",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-sweep-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-fine-left",
+      "label": "左前肢 · 单条细环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-left-lower",
+        "front-paw-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-fine-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-broad-left",
+      "label": "左前肢 · 单条宽环",
+      "variant": "第 14 轮 · B3A 确认补边",
+      "slot": "torso",
+      "regions": [
+        "foreleg-left-lower",
+        "front-paw-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round15/parts/limb-broad-left-touchup.png",
+      "source": "studio-round14-foreleg.aseprite"
+    },
+    {
+      "id": "r12-limb-pair-left",
+      "label": "左前肢 · 双横环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-left-lower",
+        "front-paw-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-pair-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-angled-left",
+      "label": "左前肢 · 斜口横环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-left-lower",
+        "front-paw-left"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-angled-left.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-wedge-right",
+      "label": "右额 · 贴顶小楔",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-wedge-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-round-right",
+      "label": "右额 · 圆弧顶斑",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-round-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-brow-right",
+      "label": "右额 · 延到眉上",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-right-brow"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-brow-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-crown-sweep-right",
+      "label": "右额 · 斜扫额斑",
+      "variant": "第 12 轮通过",
+      "slot": "head",
+      "regions": [
+        "forehead-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/crown-sweep-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-fine-right",
+      "label": "右前肢 · 单条细环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-right-lower",
+        "front-paw-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-fine-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-broad-right",
+      "label": "右前肢 · 单条宽环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-right-lower",
+        "front-paw-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-broad-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-pair-right",
+      "label": "右前肢 · 双横环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-right-lower",
+        "front-paw-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-pair-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-limb-angled-right",
+      "label": "右前肢 · 斜口横环",
+      "variant": "第 12 轮通过",
+      "slot": "torso",
+      "regions": [
+        "foreleg-right-lower",
+        "front-paw-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/limb-angled-right.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-chest-tuft",
+      "label": "独立小胸斑",
+      "variant": "第 12 轮 · B1",
+      "slot": "torso",
+      "regions": [
+        "chest-center"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/chest-tuft.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r12-chest-taper",
+      "label": "下巴连细胸线",
+      "variant": "第 12 轮 · B2",
+      "slot": "torso",
+      "regions": [
+        "chin-neck",
+        "chest-neck",
+        "chest-center"
+      ],
+      "preview": "output/aseprite-coat-parts-round12/parts/chest-taper.png",
+      "source": "studio-round12.aseprite"
+    },
+    {
+      "id": "r13-chest-b3a",
+      "label": "圆弧宽胸",
+      "variant": "第 13 轮 · B3A",
+      "slot": "torso",
+      "regions": [
+        "chin-neck",
+        "chest-neck",
+        "chest-center"
+      ],
+      "preview": "output/aseprite-coat-parts-round13/parts/chest-b3a.png",
+      "source": "studio-round13-chest.aseprite"
+    },
+    {
+      "id": "r13-chest-b3b",
+      "label": "短圆宽胸",
+      "variant": "第 13 轮 · B3B",
+      "slot": "torso",
+      "regions": [
+        "chin-neck",
+        "chest-neck",
+        "chest-center"
+      ],
+      "preview": "output/aseprite-coat-parts-round13/parts/chest-b3b.png",
+      "source": "studio-round13-chest.aseprite"
+    },
+    {
+      "id": "r15-chest-b4e",
+      "label": "双肩连片白胸",
+      "variant": "第 15 轮 · B4E 点绘定稿",
+      "slot": "torso",
+      "regions": [
+        "chin-neck",
+        "chest-neck",
+        "chest-center",
+        "chest-left-shoulder-seam",
+        "chest-right-shoulder-seam",
+        "shoulder-left",
+        "shoulder-right"
+      ],
+      "preview": "output/aseprite-coat-parts-round15/parts/chest-b4e.png",
+      "source": "studio-round15-chest.aseprite"
+    }
+  ]
+}

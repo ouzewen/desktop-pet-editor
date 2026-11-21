@@ -1,8 +1,7 @@
 import { canChooseCatFaceBase, catIrisColors, catKeepsBreedPigment, catOptions, catPatternFurColors, catPresets, catRenderConfig, currentFurPatternColors, orangeCatOptions, readPetConfig, usesOrangeCatArt,
   type CatConfig, type CatIrisColor } from './cat';
-import { colorCatBreed } from './cat-breeds';
 import { calicoChestBounds } from './cat-body-pattern';
-import { catAssetOptions, frontTyping } from './pet-assets';
+import { catAssetOptions, catListening, frontTyping } from './pet-assets';
 import { prepareCatCustomization, prepareStructuredCatCustomization, saveCatInk, seedCatInkForEditor } from './cat-custom';
 import { projectCatInk, type CatInkDocument, type CatInkPart } from './cat-ink';
 import { Motion } from './motion';
@@ -778,8 +777,80 @@ export function checkIndependentPupils() {
   }
 }
 
+export function checkListeningDrag() {
+  const live = document.createElement('canvas');
+  const expected = document.createElement('canvas');
+  const liveContext = live.getContext('2d', { willReadFrequently: true })!;
+  const expectedContext = expected.getContext('2d', { willReadFrequently: true })!;
+  const pixels = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data;
+  for (const preset of [catPresets.preset_cat_orange, catPresets.preset_cat_calico]) {
+    const motion = new Motion(live, preset);
+    const start = Math.ceil(performance.now());
+    const at = (frame: number) => start + frame * catListening.frameDuration;
+    const verify = (frame: number, phase: string) => {
+      motion.tick(at(frame));
+      render(expected, preset, 'sit', 0, undefined, { listeningFrame: frame % catListening.frames });
+      const baseline = pixels(expectedContext);
+      if (!pixels(liveContext).every((channel, index) => channel === baseline[index])) {
+        throw Error(`${preset.name} interrupted its listening animation ${phase}`);
+      }
+    };
+    motion.setListening(true);
+    verify(0, 'before the click');
+    motion.beginDrag(at(3));
+    verify(3, 'on mouse down');
+    motion.drag(28, 16, at(5));
+    verify(8, 'during movement');
+    motion.release(at(9));
+    verify(9, 'on release');
+    verify(14, 'during the former drag rebound');
+    verify(29, 'after the next loop');
+  }
+}
+
+function checkHeadphoneColors() {
+  const preset: CatConfig = catPresets.preset_cat_orange;
+  const { headphoneColor, ...legacy } = preset;
+  const restored = readPetConfig(legacy) as CatConfig;
+  if (restored.headphoneColor !== headphoneColor) throw Error('Old cat saves lost the original headphone color');
+
+  const { canvas, ctx } = makeLayer();
+  const pixels = (config: CatConfig, listeningFrame?: number) => {
+    render(canvas, config, 'sit', 0, undefined, { listeningFrame });
+    return new Uint32Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
+  };
+  const sitting = pixels(restored);
+  const originalFrames = Array.from({ length: catListening.frames }, (_, frame) => pixels(restored, frame));
+  const originalPaint = new Set([0x395d87, 0x4b79aa, 0x719dcf, 0xa0c4e2, 0x71a0cf, 0xa6c9e6]);
+  const rgb = (rgba: number) => ((rgba & 255) << 16) | (rgba & 0xff00) | ((rgba >>> 16) & 255);
+  for (const color of Object.keys(catOptions.headphoneColor)) {
+    if (color === 'natural') continue;
+    const config = readPetConfig(JSON.parse(JSON.stringify({ ...restored, headphoneColor: color }))) as CatConfig;
+    if (config.headphoneColor !== color || !pixels(config).every((pixel, index) => pixel === sitting[index])) {
+      throw Error(`Headphone color ${color} did not round-trip independently of the sitting appearance`);
+    }
+    for (const [frame, original] of originalFrames.entries()) {
+      let changed = 0;
+      pixels(config, frame).forEach((pixel, index) => {
+        const previous = original[index]!;
+        if (pixel === previous) return;
+        if ((pixel >>> 24) !== (previous >>> 24) || !originalPaint.has(rgb(previous))) {
+          throw Error(`Headphone color ${color} affected pixels outside the headphone paint in frame ${frame}`);
+        }
+        changed++;
+      });
+      if (!changed) throw Error(`Missing headphone color ${color} in frame ${frame}`);
+    }
+  }
+  if (!pixels(restored, 0).every((pixel, index) => pixel === originalFrames[0]![index])) {
+    throw Error('Switching back to the original headphone color did not restore its pixels');
+  }
+}
+
 // Exercise the bundled renderer in the same WKWebView used by the floating pet.
 export function checkCatActions() {
+  checkHeadphoneColors();
+  checkListeningDrag();
   checkEarColorOptions();
   checkNoseOptions();
   checkMouthOptions();
@@ -885,7 +956,7 @@ export function checkCatActions() {
   for (const preset of Object.values(catPresets)) {
     const source = readPetConfig(preset) as CatConfig;
     assert(source.faceBase === 'native' && source.bodyBase === 'native'
-      && source.cheekPattern === 'native' && source.tailPattern === 'native'
+      && source.cheekPattern === preset.bodyPattern && source.tailPattern === preset.bodyPattern
       && same(snapshot('sit', 0, preset), snapshot('sit', 0, source)), `${preset.name} has incorrect defaults for independent markings`);
     for (const bodyPattern of ['classic', 'plain'] as const) {
       const oldLinked = { ...preset, bodyPattern };
@@ -1101,7 +1172,7 @@ export function checkCatActions() {
   for (const preset of Object.values(catPresets)) {
     for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast'], ['typing', 'frenzy']] as const) {
       const pose = { typingMode, typingEffects: true } as const;
-      if (!colorCatBreed(preset.palette)) {
+      if (catRenderConfig(preset).coat === 'native') {
         assert(same(snapshot(action, 8, preset, { ...pose, outlineVersion: 'original' }), snapshot(action, 8, preset, pose)),
           `${preset.name} changed its baked coat when enabling adaptive outlines`);
       }
@@ -1192,8 +1263,10 @@ export function checkCatActions() {
         && hasMarkingColor(painted, marking, 249, 197, 276, 245),
       `${preset.name}/${bodyPattern} did not use its marking color on the forehead, cheek, body and tail`);
     }
-    assert(same(idle, snapshot('sit', 0, preset, { markingLayout: 'legacy' })),
-      `Separating forehead markings changed the default ${preset.name}`);
+    if (preset.pattern === 'P00' && preset.bodyPattern === 'native') {
+      assert(same(idle, snapshot('sit', 0, preset, { markingLayout: 'legacy' })),
+        `Separating forehead markings changed the default ${preset.name}`);
+    }
     const eyeCanvas = document.createElement('canvas');
     eyeCanvas.width = eyeCanvas.height = SIZE;
     const eyeContext = eyeCanvas.getContext('2d')!;
@@ -1204,7 +1277,14 @@ export function checkCatActions() {
     assert(migratedCoat.frame === 'CAT' && migratedCoat.coat === 'native' && migratedCoat.bodyPattern === 'native',
       'Legacy cat lost its original coloring or pattern');
     for (const [action, typingMode] of [['sit', 'gentle'], ['typing', 'gentle'], ['typing', 'fast']] as const) {
-      const variants = coats.map(coat => snapshot(action, 0, { ...preset, coat }, { typingMode }));
+      const resolvedCoats = new Set<string>();
+      const variants = coats.flatMap(coat => {
+        const variant = { ...preset, coat };
+        const resolved = catRenderConfig(variant).coat;
+        if (resolvedCoats.has(resolved)) return [];
+        resolvedCoats.add(resolved);
+        return [snapshot(action, 0, variant, { typingMode })];
+      });
       const stock = variants[0]!;
       assert(distinct(variants), `Coat combinations matched in ${action}/${typingMode}/${preset.name}`);
       for (const colored of variants) {

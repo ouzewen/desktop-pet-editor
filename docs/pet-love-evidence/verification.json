@@ -1,0 +1,215 @@
+{
+  "buildBase": "7db9b2a",
+  "renderer": "Chromium with current desktop 80x80 sources",
+  "frameCount": 17,
+  "frameDurationMs": 80,
+  "durationMs": 1360,
+  "live": {
+    "visited": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      null
+    ],
+    "elapsedMs": 1366.6,
+    "idleMatch": true
+  },
+  "boundaryInputs": [
+    "-1",
+    "0",
+    "79",
+    "80",
+    "1359",
+    "1360",
+    "1361",
+    "Infinity",
+    "NaN"
+  ],
+  "boundaryFrames": [
+    null,
+    0,
+    0,
+    1,
+    16,
+    null,
+    null,
+    null,
+    null
+  ],
+  "heartBoundsWithinNativeAtlasCell": [
+    null,
+    null,
+    null,
+    null,
+    [
+      9,
+      8,
+      16,
+      14
+    ],
+    [
+      9,
+      7,
+      16,
+      13
+    ],
+    [
+      9,
+      6,
+      16,
+      12
+    ],
+    [
+      9,
+      5,
+      23,
+      14
+    ],
+    [
+      9,
+      4,
+      24,
+      13
+    ],
+    [
+      10,
+      3,
+      24,
+      12
+    ],
+    [
+      10,
+      2,
+      25,
+      11
+    ],
+    [
+      11,
+      2,
+      25,
+      10
+    ],
+    [
+      11,
+      2,
+      26,
+      9
+    ],
+    [
+      21,
+      3,
+      26,
+      8
+    ],
+    [
+      22,
+      3,
+      27,
+      8
+    ],
+    null,
+    null
+  ],
+  "sourceAndAssetSha256": {
+    "art/cat-pixel80/pet-love.aseprite": "e07acffa2fa412a519cea692214ab4b2a1f4b1478d227fb4e65aa0d7b258bed2",
+    "desktop/assets-pixel80/cat/hd/pet-love/hearts.png": "1e65eed4a1f3dd67f0e54a5dfee76fd01321580a50e02e64acc480d4e00b8778",
+    "desktop/assets-pixel80/cat/hd/pet-love/eyes.png": "72c16c837aede0bf6fc64cae30307c4bb73aad2126eb87a131eae3f26c796376"
+  },
+  "fixedOrangeBodyLayerRgbaDiff": 0,
+  "variants": {
+    "orange": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "black": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "calico": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "siamese": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "folded": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "round": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "droopy": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    },
+    "curled": {
+      "framesCompared": 18,
+      "forepawDiff80": 0,
+      "idleRgbaMatchesAt": [
+        0,
+        15,
+        16,
+        17
+      ]
+    }
+  }
+}

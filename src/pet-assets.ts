@@ -2,6 +2,148 @@
 // Paths in files are relative to public/assets, without the PNG extension.
 export const PET_SIZE = 160;
 export const CAT_SIZE = 320;
+
+export const catPhotoPartPath = 'cat/hd/photo-coat-parts/';
+
+// Side-specific regions follow the preview image, consistent with fur-patch editing.
+export const catPhotoPartTaxonomy = [
+  {
+    id: 'head', label: '头部', categories: [
+      { id: 'forehead', label: '额头', regions: [
+        { id: 'forehead-left', label: '左额' }, { id: 'forehead-center', label: '额心' }, { id: 'forehead-right', label: '右额' },
+        { id: 'forehead-left-brow', label: '左额 · 眉骨', parent: 'forehead-left' },
+        { id: 'forehead-right-brow', label: '右额 · 眉骨', parent: 'forehead-right' },
+      ] },
+      { id: 'eye-surround', label: '眼周', regions: [
+        { id: 'eye-surround-left', label: '左眼周' }, { id: 'eye-surround-right', label: '右眼周' },
+        { id: 'eye-left-upper', label: '左眼周 · 上缘', parent: 'eye-surround-left' },
+        { id: 'eye-left-outer', label: '左眼周 · 外眼角', parent: 'eye-surround-left' },
+        { id: 'eye-left-lower', label: '左眼周 · 下缘', parent: 'eye-surround-left' },
+        { id: 'eye-right-upper', label: '右眼周 · 上缘', parent: 'eye-surround-right' },
+        { id: 'eye-right-outer', label: '右眼周 · 外眼角', parent: 'eye-surround-right' },
+        { id: 'eye-right-lower', label: '右眼周 · 下缘', parent: 'eye-surround-right' },
+      ] },
+      { id: 'cheek', label: '脸颊', regions: [
+        { id: 'cheek-left', label: '左脸颊' }, { id: 'cheek-right', label: '右脸颊' },
+        { id: 'cheek-left-upper', label: '左脸颊 · 上颊', parent: 'cheek-left' },
+        { id: 'cheek-left-lower', label: '左脸颊 · 下颊', parent: 'cheek-left' },
+        { id: 'cheek-right-upper', label: '右脸颊 · 上颊', parent: 'cheek-right' },
+        { id: 'cheek-right-lower', label: '右脸颊 · 下颊', parent: 'cheek-right' },
+      ] },
+      { id: 'face-center', label: '面部中心', regions: [
+        { id: 'nose-bridge', label: '鼻梁' }, { id: 'muzzle', label: '口鼻' }, { id: 'chin', label: '下巴' },
+        { id: 'chin-neck', label: '下巴 · 接颈处', parent: 'chin' },
+      ] },
+      { id: 'ear', label: '耳朵', regions: [
+        { id: 'ear-left', label: '左耳' }, { id: 'ear-right', label: '右耳' },
+        { id: 'ear-left-tip', label: '左耳 · 耳尖', parent: 'ear-left' },
+        { id: 'ear-left-crown', label: '左耳 · 靠头顶', parent: 'ear-left' },
+        { id: 'ear-left-perimeter', label: '左耳 · 靠外轮廓', parent: 'ear-left' },
+        { id: 'ear-left-outer', label: '左耳 · 外耳', parent: 'ear-left' },
+        { id: 'ear-left-inner', label: '左耳 · 内耳', parent: 'ear-left' },
+        { id: 'ear-left-root', label: '左耳 · 耳根', parent: 'ear-left' },
+        { id: 'ear-right-tip', label: '右耳 · 耳尖', parent: 'ear-right' },
+        { id: 'ear-right-crown', label: '右耳 · 靠头顶', parent: 'ear-right' },
+        { id: 'ear-right-perimeter', label: '右耳 · 靠外轮廓', parent: 'ear-right' },
+        { id: 'ear-right-outer', label: '右耳 · 外耳', parent: 'ear-right' },
+        { id: 'ear-right-inner', label: '右耳 · 内耳', parent: 'ear-right' },
+        { id: 'ear-right-root', label: '右耳 · 耳根', parent: 'ear-right' },
+      ] },
+    ],
+  },
+  {
+    id: 'body', label: '身体', categories: [
+      { id: 'chest', label: '胸口', regions: [
+        { id: 'chest-center', label: '胸口中央' },
+        { id: 'chest-neck', label: '胸口 · 上缘接颈', parent: 'chest-center' },
+        { id: 'chest-lower', label: '胸口 · 下缘收口', parent: 'chest-center' },
+        { id: 'chest-left-shoulder-seam', label: '胸口 · 左肩交界', parent: 'chest-center' },
+        { id: 'chest-right-shoulder-seam', label: '胸口 · 右肩交界', parent: 'chest-center' },
+      ] },
+      { id: 'shoulder', label: '肩部', regions: [
+        { id: 'shoulder-left', label: '左肩' }, { id: 'shoulder-right', label: '右肩' },
+      ] },
+      { id: 'trunk', label: '躯干', regions: [
+        { id: 'back', label: '背部' }, { id: 'flank-left', label: '左侧腰' }, { id: 'flank-right', label: '右侧腰' },
+        { id: 'hindquarters', label: '后躯' },
+      ] },
+      { id: 'foreleg', label: '前肢与前爪', regions: [
+        { id: 'foreleg-left', label: '左前肢' }, { id: 'foreleg-right', label: '右前肢' },
+        { id: 'front-paw-left', label: '左前爪' }, { id: 'front-paw-right', label: '右前爪' },
+        { id: 'foreleg-left-upper', label: '左前肢 · 上段', parent: 'foreleg-left' },
+        { id: 'foreleg-left-lower', label: '左前肢 · 下段', parent: 'foreleg-left' },
+        { id: 'foreleg-right-upper', label: '右前肢 · 上段', parent: 'foreleg-right' },
+        { id: 'foreleg-right-lower', label: '右前肢 · 下段', parent: 'foreleg-right' },
+        { id: 'front-toes-left', label: '左前爪 · 趾尖', parent: 'front-paw-left' },
+        { id: 'front-toes-right', label: '右前爪 · 趾尖', parent: 'front-paw-right' },
+      ] },
+      { id: 'tail', label: '尾巴', regions: [
+        { id: 'tail-base', label: '尾根' }, { id: 'tail-middle', label: '尾中段' }, { id: 'tail-tip', label: '尾尖' },
+      ] },
+    ],
+  },
+  { id: 'overall', label: '整体底毛', categories: [{ id: 'base-coat', label: '底色与明暗', regions: [
+    { id: 'base-coat-head-body', label: '全身底毛' },
+  ] }] },
+] as const;
+
+type CatPhotoRegionId = typeof catPhotoPartTaxonomy[number]['categories'][number]['regions'][number]['id'];
+
+export const catPhotoEarSides = ['left', 'right'] as const;
+export const catPhotoEarPlacements = ['crown', 'perimeter'] as const;
+export const catPhotoEarCoverages = ['tip', 'middle', 'root'] as const;
+export type CatPhotoEarSide = typeof catPhotoEarSides[number];
+type CatPhotoEarPlacement = typeof catPhotoEarPlacements[number];
+type CatPhotoEarCoverage = typeof catPhotoEarCoverages[number];
+type CatPhotoEarPartId = `ear-${CatPhotoEarSide}-${CatPhotoEarPlacement}-${CatPhotoEarCoverage}`;
+type CatPhotoEarPart = {
+  regions: readonly [`ear-${CatPhotoEarSide}-${CatPhotoEarPlacement}`];
+  slot: `ear-${CatPhotoEarSide}`; palette: 'any'; pigment: 'recolorable';
+  coverage: CatPhotoEarCoverage; side: CatPhotoEarSide; placement: CatPhotoEarPlacement;
+  source: 'ear-markings-round11.aseprite'; format: 'png'; layer: CatPhotoEarPartId;
+};
+const catPhotoEarParts = Object.fromEntries(catPhotoEarSides.flatMap(side =>
+  catPhotoEarPlacements.flatMap(placement => catPhotoEarCoverages.map(coverage => {
+    const id = `ear-${side}-${placement}-${coverage}` as const;
+    return [id, {
+      regions: [`ear-${side}-${placement}`], slot: `ear-${side}`, palette: 'any', pigment: 'recolorable',
+      coverage, side, placement, source: 'ear-markings-round11.aseprite', format: 'png', layer: id,
+    }] as const satisfies readonly [CatPhotoEarPartId, CatPhotoEarPart];
+  })))) as Record<CatPhotoEarPartId, CatPhotoEarPart>;
+
+export const catPhotoParts = {
+  ...catPhotoEarParts,
+  'asymmetric-dark-crown': {
+    regions: ['forehead-left', 'forehead-right', 'ear-right-outer', 'ear-right-root'],
+    slot: 'head', palette: 'CC02', coat: 'ivory', pigment: 'black', coverage: 'upper', side: 'right-heavy',
+    source: 'push-b3r.aseprite', format: 'png', layer: 'crown',
+  },
+  'ink-black': {
+    regions: ['base-coat-head-body'],
+    slot: 'base', palette: 'CC02', pigment: 'black', coverage: 'whole', side: 'center',
+    source: 'round-02.aseprite', layer: 'shappo-3', format: 'palette',
+  },
+  'chin-small': {
+    regions: ['chin'],
+    slot: 'head', palette: 'CC02', pigment: 'white', coverage: 'small', side: 'center',
+    source: 'white-marks.aseprite', format: 'png', layer: 'chin-small',
+  },
+  'chest-small': {
+    regions: ['chest-center'],
+    slot: 'torso', palette: 'CC02', pigment: 'white', coverage: 'small', side: 'center',
+    source: 'white-marks.aseprite', format: 'png', layer: 'chest-small',
+  },
+  'calico-wide-chest': {
+    regions: ['chest-center'],
+    slot: 'torso', palette: 'CC03', pigment: 'white', coverage: 'large', side: 'center',
+    source: 'round-03.aseprite', format: 'png', layer: 'chest-3',
+  },
+} as const satisfies Record<string, {
+  regions: readonly [CatPhotoRegionId, ...CatPhotoRegionId[]];
+  slot: 'head' | 'torso' | 'base' | `ear-${CatPhotoEarSide}`; palette: string; coat?: string;
+  pigment: string; coverage: string; side: string;
+  source: string; format: 'png' | 'palette'; layer: string;
+}>;
 export const catWalkFrames = 4;
 
 const earStyles = {
@@ -85,6 +227,12 @@ export const mouthSkinColumns = 4;
 export const legacyNoseOutlinePath = facePartsPath + 'legacy_nose_outline';
 export const bodyPatternPath = 'cat/hd/body-patterns/';
 export const headPatternPath = 'cat/hd/head-patterns/';
+export const calicoCrownPath = 'cat/hd/calico-crown/';
+export const calicoFaceFinishPath = calicoCrownPath + 'eye-mask-orange-left-finish';
+export const calicoBodyOutlinePath = 'cat/hd/breeds/CC03/body_outline';
+export const honeyGoldPath = 'cat/hd/breeds/CC11/';
+const honeyGoldParts = ['crown', 'cheeks', 'body', 'tail'] as const;
+export const calicoCrownLayouts = ['eye-streak', 'eye-mask', 'high-cap'] as const;
 export const earMaskPath = 'cat/hd/ear-masks/';
 export const tailPath = 'cat/hd/tails/';
 export const initialTailPath = tailPath + 'initial/';
@@ -98,6 +246,10 @@ export const catListening = {
     closed_eyes: { x: 88, y: 97, width: 126, height: 31 },
     notes: { x: 10, y: 37, width: 289, height: 84 },
   },
+} as const;
+export const catPetLove = {
+  path: 'cat/hd/pet-love/', frames: 30, columns: 6, frameDuration: 48,
+  hearts: { x: 144, y: 0, width: 140, height: 92 },
 } as const;
 export const catShredder = {
   path: 'cat/hd/shredder/', columns: 6,
@@ -345,6 +497,25 @@ export const assetGroups: readonly AssetGroup[] = [
   ], cat),
   scriptGroup('cat.ear-masks', 'current', 'art/cat-shared/front-ear-masks.aseprite', 'export-cat-ear-masks',
     earMaskPath, pngs(withPrefix(earMaskPath, alternativeEars))),
+  group('cat.breed.CC11', 'current', pngs(withPrefix(honeyGoldPath, honeyGoldParts)),
+    honeyGoldParts.map(layer => ({
+      source: 'art/cat-breeds/golden-shaded-fur.aseprite', layer, output: honeyGoldPath + layer,
+    })), cat),
+  ...Object.entries(catPhotoParts).map(([id, part]) => {
+    const source = 'art/cat-shared/photo-coat-parts/' + part.source;
+    const groupId = 'cat.photo-part.' + id;
+    return part.format === 'png' ? layerGroup(groupId, 'current', source, part.layer, catPhotoPartPath + id)
+      : group(groupId, 'current', [], [], { sources: [source], note: 'Reference palette applied per component.' });
+  }),
+  layerGroup('cat.calico-face-finish', 'current', 'art/cat-shared/photo-coat-parts/calico-h3r3.aseprite',
+    'facial-fur', calicoFaceFinishPath),
+  group('cat.calico-body-outline', 'current', pngs([calicoBodyOutlinePath]), [], {
+    consumer: 'cat', sources: ['art/cat-pixel80/cat.calico-body-outline.aseprite'],
+    note: 'Export with scripts/stage-cat-pixel80.mjs cat.calico-body-outline.',
+  }),
+  scriptGroup('cat.calico-crown', 'current', 'art/cat-shared/calico-crown.aseprite', 'export-calico-crown',
+    calicoCrownPath, pngs(withPrefix(calicoCrownPath, ['head', 'ears', ...calicoCrownLayouts.flatMap(layout =>
+      ['orange-left', 'orange-right'].flatMap(side => ['head', 'ears'].map(part => `${layout}-${side}-${part}`)))]))),
   scriptGroup('cat.face-fur', 'current', 'art/cat-shared/face-fur-patterns.aseprite', 'export-cat-head-patterns',
     headPatternPath, pngs(withPrefix(headPatternPath, ['forehead_region', 'face_region', 'face_patterns']))),
   ...[...foreheadParts, ...Object.keys(retiredForeheadDesigns)].map(id =>
@@ -435,6 +606,14 @@ export const assetGroups: readonly AssetGroup[] = [
       duration: catListening.frameDuration,
       ...Object.fromEntries(Object.entries(catListening.regions).map(([part, region]) => [part, Object.values(region).join(',')])),
     }),
+  scriptGroup('cat.pet-love', 'current', 'art/cat-pixel80/pet-love.aseprite',
+    'export-cat-pet-love', catPetLove.path, [
+      ...pngs([catPetLove.path + 'eyes']),
+      { key: catPetLove.path + 'hearts',
+        width: catPetLove.hearts.width * catPetLove.columns,
+        height: catPetLove.hearts.height * Math.ceil(catPetLove.frames / catPetLove.columns) },
+    ], { columns: catPetLove.columns, frames: catPetLove.frames, duration: catPetLove.frameDuration,
+      hearts: Object.values(catPetLove.hearts).join(',') }),
   ...Object.entries(catFileActions).map(([action, { path, columns, durations, closedFrames, regions }]) =>
     scriptGroup('cat.' + action, 'current', `art/cat-shared/${action}.aseprite`,
       'export-cat-file-action', path, Object.entries(regions).map(([part, { width, height }]) => ({

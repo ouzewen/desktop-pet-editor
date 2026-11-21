@@ -1,31 +1,36 @@
 /// <reference types="vite/client" />
 
-import { blackCatCoat, canChooseCatFaceBase, catFeatureColors, catIrisColors, catKeepsBreedPigment, catPupilStyle, catRenderConfig, currentFurPatternColors, hasShortCalicoChest,
-  type CatConfig, type CatPupilStyle, type CatRenderConfig, type FurPatternColors, type PetConfig } from './cat';
+import { catPhotoPartFor } from './cat-photo-parts';
+import type { CatPhotoEarPigment } from './cat-photo-request';
+
+import { blackCatCoat, canChooseCatFaceBase, catEarOnSide, catFeatureColors, catHeadphoneColors, catIrisColors, catKeepsBreedPigment, catPupilStyle, catRenderConfig, supportsCalicoFaceFinish, currentFurPatternColors, hasHoneyGoldFur, hasIndependentFur, hasShortCalicoChest, usesWhiteCatCoat,
+  type CatConfig, type CatEar, type CatPupilStyle, type CatRenderConfig, type FurPatternColors, type PetConfig } from './cat';
+import { connectedNeckFur, forelegFurPatches, furPatchColorAt, furPatchesFor, paintFurPatches, sittingForelegAt, sittingPawAt, type FurPatch, type FurPatchPart } from './cat-fur-patches';
 import type { CatCustomization, CatPixelEdits } from './cat-custom';
-import { applyCatInk, type CatInkBounds, type CatInkGeometry } from './cat-ink';
+import { applyCatInk, type CatInkBounds, type CatInkGeometry, type CatInkSurface } from './cat-ink';
 import type { CatFileAction, CatFileActionPose } from './cat-file-action';
 import { warpListeningPixels } from './cat-listening';
+import { catPetLovePose, warpCatPetLoveHead, warpCatPetLoveShoulders } from './cat-pet-love';
 import { splitJellySprite, warpJellySprite, type JellyPose } from './cat-jelly';
-import { paintBreedEars, paintInnerEarColor } from './cat-ears';
-import { recolorCatCoat, type CatCoatSurface } from './cat-coat';
-import { isLaptopFur, paintBodyPattern, usesBodyPattern } from './cat-body-pattern';
+import { isEarLiningPixel, paintBreedEars, paintInnerEarColor } from './cat-ears';
+import { recolorCatCoat, recolorPhotoInkBlack, type CatCoatSurface } from './cat-coat';
+import { isLaptopFur, paintBodyPattern, usesBodyPattern, usesNativeBodyStripes } from './cat-body-pattern';
 import { paintCatTail } from './cat-tail';
-import { clearForeheadFur, paintForeheadFur, paintHeadFur, paintSolidFace } from './cat-head-pattern';
+import { chestFringeSamples, clearForeheadFur, paintForeheadFur, paintGoldenTipping, paintHeadFur, paintHoneyGoldFur, paintSolidFace } from './cat-head-pattern';
 import { catTypingFrameCountFor, currentTypingAnimation, frenzyRedFrame, frenzySteamLoopStart, isFrontTyping, lowTypingArms, usesFallingTyping, type TypingAnimation } from './cat-typing';
 import { createTypingArmPainter, recolorFrontPaws, thickenPeekPawOutline } from './cat-typing-paint';
-import { clearForeheadOutlineSpots, recolorCatOutline, type OutlineVersion } from './cat-outline';
+import { clearForeheadOutlineSpots, isOutline, pixel80CatOutline, recolorCatOutline, type OutlineVersion } from './cat-outline';
 export type { OutlineVersion } from './cat-outline';
 import { irisColors, palettes, type Config } from './model';
 
 import {
-  assetFiles, assetsFor, atlasNoseTips, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
-  bodyPatternPath, breedArt, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catFileActions, catFrontEars, catListening,
+  assetFiles, assetsFor, atlasNoseTips, catPhotoEarSides, catPhotoPartPath, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
+  bodyPatternPath, calicoBodyOutlinePath, calicoCrownPath, calicoFaceFinishPath, breedArt, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catFileActions, catFrontEars, catListening, catPetLove, honeyGoldPath,
   catFurSlots, catMarkings, catMouthPath, catNosePath, catWalkBodies, catWalkFrames, earMaskPath, facePartsPath, faceTiles,
   foreheadParts, frontTyping, frontTypingEffects, frontTypingEffectsPath, headPatternPath, legacyMouthIds, legacyNoseOutlinePath, mouthSkinColumns, mouthSkinPath, mouthStems,
   orangePath, sharedMouthStyles, sharedNoseStyles,
   initialTailPath, referenceTailPath, sharedBreedParts, sharedTailStyles, tailPath, typingAtlases, typingEffectPath, typingGeometryPart, typingInkPatches, typingReferencePath,
-  walkEyeGlints, type LegacyFrontBreed,
+  walkEyeGlints, type CatPhotoEarSide, type LegacyFrontBreed,
 } from './pet-assets';
 
 export const SIZE = PET_SIZE;
@@ -61,6 +66,7 @@ export type CatPose = {
   stretch?: number;
   jelly?: JellyPose;
   listeningFrame?: number;
+  petLoveFrame?: number;
   fileAction?: CatFileActionPose;
   edge?: CatEdge;
   custom?: CatCustomization;
@@ -76,11 +82,14 @@ export function frameCount(config: PetConfig, action: Action, animation: TypingA
 
 type FurSlot = typeof furSlots[number];
 
+const pixel80Keys = new Set<string>(import.meta.env.VITE_PET_PIXEL80_KEYS);
+
 function loadLayer(layer: string) {
   const asset = assetFiles.get(layer);
   if (!asset) throw Error(`未登记图层 · ${layer}`);
   const image = new Image();
-  image.src = `${import.meta.env.BASE_URL}assets/${layer}.png`;
+  const directory = pixel80Keys.has(layer) ? 'assets-pixel80' : 'assets';
+  image.src = `${import.meta.env.BASE_URL}${directory}/${layer}.png`;
   return image.decode().then(() => {
     if (image.naturalWidth !== asset.width || image.naturalHeight !== asset.height) throw Error(`图层尺寸错误 · ${layer}`);
     return [layer, image] as const;
@@ -117,6 +126,23 @@ function imageFor(layer: string) {
   if (!image) throw Error(`缺少图层 · ${layer}`);
   return image;
 }
+
+const authoredCoatLayers = new WeakMap<CatLayer, { part: string; canvas: HTMLCanvasElement }>();
+
+function withAuthoredCoatPart(source: CatLayer, part: string | undefined): CatLayer {
+  if (!part) return source;
+  const cached = authoredCoatLayers.get(source);
+  if (cached?.part === part) return cached.canvas;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.drawImage(source, 0, 0);
+  ctx.drawImage(imageFor(part), 0, 0);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(source, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  authoredCoatLayers.set(source, { part, canvas });
+  return canvas;
+}
+
 
 export function makeLayer(width = SIZE, height = width) {
   const canvas = document.createElement('canvas');
@@ -340,9 +366,11 @@ function coloredAlternateInnerPupil(path: string, color: string) {
 }
 
 const rimlessOpenEyes = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+const unlinedOpenEyes = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
 
-function cleanOpenEye(image: HTMLImageElement, aperture: Uint8ClampedArray) {
-  const cached = rimlessOpenEyes.get(image);
+function cleanOpenEye(image: HTMLImageElement, aperture: Uint8ClampedArray, unlined: boolean) {
+  const cache = unlined ? unlinedOpenEyes : rimlessOpenEyes;
+  const cached = cache.get(image);
   if (cached) return cached;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   const pixels = layerPixels(image);
@@ -356,7 +384,9 @@ function cleanOpenEye(image: HTMLImageElement, aperture: Uint8ClampedArray) {
       // its white rim. Retain the sclera and everything between its edges.
       for (let x = start; x < start + half; x++) {
         const i = (row + x) * 4;
-        const white = data[i + 3] && data[i]! >= 205 && data[i + 1]! >= 200 && data[i + 2]! >= 196;
+        const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+        const white = data[i + 3] && r >= 205 && g >= 200 && b >= 196
+          && (!unlined || (r - g <= 14 && r - b <= 24));
         if (white || aperture[i + 3]) {
           left = Math.min(left, x);
           right = x;
@@ -364,23 +394,38 @@ function cleanOpenEye(image: HTMLImageElement, aperture: Uint8ClampedArray) {
       }
       data.fill(0, (row + start) * 4, (row + left) * 4);
       data.fill(0, (row + right + 1) * 4, (row + start + half) * 4);
+      if (unlined) {
+        // The inherited black outline sits outside the iris aperture.
+        // Restore the surrounding white while keeping the eye color and pupil.
+        for (let x = left; x <= right; x++) {
+          const i = (row + x) * 4;
+          if (data[i + 3] && !aperture[i + 3]) data.set([255, 253, 250], i);
+        }
+      }
     }
   }
   ctx.putImageData(pixels, 0, 0);
-  rimlessOpenEyes.set(image, canvas);
+  cache.set(image, canvas);
   return canvas;
 }
 
-function tintCatEye(sourcePath: string, irisMask: string, color?: string, cleanRimAperture?: string) {
+function tintCatEye(sourcePath: string, irisMask: string, color?: string, cleanRimAperture?: string, unlined = false, honeyGoldRim = false) {
   const image = imageFor(sourcePath);
-  const source = cleanRimAperture ? cleanOpenEye(image, readBodyPixels(cleanRimAperture)) : image;
-  if (!color) return source;
-  const key = `${sourcePath}/${irisMask}/${color}/${cleanRimAperture ?? ''}`;
+  const source = cleanRimAperture ? cleanOpenEye(image, readBodyPixels(cleanRimAperture), unlined) : image;
+  if (!color && !honeyGoldRim) return source;
+  const key = `${sourcePath}/${irisMask}/${color}/${cleanRimAperture ?? ''}/${unlined}/${honeyGoldRim}`;
   const cached = tinted.get(key);
   if (cached) return cached;
   const result = makeLayer(image.naturalWidth);
   result.ctx.drawImage(source, 0, 0);
-  result.ctx.drawImage(coloredCatIris(irisMask, color), 0, 0);
+  if (honeyGoldRim) {
+    const pixels = layerPixels(result.canvas);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      if (pixels.data[i + 3] && pixels.data[i + 2]! >= 210) pixels.data.set([246, 216, 169], i);
+    }
+    result.ctx.putImageData(pixels, 0, 0);
+  }
+  if (color) result.ctx.drawImage(coloredCatIris(irisMask, color), 0, 0);
   tinted.set(key, result.canvas);
   return result.canvas;
 }
@@ -401,7 +446,9 @@ const naturalFrontIris = {
   CC05: '#C1831A', CC06: '#326337', CC07: '#9B973C', CC08: '#478CC9',
 } as const satisfies Record<FrontBreed, string>;
 
-function frontCatEye(palette: FrontBreed, eye: CatRenderConfig['eye'], { eyeColor, innerPupil }: CatPupilStyle, cleanRim = false) {
+function frontCatEye(palette: FrontBreed, eye: CatRenderConfig['eye'], { eyeColor, innerPupil }: CatPupilStyle,
+  cleanRim: boolean, unlined: boolean, honeyGoldRim = false,
+) {
   const template = eye === 'Y01' ? palette : sharedBreedParts[palette];
   const path = breedPath(template);
   const alternate = eye === 'Y01' ? '' : `eye_${eye}_`;
@@ -412,7 +459,9 @@ function frontCatEye(palette: FrontBreed, eye: CatRenderConfig['eye'], { eyeColo
   const defaultColor = palette === 'CC03' ? 'green' : palette === 'CC04' ? 'blue' : 'natural';
   const color = eyeColor === 'natural' || eyeColor === defaultColor
     ? (single || template !== palette ? naturalFrontIris[palette] : undefined) : catIrisColors[eyeColor];
-  return tintCatEye(source, irisMask, color, eye === 'Y01' && cleanRim ? path + 'aperture' : undefined);
+  const removeOutline = unlined && (eye === 'Y01' || eye === 'Y03' || eye === 'Y04' || eye === 'Y05');
+  const cleanAperture = removeOutline || (eye === 'Y01' && cleanRim) ? path + alternate + 'aperture' : undefined;
+  return tintCatEye(source, irisMask, color, cleanAperture, removeOutline, honeyGoldRim && eye === 'Y01' && !removeOutline);
 }
 
 function orangeCatIris({ eyeColor, innerPupil }: CatPupilStyle, pupilPath: string) {
@@ -465,12 +514,21 @@ function typingLayer(path: string, layout: TypingLayout | undefined) {
   return layer;
 }
 
+function inkBlackProfile(config: CatRenderConfig) {
+  return catPhotoPartFor(config.photoCoatParts, 'base', config.palette, config.coat) === 'ink-black';
+}
+
 function catPatternCacheKey(config: CatRenderConfig) {
-  return `${config.palette}/${config.coat}/${config.bodyBase}/${config.bodyPattern}/${config.furPatternColors ?? currentFurPatternColors}/${hasShortCalicoChest(config)}`;
+  return `${config.palette}/${config.coat}/${config.bodyBase}/${config.bodyPattern}/${config.forelegPatternSource ?? 'native'}/${config.furPatternColors ?? currentFurPatternColors}/${hasShortCalicoChest(config)}/${inkBlackProfile(config)}`;
+}
+
+function hasCleanFaceColors(config: CatRenderConfig) {
+  const version = config.furPatternColors ?? currentFurPatternColors;
+  return version === 'clean-face' || version === 'connected-chest' || hasIndependentFur(version);
 }
 
 function facePatternConfig(config: CatRenderConfig): CatRenderConfig {
-  const faceBase = (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors
+  const faceBase = hasCleanFaceColors(config)
     && config.faceBase === 'solid' && !canChooseCatFaceBase(config.palette) ? 'native' : config.faceBase;
   return { ...config, bodyPattern: config.cheekPattern ?? config.bodyPattern, bodyBase: undefined, faceBase };
 }
@@ -480,7 +538,7 @@ function facePatternCacheKey(config: CatRenderConfig) {
 }
 
 function cleanSolidFaceEyes(config: CatRenderConfig) {
-  return config.faceBase === 'solid' && (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors;
+  return config.faceBase === 'solid' && hasCleanFaceColors(config);
 }
 
 export function catTypingLaptop(appearance: CatConfig | CatRenderConfig, layout?: TypingLayout, version: LaptopVersion = 'clean',
@@ -523,9 +581,11 @@ function bodyWithTypingConnector(body: CatLayer, config: CatRenderConfig, layout
 const frontCoatLayers = new WeakMap<CatLayer, { key: string; canvas: HTMLCanvasElement }>();
 let orangeEyePixels: Uint8ClampedArray | undefined;
 
-function frontCoatLayer(source: CatLayer, { palette, coat }: CatRenderConfig, surface: CatCoatSurface = 'fur') {
-  if (coat === 'native') return source;
-  const key = `${palette}/${coat}/${surface}`;
+function frontCoatLayer(source: CatLayer, config: CatRenderConfig, surface: CatCoatSurface = 'fur') {
+  const { palette, coat } = config;
+  const inkBlack = surface === 'fur' && inkBlackProfile(config);
+  if (coat === 'native' && !inkBlack) return source;
+  const key = `${palette}/${coat}/${surface}/${inkBlack}`;
   const cached = frontCoatLayers.get(source);
   if (cached?.key === key) return cached.canvas;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
@@ -536,13 +596,16 @@ function frontCoatLayer(source: CatLayer, { palette, coat }: CatRenderConfig, su
     ctx.drawImage(imageFor(orangePath + 'iris'), 0, 0);
     orangeEyePixels = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data;
   }
-  recolorCatCoat(pixels, palette, coat, surface, orangeEyePixels);
+  if (inkBlack) recolorPhotoInkBlack(pixels);
+  else if (coat !== 'native') recolorCatCoat(pixels, palette, coat, surface, orangeEyePixels);
   ctx.putImageData(pixels, 0, 0);
   frontCoatLayers.set(source, { key, canvas });
   return canvas;
 }
 
-const outlinedLayers = new WeakMap<CatLayer, { coat: string; guide: CatLayer; head: boolean; canvas: HTMLCanvasElement }>();
+const outlinedLayers = new WeakMap<CatLayer, {
+  coat: string; guide: CatLayer; charcoal?: CatLayer; additionalInk?: CatLayer; head: boolean; canvas: HTMLCanvasElement;
+}>();
 const outlineGuides = new WeakMap<CatLayer, Uint8ClampedArray>();
 
 function outlineGuidePixels(guide: CatLayer) {
@@ -555,15 +618,18 @@ function outlineGuidePixels(guide: CatLayer) {
 
 function outlinedCatLayer(
   source: CatLayer, guide: CatLayer, config: CatRenderConfig, version: OutlineVersion = 'original', head = false,
+  charcoal?: CatLayer, additionalInk?: CatLayer,
 ): CatLayer {
   if (version === 'original' || config.coat === 'native') return source;
   const cached = outlinedLayers.get(source);
-  if (cached?.coat === config.coat && cached.guide === guide && cached.head === head) return cached.canvas;
+  if (cached?.coat === config.coat && cached.guide === guide && cached.charcoal === charcoal
+    && cached.additionalInk === additionalInk && cached.head === head) return cached.canvas;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   const pixels = layerPixels(source);
-  recolorCatOutline(pixels, outlineGuidePixels(guide), config, head);
+  recolorCatOutline(pixels, outlineGuidePixels(guide), config, head, charcoal && outlineGuidePixels(charcoal), pixel80Keys.size > 0,
+    additionalInk && outlineGuidePixels(additionalInk));
   ctx.putImageData(pixels, 0, 0);
-  outlinedLayers.set(source, { coat: config.coat, guide, head, canvas });
+  outlinedLayers.set(source, { coat: config.coat, guide, charcoal, additionalInk, head, canvas });
   return canvas;
 }
 
@@ -596,6 +662,10 @@ function bodyGuide(part: string) {
   return combined;
 }
 
+function cleanWhiteBody(config: CatRenderConfig) {
+  return (config.furPatternColors ?? currentFurPatternColors) === currentFurPatternColors && usesWhiteCatCoat(config);
+}
+
 function patternedBodyLayer(
   path: string, part: string, config: CatRenderConfig, layout: TypingLayout | undefined, laptopOnly = false,
 ) {
@@ -609,9 +679,14 @@ function patternedBodyLayer(
     ctx.drawImage(base, 0, 0);
     const pixels = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
     const guide = laptopOnly ? readBodyPixels(path) : bodyGuide(part);
-    const mask = config.bodyPattern === 'plain' ? undefined : readBodyPixels(bodyPatternPath + part);
+    const mask = config.bodyPattern === 'plain' || usesNativeBodyStripes(config) ? undefined : readBodyPixels(bodyPatternPath + part);
+    const goldFur = part === 'body' && config.bodyBase !== 'solid' && config.bodyPattern === 'plain' && hasHoneyGoldFur(config);
+    const cleanGold = goldFur && config.furPatternColors !== 'honey-gold';
     paintBodyPattern(pixels, guide, mask, config, typing, laptopOnly,
-      config.bodyBase === 'solid' ? readBodyPixels(path) : undefined);
+      config.bodyBase === 'solid' || cleanGold || cleanWhiteBody(config) ? readBodyPixels(path) : undefined);
+    if (goldFur) {
+      paintHoneyGoldFur(pixels, readBodyPixels(honeyGoldPath + 'body'), config);
+    }
     ctx.putImageData(pixels, 0, 0);
     cached = { key, raw: canvas };
     patternedLayers.set(source, cached);
@@ -627,7 +702,11 @@ function frontBodyLayer(
   const source = usesBodyPattern(config) ? patternedBodyLayer(asset, part, config, layout)
     : frontCoatLayer(part === 'body' ? imageFor(asset) : typingLayer(asset, layout), config);
   const guide = part === 'body' ? imageFor(orangePath + part) : typingLayer(orangePath + part, layout);
-  return outlinedCatLayer(source, guide, config, outlineVersion);
+  const charcoal = cleanWhiteBody(config) ? (part === 'body' ? imageFor(asset) : typingLayer(asset, layout)) : undefined;
+  // The calico body has ink at two cells outside the shared orange contour.
+  const additionalInk = part === 'body' && config.palette === 'CC03' && config.coat === 'breed:CC12'
+    && pixel80Keys.has(calicoBodyOutlinePath) ? imageFor(calicoBodyOutlinePath) : undefined;
+  return outlinedCatLayer(source, guide, config, outlineVersion, false, charcoal, additionalInk);
 }
 
 type TypingArmFrames = { left: ImageData; right: ImageData; raw: HTMLCanvasElement[]; aligned: HTMLCanvasElement[] };
@@ -698,25 +777,59 @@ function frontTypingPaws(frame: number, frenzy: boolean) {
   return frontPawFrames[index] = canvas;
 }
 
-const frontPawColors = new WeakMap<CatLayer, WeakMap<HTMLCanvasElement, HTMLCanvasElement>>();
+const frontPawColors = new WeakMap<CatLayer, Map<OutlineVersion, WeakMap<HTMLCanvasElement, HTMLCanvasElement>>>();
 function coloredFrontPaws(source: HTMLCanvasElement, body: CatLayer, config: CatRenderConfig, outlineVersion: OutlineVersion) {
-  if (config.palette === 'CC01' && config.coat === 'native' && !usesBodyPattern(config)) return source;
-  let frames = frontPawColors.get(body);
-  if (!frames) frontPawColors.set(body, frames = new WeakMap());
+  const ink = pixel80SharedInk(config, outlineVersion);
+  const originalFur = config.palette === 'CC01' && config.coat === 'native' && !usesBodyPattern(config);
+  if (!ink && originalFur) return source;
+  let versions = frontPawColors.get(body);
+  if (!versions) frontPawColors.set(body, versions = new Map());
+  let frames = versions.get(outlineVersion);
+  if (!frames) versions.set(outlineVersion, frames = new WeakMap());
   let colored = frames.get(source);
   if (!colored) {
     const { canvas, ctx } = makeLayer(CAT_SIZE);
-    const paws = recolorFrontPaws(layerPixels(source), layerPixels(body), config.palette === 'CC02');
+    const outline = ink ?? (config.palette === 'CC02' ? [32, 27, 30] : undefined);
+    const paws = recolorFrontPaws(layerPixels(source), originalFur ? undefined : layerPixels(body), outline);
     ctx.putImageData(paws, 0, 0);
     frames.set(source, colored = canvas);
   }
-  return outlinedCatLayer(colored, source, config, outlineVersion);
+  return ink ? colored : outlinedCatLayer(colored, source, config, outlineVersion);
+}
+
+function pixel80SharedInk(config: CatRenderConfig, version: OutlineVersion) {
+  return pixel80Keys.size && version === 'adaptive' ? pixel80CatOutline(config) : undefined;
 }
 
 function layerPixels(source: CatLayer) {
   const { ctx } = makeLayer(CAT_SIZE);
   ctx.drawImage(source, 0, 0);
   return ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
+}
+
+type FurPatchPaint = Parameters<typeof paintFurPatches>[3] & { patches: readonly FurPatch[] };
+const furPatchedLayers = new WeakMap<CatLayer, { paint: FurPatchPaint[]; keys: string[]; canvas: HTMLCanvasElement }>();
+
+function furPatchedLayer(source: CatLayer, ...paint: FurPatchPaint[]): CatLayer {
+  const active = paint.filter(region => region.patches.length);
+  if (!active.length) return source;
+  const keys = active.map(region => JSON.stringify(region.patches));
+  const cached = furPatchedLayers.get(source);
+  if (cached?.paint.length === active.length && active.every((region, index) => {
+    const old = cached.paint[index]!;
+    return keys[index] === cached.keys[index] && region.guide === old.guide && region.surface === old.surface
+      && region.idle === old.idle && region.keep === old.keep && region.skin === old.skin && region.movingPaw === old.movingPaw
+      && region.neck === old.neck && region.reverseY === old.reverseY;
+  })) return cached.canvas;
+  const pixels = layerPixels(source);
+  const baseFur = pixels.data.slice();
+  for (const region of active) {
+    paintFurPatches(pixels, baseFur, region.patches, pixel80Keys.size ? { ...region, grid: 4 } : region);
+  }
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.putImageData(pixels, 0, 0);
+  furPatchedLayers.set(source, { paint: active, keys, canvas });
+  return canvas;
 }
 
 let referenceArmCache: {
@@ -780,13 +893,20 @@ function selectedTail(config: CatRenderConfig, typing: boolean, layout: TypingLa
   const path = shared ? tailArtPaths[version] : tailPath;
   const asset = path + (typing ? 'typing' : 'idle') + '_' + config.tail;
   const source = imageFor(asset);
-  const key = catPatternCacheKey({ ...config, bodyPattern: config.tailPattern ?? config.bodyPattern, bodyBase: undefined });
+  const ink = pixel80SharedInk(config, outlineVersion);
+  const key = catPatternCacheKey({ ...config, bodyPattern: config.tailPattern ?? config.bodyPattern, bodyBase: undefined })
+    + (ink ? '/' + ink.join(',') : '');
   let cached = tailPaintLayers.get(source);
   if (cached?.key !== key) {
     const { canvas, ctx } = makeLayer(CAT_SIZE);
     ctx.drawImage(source, 0, 0);
     const pixels = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
-    paintCatTail(pixels, readBodyPixels(asset + '_patterns'), config);
+    paintCatTail(pixels, readBodyPixels(asset + '_patterns'), config, ink);
+    if (inkBlackProfile(config)) recolorPhotoInkBlack(pixels);
+    const pattern = config.tailPattern ?? config.bodyPattern;
+    if (asset === tailPath + 'idle_CT05' && (pattern === 'plain' || pattern === 'native') && hasHoneyGoldFur(config)) {
+      paintHoneyGoldFur(pixels, readBodyPixels(honeyGoldPath + 'tail'), config);
+    }
     ctx.putImageData(pixels, 0, 0);
     cached = { key, raw: canvas };
     tailPaintLayers.set(source, cached);
@@ -794,45 +914,162 @@ function selectedTail(config: CatRenderConfig, typing: boolean, layout: TypingLa
   const needsAlignment = typing && layout !== 'legacy' && !shared;
   const result = needsAlignment ? cached.aligned ??= alignTypingLayer(cached.raw) : cached.raw;
   const guide = needsAlignment ? typingLayer(asset, layout) : source;
-  return outlinedCatLayer(result, guide, config, outlineVersion);
+  return ink ? result : outlinedCatLayer(result, guide, config, outlineVersion);
 }
 
 function tailRemoval(typing: boolean, layout?: TypingLayout) {
   return typing ? typingLayer(tailPath + 'typing_remove', layout) : imageFor(tailPath + 'idle_remove');
 }
 
+function swingPetLoveTail(tail: CatLayer, style: CatRenderConfig['tail'], degrees: number, ink?: readonly number[]) {
+  const { canvas, ctx } = makeLayer(80);
+  const short = style === 'CT02' || style === 'CT06';
+  const rootX = 58, rootY = short ? 60 : 65;
+  ctx.translate(rootX, rootY);
+  ctx.rotate(degrees * Math.PI / 180);
+  // The zigzag tail is taller. Shorten its reach as it sweeps past the haunch.
+  if (style === 'CT08') ctx.scale(1, 1 - degrees / 330);
+  ctx.drawImage(tail, -rootX, -rootY, 80, 80);
+  if (ink) {
+    const pixels = ctx.getImageData(0, 0, 80, 80);
+    const { data, width, height } = pixels;
+    const stride = width * 4;
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const alpha = y * stride + x * 4 + 3;
+        if (data[alpha] && (!data[alpha - stride] || !data[alpha - 4]
+          || !data[alpha + 4] || !data[alpha + stride])) data.set(ink, alpha - 3);
+      }
+    }
+    ctx.putImageData(pixels, 0, 0);
+  }
+  return canvas;
+}
+
 function bodyWithSelectedTail(body: CatLayer, config: CatRenderConfig, typing: boolean, layout: TypingLayout | undefined,
-  outlineVersion: OutlineVersion, version: TailArtVersion) {
-  if (config.tail === 'CT01') return body;
-  const key = `${catPatternCacheKey(config)}/${config.tail}/${config.tailPattern}/${typing}/${layout}/${outlineVersion}/${version}`;
+  outlineVersion: OutlineVersion, version: TailArtVersion, swing = 0, paintTail?: (tail: CatLayer) => CatLayer) {
+  if (config.tail === 'CT01' && !swing) return body;
+  const tailCoats = { dark: { palette: 'CC02', coat: 'jetBlack' }, orange: { palette: 'CC01', coat: 'native' },
+    gray: { palette: 'CC05', coat: 'native' } } as const;
+  const tailConfig = config.coloredTail ? { ...config, ...tailCoats[config.coloredTail] } : config;
+  const key = `${catPatternCacheKey(config)}/${config.tail}/${config.tailPattern}/${typing}/${layout}/${outlineVersion}/${version}/${config.coloredTail}/${swing}`;
   const cached = tailBodyLayers.get(body);
-  if (cached?.key === key) return cached.canvas;
+  if (!paintTail && cached?.key === key) return cached.canvas;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   ctx.drawImage(body, 0, 0);
   ctx.globalCompositeOperation = 'destination-out';
   ctx.drawImage(tailRemoval(typing, layout), 0, 0);
   ctx.globalCompositeOperation = 'destination-over';
-  ctx.drawImage(selectedTail(config, typing, layout, outlineVersion, version), 0, 0);
-  tailBodyLayers.set(body, { key, canvas });
+  let tail: CatLayer;
+  if (config.tail === 'CT01') {
+    const legacy = makeLayer(CAT_SIZE);
+    legacy.ctx.drawImage(body, 0, 0);
+    legacy.ctx.globalCompositeOperation = 'destination-in';
+    legacy.ctx.drawImage(tailRemoval(typing, layout), 0, 0);
+    tail = legacy.canvas;
+  } else {
+    tail = selectedTail(tailConfig, typing, layout, outlineVersion, version);
+  }
+  if (paintTail) tail = paintTail(tail);
+  if (swing) tail = swingPetLoveTail(tail, config.tail, swing, pixel80SharedInk(tailConfig, outlineVersion));
+  ctx.drawImage(tail, 0, 0, CAT_SIZE, CAT_SIZE);
+  if (!paintTail) tailBodyLayers.set(body, { key, canvas });
   return canvas;
 }
 
 const composedEars = new Map<string, HTMLCanvasElement>();
 
-function frontCatEars(config: CatRenderConfig, layout?: CatPose['earLayout']) {
-  const { palette, ear } = config;
+function calicoCrownAsset(config: CatRenderConfig) {
+  if (config.palette !== 'CC03' || !config.calicoCrown || config.faceBase === 'solid') return;
+  if (config.calicoCrownLayout) return `${calicoCrownPath}${config.calicoCrownLayout}-${config.calicoCrown}-`;
+  if (config.calicoCrown === 'orange-left') return calicoCrownPath;
+}
+
+// The existing ear assets share a crown and a single frontal anchor.
+// Their changes are on either side of this 80-pixel-grid boundary.
+const earSeam = 152;
+const earCombinations = new WeakMap<CatLayer, WeakMap<CatLayer, CatLayer>>();
+
+function joinEarSides(left: CatLayer, right: CatLayer): CatLayer {
+  if (left === right) return left;
+  let variants = earCombinations.get(left);
+  if (!variants) earCombinations.set(left, variants = new WeakMap());
+  const cached = variants.get(right);
+  if (cached) return cached;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.drawImage(left, 0, 0, earSeam, CAT_SIZE, 0, 0, earSeam, CAT_SIZE);
+  const span = CAT_SIZE - earSeam;
+  ctx.drawImage(right, earSeam, 0, span, CAT_SIZE, earSeam, 0, span, CAT_SIZE);
+  variants.set(right, canvas);
+  return canvas;
+}
+
+function earPairKey(config: CatRenderConfig) {
+  return `${catEarOnSide(config, 'left')}/${catEarOnSide(config, 'right')}`;
+}
+
+function stockEar(ear: CatEar) {
+  return imageFor(orangePath + `ear_${catFrontEars[ear]}`);
+}
+
+function stockEarPair(config: CatRenderConfig) {
+  return joinEarSides(stockEar(catEarOnSide(config, 'left')), stockEar(catEarOnSide(config, 'right')));
+}
+
+function earOwnership(ear: CatEar) {
+  const shape = catFrontEars[ear];
+  return readBodyPixels(earMaskPath + (shape === 'upright' ? 'folded' : shape));
+}
+
+function frontCatEars(config: CatRenderConfig, layout?: CatPose['earLayout']): CatLayer {
+  return joinEarSides(frontEarCel(config, catEarOnSide(config, 'left'), layout),
+    frontEarCel(config, catEarOnSide(config, 'right'), layout));
+}
+
+function frontEarCel(config: CatRenderConfig, ear: CatEar, layout?: CatPose['earLayout']) {
+  const { palette } = config;
   const shape = catFrontEars[ear];
   const part = `ear_${shape}`;
   if (palette === 'CC01') return imageFor(orangePath + part);
   const path = breedPath(palette);
-  if (ear === 'CE01' || (layout === 'legacy' && sharedBreedParts[palette] === palette)) return imageFor(path + part);
-  const key = path + part;
+  const crown = calicoCrownAsset(config);
+  // The upright cel includes the crown and reaches the brow. The template
+  // head owns the cheek and eye area, and both cels keep the same anchor.
+  const top = crown && config.calicoCrownTop;
+  const topLayout = top === 'dark' ? 'eye-streak' : top === 'high-cap' ? 'high-cap' : undefined;
+  const upright = top === 'split' ? config.calicoCrown === 'orange-left' ? calicoCrownPath + 'ears' : path + 'ear_upright'
+    : topLayout ? `${calicoCrownPath}${topLayout}-${config.calicoCrown}-ears`
+    : crown ? crown + 'ears' : path + 'ear_upright';
+  if (ear === 'CE01') return imageFor(upright);
+  if (layout === 'legacy' && sharedBreedParts[palette] === palette && !crown) return imageFor(path + part);
+  const preserveCrownPigment = !!crown && ear !== config.ear;
+  const key = `${path}${part}/${upright}/${preserveCrownPigment}`;
   const cached = composedEars.get(key);
   if (cached) return cached;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
-  paintBreedEars(ctx, imageFor(orangePath + part), imageFor(earMaskPath + shape), imageFor(path + 'ear_upright'), palette);
+  const crownCel = imageFor(upright);
+  paintBreedEars(ctx, imageFor(orangePath + part), imageFor(earMaskPath + shape), crownCel, palette, pixel80Keys.size > 0,
+    preserveCrownPigment ? calicoEarPigment(crownCel) : undefined);
   composedEars.set(key, canvas);
   return canvas;
+}
+
+// Calico photo crowns can swap the orange and charcoal sides. Sample the
+// authored upright ear, excluding the lining and the head-to-ear join.
+function calicoEarPigment(crown: CatLayer): readonly [boolean, boolean] {
+  const data = outlineGuidePixels(crown);
+  const region = earOwnership('CE01');
+  const guide = outlineGuidePixels(stockEar('CE01'));
+  const dark = [0, 0], orange = [0, 0];
+  for (let offset = 0; offset < data.length; offset += 4) {
+    if (!data[offset + 3] || isEarLiningPixel(data, offset) || isOutline(guide, offset)) continue;
+    const side = region[offset] === 255 ? 0 : region[offset + 1] === 255 ? 1 : -1;
+    if (side === -1) continue;
+    const r = data[offset]!, g = data[offset + 1]!, b = data[offset + 2]!;
+    if (r - g > 25 && g - b > 10) orange[side]!++;
+    else if (r < 125 && r - g < 26) dark[side]!++;
+  }
+  return [dark[0]! >= orange[0]!, dark[1]! > orange[1]!];
 }
 
 const earTintLayers = new WeakMap<CatLayer, { coat: CatRenderConfig['coat']; color: CatConfig['earColor']; canvas: HTMLCanvasElement }>();
@@ -850,6 +1087,92 @@ function coloredFrontCatEars(config: CatRenderConfig, layout?: CatPose['earLayou
   paintInnerEarColor(image, layerPixels(source), [color >>> 16, (color >>> 8) & 255, color & 255]);
   ctx.putImageData(image, 0, 0);
   earTintLayers.set(source, { coat, color: earColor, canvas });
+  return canvas;
+}
+
+const photoEarBaseColors: Record<Exclude<CatPhotoEarPigment, 'orange'>, readonly number[]> = {
+  dark: [64, 57, 66], brown: [152, 103, 76], gray: [123, 121, 134], white: [242, 233, 219],
+};
+const photoEarOutlineColors: Record<CatPhotoEarPigment, readonly [number, number, number]> = {
+  dark: [39, 31, 36], orange: [62, 34, 29], brown: [77, 48, 34], gray: [58, 56, 69], white: [109, 107, 115],
+};
+const photoEarLayers = new WeakMap<CatLayer, { key: string; canvas: HTMLCanvasElement }>();
+
+const projectedEarMarks = new Map<string, Uint8ClampedArray>();
+
+function stockEarBounds(ear: CatEar, side: CatPhotoEarSide) {
+  const data = outlineGuidePixels(stockEar(ear)), owner = earOwnership(ear);
+  const channel = side === 'left' ? 0 : 1;
+  const mask = Uint8Array.from({ length: CAT_SIZE * CAT_SIZE },
+    (_, i) => data[i * 4 + 3] && owner[i * 4 + channel]! >= 128 ? 1 : 0);
+  return fittedInkSurface(mask);
+}
+
+function photoEarMarkPixels(path: string, side: CatPhotoEarSide, ear: CatEar) {
+  const art = readBodyPixels(path);
+  if (ear === 'CE01') return art;
+  const key = `${path}/${ear}`;
+  const cached = projectedEarMarks.get(key);
+  if (cached) return cached;
+  const upright = stockEarBounds('CE01', side);
+  const target = stockEarBounds(ear, side);
+  const result = new Uint8ClampedArray(art.length);
+  if (upright && target) {
+    const from = upright.bounds, to = target.bounds;
+    // Sample in each ear's own coordinates so a change of shape moves
+    // the reviewed pigment with that ear and never across the crown.
+    for (let y = to.y; y < to.y + to.height; y++) {
+      const sy = from.y + Math.floor((y - to.y + 0.5) * from.height / to.height);
+      for (let x = to.x; x < to.x + to.width; x++) {
+        if (!target.mask[y * CAT_SIZE + x]) continue;
+        const sx = from.x + Math.floor((x - to.x + 0.5) * from.width / to.width);
+        const origin = (sy * CAT_SIZE + sx) * 4;
+        result.set(art.subarray(origin, origin + 4), (y * CAT_SIZE + x) * 4);
+      }
+    }
+  }
+  projectedEarMarks.set(key, result);
+  return result;
+}
+
+function withPhotoEarMarks(source: CatLayer, config: CatRenderConfig, layout?: CatPose['earLayout']): CatLayer {
+  if (!config.photoCoatParts?.length) return source;
+  const parts = catPhotoEarSides.flatMap(side => {
+    const part = catPhotoPartFor(config.photoCoatParts, `ear-${side}`, config.palette, config.coat);
+    const ear = catEarOnSide(config, side);
+    if (!part || (ear !== 'CE01' && config[side === 'left' ? 'leftEar' : 'rightEar'] === undefined)) return [];
+    return [{ part, side, ear, pigment: config.photoEarColors?.[side] ?? 'orange' }];
+  });
+  if (!parts.length) return source;
+  const key = parts.map(({ part, pigment, ear }) => `${part}/${pigment}/${ear}`).join(';');
+  const cached = photoEarLayers.get(source);
+  if (cached?.key === key) return cached.canvas;
+  const guide = outlineGuidePixels(headOutlineGuide(config));
+  const lining = layerPixels(frontCatEars(config, layout)).data;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.drawImage(source, 0, 0);
+  const pixels = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
+  for (const { part, side, ear, pigment } of parts) {
+    const path = catPhotoPartPath + part;
+    const art = photoEarMarkPixels(path, side, ear);
+    const baseColor = pigment === 'orange' ? undefined : photoEarBaseColors[pigment];
+    const outline = pixel80Keys.has(path) ? photoEarOutlineColors[pigment] : undefined;
+    for (let offset = 0; offset < art.length; offset += 4) {
+      if (!art[offset + 3] || !pixels.data[offset + 3]
+        || isEarLiningPixel(guide, offset) || isEarLiningPixel(lining, offset)) continue;
+      if (isOutline(guide, offset)) {
+        // Keep the alternate shape's authored contour and fold lines.
+        if (outline && ear === 'CE01') pixels.data.set(outline, offset);
+        continue;
+      }
+      const shade = art[offset + 1]! - 104;
+      for (let channel = 0; channel < 3; channel++) {
+        pixels.data[offset + channel] = baseColor ? baseColor[channel]! + shade : art[offset + channel]!;
+      }
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+  photoEarLayers.set(source, { key, canvas });
   return canvas;
 }
 
@@ -1002,7 +1325,7 @@ function drawNosePart(ctx: CanvasRenderingContext2D, config: CatRenderConfig, at
   ctx.drawImage(recolored, 0, 0);
 }
 
-const blackMouthLayers = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+const mouthLineLayers = new WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement>>();
 let cachedMouthSkin: { key: string; canvas: HTMLCanvasElement } | undefined;
 
 function mouthSkinLayer(config: CatRenderConfig, markingLayout?: MarkingLayout) {
@@ -1026,22 +1349,50 @@ function mouthSkinLayer(config: CatRenderConfig, markingLayout?: MarkingLayout) 
   return canvas;
 }
 
-function sharedMouthLayer(config: CatRenderConfig) {
+function sharedMouthLayer(config: CatRenderConfig, ink = config.palette === 'CC02' ? '#261B1C' : undefined) {
   const art = imageFor(catMouthPath + config.mouth);
-  if (config.palette !== 'CC02') return art;
-  const cached = blackMouthLayers.get(art);
+  if (!ink) return art;
+  const layers = mouthLineLayers.get(art) ?? new Map<string, HTMLCanvasElement>();
+  const cached = layers.get(ink);
   if (cached) return cached;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   const { left, top, width, height } = faceTiles;
   ctx.drawImage(art, 0, 0);
   const pixels = ctx.getImageData(left, top, width, height);
+  const hex = Number.parseInt(ink.slice(1), 16);
+  const color = [hex >>> 16, (hex >>> 8) & 255, hex & 255];
   for (let offset = 0; offset < pixels.data.length; offset += 4) {
     if (pixels.data[offset + 3] && pixels.data[offset + 1]! < 70) {
-      pixels.data.set([38, 27, 28], offset);
+      pixels.data.set(color, offset);
     }
   }
   ctx.putImageData(pixels, left, top);
-  blackMouthLayers.set(art, canvas);
+  layers.set(ink, canvas);
+  mouthLineLayers.set(art, layers);
+  return canvas;
+}
+
+const faceCleanupLayers = new WeakMap<CatLayer, HTMLCanvasElement>();
+const honeyGoldSkinLayers = new WeakMap<CatLayer, HTMLCanvasElement>();
+
+function honeyGoldMouthSkin(source: CatLayer, config: CatRenderConfig) {
+  const cached = honeyGoldSkinLayers.get(source);
+  if (cached) return cached;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  const pixels = layerPixels(source);
+  paintHoneyGoldFur(pixels, readBodyPixels(honeyGoldPath + 'cheeks'), config);
+  ctx.putImageData(pixels, 0, 0);
+  honeyGoldSkinLayers.set(source, canvas);
+  return canvas;
+}
+
+function faceCleanupLayer(atlas: CatLayer) {
+  const cached = faceCleanupLayers.get(atlas);
+  if (cached) return cached;
+  const { left, top, width, height } = faceTiles;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.drawImage(atlas, 0, 2 * height, width, height, left, top, width, height);
+  faceCleanupLayers.set(atlas, canvas);
   return canvas;
 }
 
@@ -1049,6 +1400,8 @@ function drawCatFaceParts(
   ctx: CanvasRenderingContext2D, config: CatRenderConfig, markingLayout: MarkingLayout | undefined,
   transientMouth: 'smile' | 'flat' | undefined, animation: TypingAnimation, cleanMouth: boolean,
   legacyNoseOutline?: boolean, effortMouth = false, effort = false,
+  patchSkin?: (skin: CatLayer) => CatLayer,
+  mouthInk?: string, maskFur = false,
 ) {
   // The Aseprite exporter packs the original face coordinates into three rows.
   const { left, top, width, height } = faceTiles;
@@ -1064,19 +1417,24 @@ function drawCatFaceParts(
     }
     drawNosePart(ctx, config, atlas);
   };
-  draw(0, 2);
-  if (cleanMouth) {
-    const patch = imageFor(referenceTypingPath('reference-v2') + typingInkPatches.mouth);
-    ctx.drawImage(frontCoatLayer(patch, config), 0, 0);
+  if (!maskFur) {
+    if (patchSkin) ctx.drawImage(patchSkin(faceCleanupLayer(atlas)), 0, 0);
+    else draw(0, 2);
   }
-  if (customMouth) {
+  if (cleanMouth && !maskFur) {
+    const patch = imageFor(referenceTypingPath('reference-v2') + typingInkPatches.mouth);
+    const skin = frontCoatLayer(patch, config);
+    ctx.drawImage(patchSkin ? patchSkin(skin) : skin, 0, 0);
+  }
+  if (customMouth && !maskFur) {
     // Restore the local fur before compositing the independent lips. Old
     // flattened saves still need the original face atlas and its exact pixels.
-    ctx.drawImage(mouthSkinLayer(config, markingLayout), 0, 0);
+    const skin = mouthSkinLayer(config, markingLayout);
+    ctx.drawImage(patchSkin ? patchSkin(skin) : skin, 0, 0);
   }
   if (effortMouth) {
     const path = frontTypingEffectsPath + 'mouth';
-    const line = coloredCatIris(path, config.palette === 'CC02' ? '#261B1C' : '#442416');
+    const line = coloredCatIris(path, mouthInk ?? (config.palette === 'CC02' ? '#261B1C' : '#442416'));
     ctx.drawImage(line, 0, Math.max(0, tip - 130));
     drawNose();
     return;
@@ -1092,7 +1450,9 @@ function drawCatFaceParts(
     return;
   }
   if (customMouth) {
-    const line = sharedMouthLayer(config);
+    const line = mouthInk && config.mouth !== 'CN09'
+      ? coloredCatIris(catMouthPath + config.mouth, mouthInk)
+      : sharedMouthLayer(config, config.mouthContrast === 'light' ? mouthInk : undefined);
     ctx.drawImage(line, 0, 0);
     const stemX = 149, stemY = 131, stemWidth = 4;
     const gap = stemY - tip - 1;
@@ -1140,13 +1500,13 @@ const headOutlineGuides = new Map<string, HTMLCanvasElement>();
 const bareForeheadHeads = new WeakMap<CatLayer, HTMLCanvasElement>();
 
 function headOutlineGuide(config: CatRenderConfig) {
-  const shape = catFrontEars[config.ear];
-  const cached = headOutlineGuides.get(shape);
+  const key = earPairKey(config);
+  const cached = headOutlineGuides.get(key);
   if (cached) return cached;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   ctx.drawImage(imageFor(orangePath + 'head_base'), 0, 0);
-  ctx.drawImage(imageFor(orangePath + `ear_${shape}`), 0, 0);
-  headOutlineGuides.set(shape, canvas);
+  ctx.drawImage(stockEarPair(config), 0, 0);
+  headOutlineGuides.set(key, canvas);
   return canvas;
 }
 
@@ -1183,7 +1543,7 @@ function headFurGuide(config: CatRenderConfig, effort: boolean, cleanSolidEyes =
   const sharedNose = Object.hasOwn(sharedNoseStyles, config.nose);
   const sharedMouth = Object.hasOwn(sharedMouthStyles, config.mouth);
   const solid = config.faceBase === 'solid';
-  const key = `${config.ear}/${effort}/${sharedNose}/${sharedMouth}/${solid}/${cleanSolidEyes ? config.palette : ''}`;
+  const key = `${earPairKey(config)}/${effort}/${sharedNose}/${sharedMouth}/${solid}/${cleanSolidEyes ? config.palette : ''}`;
   const cached = sharedHeadGuides.get(key);
   if (cached) return cached;
   const { ctx } = makeLayer(CAT_SIZE);
@@ -1198,8 +1558,7 @@ function headFurGuide(config: CatRenderConfig, effort: boolean, cleanSolidEyes =
       left, top, width, patchHeight);
     if (sharedMouth) ctx.drawImage(imageFor(mouthSkinPath), 0, 0, width, height, left, top, width, height);
   }
-  const shape = catFrontEars[config.ear];
-  ctx.drawImage(imageFor(orangePath + `ear_${shape}`), 0, 0);
+  ctx.drawImage(stockEarPair(config), 0, 0);
   const data = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data;
   if (cleanSolidEyes) {
     // Treat the area reserved for the orange eyes as fur before the separate
@@ -1209,17 +1568,46 @@ function headFurGuide(config: CatRenderConfig, effort: boolean, cleanSolidEyes =
       if (coverage[i] && data[i * 4 + 3]) data.set([243, 174, 109], i * 4);
     }
   }
-  if (shape !== 'upright' || solid) {
-    const ear = readBodyPixels(earMaskPath + (shape === 'upright' ? 'folded' : shape));
-    // A wide crown region can reach a folded or curled ear. Its solid
-    // ownership mask protects that ear's painted folds; the soft root
-    // transition remains available for the surrounding head fur.
+  for (const side of catPhotoEarSides) {
+    const shape = catEarOnSide(config, side);
+    if (shape === 'CE01' && !solid) continue;
+    const ear = earOwnership(shape);
+    const channel = side === 'left' ? 0 : 1;
+    // Protect the ear's painted folds while keeping the soft crown join.
     for (let offset = 0; offset < data.length; offset += 4) {
-      if (ear[offset] === 255 || ear[offset + 1] === 255) data[offset + 3] = 0;
+      if (ear[offset + channel] === 255) data[offset + 3] = 0;
     }
   }
   sharedHeadGuides.set(key, data);
   return data;
+}
+
+const chestFringeByBreed = new Map<CatRenderConfig['palette'], ReturnType<typeof chestFringeSamples>>();
+const headsWithSolidNeck = new WeakMap<CatLayer, HTMLCanvasElement>();
+
+function headWithBodyBase(head: CatLayer, config: CatRenderConfig): CatLayer {
+  const version = config.furPatternColors ?? currentFurPatternColors;
+  if (config.bodyBase !== 'solid' || (version !== 'connected-chest' && !hasIndependentFur(version))) return head;
+  const cached = headsWithSolidNeck.get(head);
+  if (cached) return cached;
+  // The uniform calico face inherits the orange guide's reserved chest edge.
+  // Its original face paint has a separate white region that belongs to the head.
+  const palette = hasIndependentFur(version) && config.palette === 'CC03' && config.faceBase === 'solid'
+    ? 'CC01' : config.palette;
+  let samples = chestFringeByBreed.get(palette);
+  if (!samples) {
+    const path = palette === 'CC01' ? orangePath : breedPath(palette);
+    samples = chestFringeSamples(readBodyPixels(path + (palette === 'CC01' ? 'head_base' : 'head')),
+      readBodyPixels(path + 'body'), CAT_SIZE);
+    chestFringeByBreed.set(palette, samples);
+  }
+  if (!samples.length) return head;
+  const pixels = layerPixels(head);
+  for (const [target, fur] of samples) pixels.data.copyWithin(target, fur, fur + 3);
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.putImageData(pixels, 0, 0);
+  headsWithSolidNeck.set(head, canvas);
+  return canvas;
 }
 
 function nativeHeadPigmentGuide(head: CatLayer, ears: CatLayer) {
@@ -1236,13 +1624,14 @@ function nativeHeadPigmentGuide(head: CatLayer, ears: CatLayer) {
 function sharedPatternHead(config: CatRenderConfig, effort: boolean, earLayout?: CatPose['earLayout'], cleanEyeRim = false) {
   const sharedNose = Object.hasOwn(sharedNoseStyles, config.nose);
   const sharedMouth = Object.hasOwn(sharedMouthStyles, config.mouth);
-  const key = `${facePatternCacheKey(config)}/${config.pattern}/${config.ear}/${config.earColor}/${effort}/${earLayout}/${sharedNose}/${sharedMouth}/${cleanEyeRim}`;
+  const key = `${facePatternCacheKey(config)}/${config.pattern}/${earPairKey(config)}/${config.earColor}/${effort}/${earLayout}/${sharedNose}/${sharedMouth}/${cleanEyeRim}/${config.calicoCrown}/${config.calicoCrownLayout}/${config.calicoCrownTop}`;
   const cached = sharedPatternHeads.get(key);
   if (cached) return cached;
   const { palette } = config;
   const orange = palette === 'CC01';
   const path = orange ? orangePath : breedPath(palette);
-  const original = imageFor(path + (orange ? 'head_base' : 'head'));
+  const crown = calicoCrownAsset(config);
+  const original = imageFor(crown ? crown + 'head' : path + (orange ? 'head_base' : 'head'));
   const base = effort && !orange ? headWithoutBakedEyes(original, palette, cleanEyeRim) : original;
   const { canvas, ctx } = makeLayer(CAT_SIZE);
   ctx.drawImage(frontCoatLayer(base, config, orange ? 'orange-head' : 'fur'), 0, 0);
@@ -1273,6 +1662,15 @@ function sharedPatternHead(config: CatRenderConfig, effort: boolean, earLayout?:
     }
     paintHeadFur(pixels, guide, cheeks,
       config.bodyPattern === 'plain' ? undefined : readBodyPixels(headPatternPath + 'face_patterns'), config);
+    if (hasHoneyGoldFur(config)) {
+      if (config.pattern === 'P03') paintHoneyGoldFur(pixels, readBodyPixels(honeyGoldPath + 'crown'), config);
+      if (config.bodyPattern === 'plain') paintHoneyGoldFur(pixels, readBodyPixels(honeyGoldPath + 'cheeks'), config);
+    } else if (config.coat === 'breed:CC11') {
+      paintGoldenTipping(pixels, config);
+    }
+    // Cleaning the forehead can restore the template's lighter charcoal.
+    // Remap only those restored shades; the existing dark coat is already inked.
+    if (pixel80Keys.size && inkBlackProfile(config)) recolorPhotoInkBlack(pixels, 56);
     ctx.putImageData(pixels, 0, 0);
   }
   // Keep a small set of recent appearances; typing frames reuse the same head.
@@ -1300,7 +1698,11 @@ function headWithoutBakedEyes(head: HTMLImageElement, palette: FrontBreed, clean
   // The Siamese head already had its pupil ink removed, but kept thin
   // streaks from the original eye fill along the colorpoint mask.
   const hasOldSiameseFill = cleanEyeRim && palette === 'CC04';
-  if (!eyeArea || (!hasOldSiameseFill && bakedInk / eyeArea < 0.8)) {
+  // The smaller pixel80 pupil covers fewer of the aperture pixels. These
+  // four breed drawings still have a full dark pupil baked into their heads.
+  const coarseBakedPupil = pixel80Keys.has(breedPath(palette) + 'head')
+    && ['CC05', 'CC06', 'CC07', 'CC08'].includes(palette);
+  if (!eyeArea || (!hasOldSiameseFill && bakedInk / eyeArea < (coarseBakedPupil ? 0.5 : 0.8))) {
     cache.set(head, head);
     return head;
   }
@@ -1356,11 +1758,91 @@ function headWithoutBakedEyes(head: HTMLImageElement, palette: FrontBreed, clean
   return canvas;
 }
 
+let bakedOrangeEyePixels: Uint8Array | undefined;
+
+function orangeBakedEyeMask() {
+  if (bakedOrangeEyePixels) return bakedOrangeEyePixels;
+  const iris = readBodyPixels(orangePath + 'iris');
+  const head = readBodyPixels(orangePath + 'head_base');
+  const mask = new Uint8Array(CAT_SIZE * CAT_SIZE);
+  for (let y = 91; y < 140; y++) {
+    for (let x = 85; x < 220; x++) {
+      if (x > 134 && x < 166) continue;
+      const index = y * CAT_SIZE + x, offset = index * 4;
+      if (iris[offset + 3] || (head[offset + 3] && head[offset + 2]! > 178)) mask[index] = 1;
+    }
+  }
+  return bakedOrangeEyePixels = mask;
+}
+
+const headPatchGuides = new WeakMap<Uint8ClampedArray, Uint8ClampedArray>();
+const headPatchMasks = new Map<string, Uint8Array>();
+
+function headPatchGuide(config: CatRenderConfig) {
+  const fur = headFurGuide(config, true);
+  const cached = headPatchGuides.get(fur);
+  if (cached) return cached;
+  const result = fur.slice();
+  const completeHead = outlineGuidePixels(headOutlineGuide(config));
+  for (let i = 0; i < result.length; i += 4) {
+    if (!result[i + 3] && completeHead[i + 3]) result.set(completeHead.subarray(i, i + 4), i);
+  }
+  headPatchGuides.set(fur, result);
+  return result;
+}
+
+function protectedHeadPatchPixels(config: CatRenderConfig, keepBakedEyes: boolean) {
+  const key = `${earPairKey(config)}/${keepBakedEyes}`;
+  const cached = headPatchMasks.get(key);
+  if (cached) return cached;
+  const mask = keepBakedEyes ? orangeBakedEyeMask().slice() : new Uint8Array(inkArea);
+  const pixels = outlineGuidePixels(stockEarPair(config));
+  // Match the inner-ear picker: a forehead mark may cross the outer ear
+  // but the lining itself retains the selected ear color.
+  for (let y = 0; y < 104; y++) {
+    for (let x = 0; x < CAT_SIZE; x++) {
+      if (x >= 125 && x < 176) continue;
+      const index = y * CAT_SIZE + x, i = index * 4;
+      const r = pixels[i]!, g = pixels[i + 1]!, b = pixels[i + 2]!;
+      if (pixels[i + 3] && r >= 145 && r - g >= 31 && b >= g - 5) mask[index] = 1;
+    }
+  }
+  headPatchMasks.set(key, mask);
+  return mask;
+}
+
+function inkOverDarkPatch(patches: readonly FurPatch[], x: number, y: number) {
+  const pigment = furPatchColorAt(patches, x, y);
+  if (!pigment) return;
+  const [r, g, b] = pigment;
+  const tone = (3 * r + 6 * g + b) / 10;
+  if (tone >= 74) return;
+  // Cool shadows respond to cool coats without burying the expression lines.
+  const added = Math.round(55 * (1 - tone / 150));
+  return '#' + pigment.map(value => Math.min(255, value + added).toString(16).padStart(2, '0')).join('');
+}
+
+const effortEyeCenters = [106, 198] as const;
+const effortEyeFur = new WeakMap<CatLayer, readonly boolean[]>();
+
+function darkFurBehindEffortEyes(head: CatLayer) {
+  const cached = effortEyeFur.get(head);
+  if (cached) return cached;
+  const {data} = layerPixels(head);
+  const sides = effortEyeCenters.map(x => {
+    const i = (114 * CAT_SIZE + x) * 4;
+    return !!data[i + 3] && 3 * data[i]! + 6 * data[i + 1]! + data[i + 2]! < 740;
+  });
+  effortEyeFur.set(head, sides);
+  return sides;
+}
+
 export function drawCatHead(
   ctx: CanvasRenderingContext2D, appearance: CatConfig | CatRenderConfig, typing: boolean, frame: number, gaze: Gaze,
-  { scale = 1, earLayout, hideGlints, markingLayout, legacyNoseOutline, outlineVersion = 'adaptive', closeEyes = false, ...typingPose }:
+  { scale = 1, earLayout, hideGlints, markingLayout, legacyNoseOutline, outlineVersion = 'adaptive',
+    closeEyes = false, maskFur = false, petLoveEyes = false, ...typingPose }:
     TypingEffects & Pick<CatPose, 'earLayout' | 'markingLayout' | 'outlineVersion' | 'legacyNoseOutline'>
-      & { scale?: number; hideGlints?: HiddenGlints; closeEyes?: boolean } = {},
+      & { scale?: number; hideGlints?: HiddenGlints; closeEyes?: boolean; maskFur?: boolean; petLoveEyes?: boolean } = {},
 ) {
   const animation = typingPose.typingAnimation ?? currentTypingAnimation;
   const mode = typingPose.typingMode ?? 'gentle';
@@ -1378,8 +1860,11 @@ export function drawCatHead(
   const accessory = config.accessory === 'A07' ? 'A06' : config.accessory;
   const eye = catHeadEye(config, typing, frame);
   const effort = hasEffortEyes(typing, frame, typingPose);
-  const eyesClosed = effort || closeEyes;
-  const cleanEyeRim = !orange && (closeEyes || (effort && effectsAnimation === 'reference-v2'
+  const blinkPath = !orange && eye === 'Y02' && !effort && !closeEyes
+    ? breedPath(sharedBreedParts[palette]) + 'eye_Y02' : undefined;
+  const blink = blinkPath !== undefined && pixel80Keys.has(blinkPath);
+  const eyesClosed = effort || closeEyes || blink;
+  const cleanEyeRim = !orange && (closeEyes || blink || (effort && effectsAnimation === 'reference-v2'
     && (typingPose.typingInkVersion ?? currentTypingInkVersion) === currentTypingInkVersion));
   const leftPupil = catPupilStyle(config, 'left');
   const rightPupil = catPupilStyle(config, 'right');
@@ -1388,14 +1873,42 @@ export function drawCatHead(
   const transientMouth = referenceEffects && !sharedTypingMouth && (config.mouth === 'CN01' || config.mouth === 'CN05')
     ? mode === 'frenzy' ? 'smile' : mode === 'fast' ? firstHalf ? 'smile' : 'flat' : undefined
     : undefined;
-  if (markingLayout === 'legacy') {
+  const patches = furPatchesFor(config.furPatches, 'head');
+  const lightMouth = config.mouthContrast === 'light';
+  const blackCoat = config.coat === 'jetBlack' || config.coat === 'blackSmoke' || config.coat === 'blackWarm'
+    || (config.palette === 'CC02' && config.coat === 'native');
+  const tortieCoat = config.coat === 'breed:CC10' || config.coat === 'tortieAmber' || config.coat === 'tortieWalnut';
+  const expressionInk = blackCoat && lightMouth ? '#ADA4B0'
+    : config.coat === 'jetBlack' ? '#5A5053'
+    : tortieCoat ? (lightMouth ? '#C89D8F' : '#74554D') : undefined;
+  const patchGuide = patches.length ? headPatchGuide(faceConfig) : undefined;
+  const neck = connectedNeckFur(config.furPatches);
+  const headPart = catPhotoPartFor(config.photoCoatParts, 'head', config.palette, config.coat);
+  const compatibleHeadPart = headPart && (headPart !== 'asymmetric-dark-crown' || config.ear === 'CE01');
+  const authoredHeadPart = config.calicoFaceFinish === 'h3r3' && supportsCalicoFaceFinish(config) ? calicoFaceFinishPath
+    : compatibleHeadPart ? catPhotoPartPath + headPart : undefined;
+  const patchHead = (head: CatLayer) => {
+    const painted = withAuthoredCoatPart(head, authoredHeadPart);
+    return patchGuide ? furPatchedLayer(painted, {
+      patches, guide: patchGuide, keep: protectedHeadPatchPixels(config, orange && !eyesClosed), neck,
+    }) : painted;
+  };
+  const goldenCheeks = hasHoneyGoldFur(faceConfig) && faceConfig.bodyPattern === 'plain';
+  const patchSkin = patchGuide || goldenCheeks ? (skin: CatLayer) => {
+    const painted = goldenCheeks ? honeyGoldMouthSkin(skin, faceConfig) : skin;
+    return patchGuide ? furPatchedLayer(painted, { patches, guide: patchGuide, skin: true }) : painted;
+  } : undefined;
+  let effortFur: CatLayer | undefined;
+  if (markingLayout === 'legacy' && !patches.length && !authoredHeadPart && !calicoCrownAsset(config)) {
     const head = imageFor(path + (orange ? 'head_base' : 'head'));
     const base = eyesClosed && !orange ? headWithoutBakedEyes(head, palette, cleanEyeRim) : head;
-    ctx.drawImage(outlinedCatLayer(frontCoatLayer(base, config, orange ? 'orange-head' : 'fur'),
-      imageFor(orangePath + 'head_base'), config, outlineVersion, true), 0, 0);
+    const painted = outlinedCatLayer(frontCoatLayer(base, config, orange ? 'orange-head' : 'fur'),
+      imageFor(orangePath + 'head_base'), config, outlineVersion, true);
+    effortFur = headWithBodyBase(painted, { ...config, faceBase: 'native' });
+    ctx.drawImage(effortFur, 0, 0);
     if (eyesClosed && orange) ctx.drawImage(frontCoatLayer(imageFor(typingEffectPath + 'orange_eye_patch'), config), 0, 0);
     ctx.drawImage(outlinedCatLayer(coloredFrontCatEars(config, earLayout),
-      imageFor(orangePath + `ear_${catFrontEars[config.ear]}`), config, outlineVersion, true), 0, 0);
+      stockEarPair(config), config, outlineVersion, true), 0, 0);
     if (['P01', 'P02', 'P06'].includes(config.pattern)) {
       const template = config.palette === 'CC01' ? config.palette : sharedBreedParts[config.palette];
       const face = imageFor((orange ? orangePath : breedPath(template)) + `face_${config.pattern}`);
@@ -1405,18 +1918,46 @@ export function drawCatHead(
     const guide = headOutlineGuide(config);
     const head = outlinedCatLayer(sharedPatternHead(faceConfig, eyesClosed, earLayout, cleanEyeRim), guide, config, outlineVersion, true);
     const bareForehead = config.pattern === 'P03' && markingLayout !== 'shared';
-    ctx.drawImage(bareForehead ? bareForeheadHead(head, guide) : head, 0, 0);
+    const paintedHead = patchHead(headWithBodyBase(bareForehead ? bareForeheadHead(head, guide) : head, config));
+    effortFur = withPhotoEarMarks(paintedHead, config, earLayout);
+    ctx.drawImage(effortFur, 0, 0);
   }
-  if (!eyesClosed && !orange) {
+  if (maskFur) {
+    // Use stock, unpainted art for the outline and ear lining. The independent
+    // face, effects and accessory layers below cut their exact shapes out.
+    const ear = outlineGuidePixels(frontCatEars(config, earLayout));
+    const keep = protectedHeadPatchPixels(config, orange && !eyesClosed);
+    const guide = headPatchGuide(config);
+    const native = readBodyPixels(path + (orange ? 'head_base' : 'head'));
+    const image = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
+    const alpha = opaqueFurMask(image.data, guide, native, config, index =>
+      keep[index] || (Math.floor(index / CAT_SIZE) < 104
+        && (index % CAT_SIZE < 125 || index % CAT_SIZE >= 176) && isEarLiningPixel(ear, index * 4)));
+    for (let i = 0; i < alpha.length; i++) image.data[i * 4 + 3] = alpha[i] ? 255 : 0;
+    ctx.putImageData(image, 0, 0);
+    ctx.globalCompositeOperation = 'destination-out';
+  }
+  if (blink && blinkPath) {
+    const darkFur = effortFur && darkFurBehindEffortEyes(effortFur);
+    const blinkInk = (side: 0 | 1) => {
+      const color = inkOverDarkPatch(patches, effortEyeCenters[side], 114)
+        ?? (darkFur?.[side] || blackCoat ? '#A49AA4' : undefined);
+      return color ? coloredCatIris(blinkPath, color) : imageFor(blinkPath);
+    };
+    drawEyePair(ctx, blinkInk(0), blinkInk(1));
+  } else if (!eyesClosed && !orange) {
     const cleanRim = markingLayout !== 'legacy' && cleanSolidFaceEyes(faceConfig);
-    drawEyePair(ctx, frontCatEye(palette, eye, leftPupil, cleanRim), frontCatEye(palette, eye, rightPupil, cleanRim));
+    const unlined = config.eyeRim === 'none';
+    const honeyGoldRim = hasHoneyGoldFur(config);
+    drawEyePair(ctx, frontCatEye(palette, eye, leftPupil, cleanRim, unlined, honeyGoldRim),
+      frontCatEye(palette, eye, rightPupil, cleanRim, unlined, honeyGoldRim));
   }
   const cleanMouth = orange && typing && animation === 'reference-v2' && typingPose.typingInkVersion !== 'original';
   const effortMouth = transitionalFace && effort && sharedTypingMouth;
   const orangeMouth = effortMouth && orange && faceConfig.faceBase !== 'solid' && config.coat === 'native' && faceConfig.bodyPattern === 'native'
     && config.nose === 'NO05' && markingLayout !== 'legacy';
   drawCatFaceParts(ctx, faceConfig, markingLayout, transientMouth, effectsAnimation, cleanMouth,
-    legacyNoseOutline, effortMouth && !orangeMouth, effort);
+    legacyNoseOutline, effortMouth && !orangeMouth, effort, patchSkin, inkOverDarkPatch(patches, 151, 139) ?? expressionInk, maskFur);
   if (orangeMouth) ctx.drawImage(imageFor(frontTypingEffectsPath + 'mouth_orange'), 0, 0);
   const pupilPath = breedPath(orange ? 'CC03' : config.palette);
   if (!eyesClosed && orange) {
@@ -1435,11 +1976,26 @@ export function drawCatHead(
   }
   if (effort) {
     const path = (referenceEffects ? referenceTypingPath(effectsAnimation) : typingEffectPath) + 'effort_eyes';
-    const expression = config.palette === 'CC02'
-      ? coloredCatIris(path, '#201B1E') : imageFor(path);
-    ctx.drawImage(expression, 0, 0);
+    const pixel80 = pixel80Keys.has(path);
+    const darkFur = pixel80 && effortFur ? darkFurBehindEffortEyes(effortFur) : undefined;
+    const expression = (side: 0 | 1) => {
+      const x = pixel80 ? effortEyeCenters[side] : side === 0 ? 109 : 192;
+      const defaultInk = pixel80 ? (darkFur?.[side] || blackCoat ? '#A49AA4' : undefined)
+        : config.palette === 'CC02' ? '#201B1E' : undefined;
+      const color = inkOverDarkPatch(patches, x, pixel80 ? 114 : 116) ?? defaultInk;
+      return color ? coloredCatIris(path, color) : imageFor(path);
+    };
+    drawEyePair(ctx, expression(0), expression(1));
   } else if (!closeEyes) {
     drawCatGlints(ctx, config, typing, frame, gaze, scale, hideGlints);
+  }
+  if (petLoveEyes) {
+    const darkFur = effortFur && darkFurBehindEffortEyes(effortFur);
+    const outline = pixel80SharedInk(config, outlineVersion) ?? [75, 46, 34];
+    const ink = '#' + outline.map(channel => channel.toString(16).padStart(2, '0')).join('');
+    const eyes = catPetLove.path + 'eyes';
+    drawEyePair(ctx, coloredCatIris(eyes, darkFur?.[0] ? '#AEA2B0' : ink),
+      coloredCatIris(eyes, darkFur?.[1] ? '#AEA2B0' : ink));
   }
   // New sweat belongs on the forehead, beneath hats and hair clips. Preserve
   // the old shared order when reconstructing older pixel-editor saves.
@@ -1453,6 +2009,7 @@ export function drawCatHead(
     const sweat = Math.floor((frame % catTypingFrameCountFor('shared')) / 3) - 1;
     if (sweat >= 0) ctx.drawImage(imageFor(typingEffectPath + `sweat_${sweat}`), 0, 0);
   }
+  if (maskFur) ctx.globalCompositeOperation = 'source-over';
 }
 
 function copyCatEdits(ctx: CanvasRenderingContext2D, edits: CatPixelEdits) {
@@ -1550,23 +2107,21 @@ function placedHeadMask(mask: Uint8Array, placement: ReturnType<typeof catHeadPl
 
 function catHeadInkGeometry(config: CatRenderConfig, typing: boolean, pose: CatPose): CatInkGeometry {
   const layout = typing ? pose.typingLayout : undefined;
-  const key = `${config.palette}/${config.ear}/${config.accessory}/${pose.earLayout}/${layout}`;
+  const key = `${config.palette}/${earPairKey(config)}/${config.accessory}/${pose.earLayout}/${layout}/${config.calicoCrown}/${config.calicoCrownLayout}/${config.calicoCrownTop}/${config.faceBase}`;
   const cached = headInkCache.get(key);
   if (cached) return cached;
   const base = catLayerAlpha(imageFor(config.palette === 'CC01' ? `${orangePath}head_base` : `${breedPath(config.palette)}head`));
   const ears = catLayerAlpha(frontCatEars(config, pose.earLayout));
-  const shape = catFrontEars[config.ear];
-  // The upright cel also holds the crown. The folded-ear blend guide was
-  // drawn over both those original ears and the replacement silhouette.
-  const earRegions = readBodyPixels(earMaskPath + (shape === 'upright' ? 'folded' : shape));
+  const leftRegion = earOwnership(catEarOnSide(config, 'left'));
+  const rightRegion = earOwnership(catEarOnSide(config, 'right'));
   const accessory = config.accessory === 'A07' ? 'A06' : config.accessory;
   const worn = accessory !== 'A00' ? catLayerAlpha(imageFor(`${orangePath}accessory_${accessory}`)) : undefined;
   const leftEar = new Uint8Array(inkArea), rightEar = new Uint8Array(inkArea), head = new Uint8Array(inkArea);
   for (let index = 0; index < inkArea; index++) {
     const offset = index * 4;
     if (worn?.[index]) head[index] = 1;
-    else if (ears[index] && earRegions[offset] === 255) leftEar[index] = 1;
-    else if (ears[index] && earRegions[offset + 1] === 255) rightEar[index] = 1;
+    else if (ears[index] && leftRegion[offset] === 255) leftEar[index] = 1;
+    else if (ears[index] && rightRegion[offset + 1] === 255) rightEar[index] = 1;
     else if (base[index] || ears[index]) head[index] = 1;
   }
   const placement = catHeadPlacement(typing, 0, layout);
@@ -1582,18 +2137,6 @@ function catHeadInkGeometry(config: CatRenderConfig, typing: boolean, pose: CatP
   if (headInkCache.size >= 24) headInkCache.delete(headInkCache.keys().next().value!);
   headInkCache.set(key, geometry);
   return geometry;
-}
-
-function idlePawAt(x: number, y: number) {
-  // The idle front paws are baked into one cel, with the hind paws and
-  // chest beside them. These cuts run along the shared front-paw outlines.
-  if (y < 252) return;
-  const leftEdge = y < 264 ? 103 : 107;
-  const innerLeft = y < 256 ? 144 : y < 266 ? 149 : 153;
-  const innerRight = y < 256 ? 158 : y < 266 ? 157 : 153;
-  const rightEdge = y < 264 ? 199 : 194;
-  if (x >= leftEdge && x < innerLeft) return 'leftPaw';
-  if (x >= innerRight && x < rightEdge) return 'rightPaw';
 }
 
 function catBodyInkGeometry(
@@ -1624,7 +2167,7 @@ function catBodyInkGeometry(
     // Older flattened arm cels have no paw mask. Give their low hand area
     // an owner when converting a historical editor save to the new format.
     let paw;
-    if (!typing) paw = idlePawAt(x, y);
+    if (!typing) paw = sittingPawAt(x, y);
     else if (armsAlpha?.[index]) {
       const paintedPaw = referencePaws?.[index] ?? (layout === 'legacy'
         ? y >= 180 && x >= 92 && x < 209
@@ -1648,6 +2191,76 @@ function catBodyInkGeometry(
   return geometry;
 }
 
+const patchLimbParts = [
+  ['leftForeleg', 'leftPaw'],
+  ['rightForeleg', 'rightPaw'],
+] as const;
+type FrontPaw = typeof patchLimbParts[number][1];
+type FurPatchGeometry = Partial<Record<FurPatchPart, CatInkSurface>>;
+const furPatchBodyGeometry = new WeakMap<CatInkGeometry, FurPatchGeometry>();
+
+function separatedFurPatchBody(idle: CatInkGeometry): FurPatchGeometry {
+  const cached = furPatchBodyGeometry.get(idle);
+  if (cached) return cached;
+  const trunk = idle.torso?.mask?.slice();
+  if (!trunk) return idle;
+  const left = idle.leftPaw?.mask?.slice() ?? new Uint8Array(inkArea);
+  const right = idle.rightPaw?.mask?.slice() ?? new Uint8Array(inkArea);
+  // The sitting art bakes the forelimbs into the same cel as the breast
+  // and haunches. Assign the fur above each paw along the drawn legs so
+  // torso patterns cannot spill forward over the arms.
+  for (let y = 201; y < 252; y++) {
+    for (let x = 95; x <= 207; x++) {
+      const index = y * CAT_SIZE + x;
+      if (!trunk[index]) continue;
+      const side = sittingForelegAt(x, y);
+      if (!side) continue;
+      trunk[index] = 0;
+      (side === 'leftForeleg' ? left : right)[index] = 1;
+    }
+  }
+  const geometry: FurPatchGeometry = { ...idle, torso: fittedInkSurface(trunk, inkBounds),
+    leftForeleg: fittedInkSurface(left, inkBounds), rightForeleg: fittedInkSurface(right, inkBounds) };
+  furPatchBodyGeometry.set(idle, geometry);
+  return geometry;
+}
+
+function furPatchPaintForPart(
+  config: CatRenderConfig, part: FurPatchPart, guide: Uint8ClampedArray, geometry: FurPatchGeometry,
+): FurPatchPaint {
+  const surface = geometry[part];
+  const patches = part === 'leftForeleg' || part === 'rightForeleg'
+    ? forelegFurPatches(config.furPatches, part) : furPatchesFor(config.furPatches, part);
+  return { patches: surface ? patches : [], guide, surface };
+}
+
+function hasMovingFurPatches(config: CatRenderConfig) {
+  return patchLimbParts.some(([limb, paw]) => forelegFurPatches(config.furPatches, limb).length
+    || furPatchesFor(config.furPatches, paw).length);
+}
+
+function furPatchedMovingPaws(
+  source: CatLayer, guide: CatLayer, config: CatRenderConfig, geometry: CatInkGeometry, pose: CatPose, reverseForeleg = false,
+) {
+  if (!hasMovingFurPatches(config)) return source;
+  const idle = catBodyInkGeometry(config, false, 0, pose, frontCatLayers(config, false, 0, pose));
+  const pixels = outlineGuidePixels(guide);
+  // Raised cels only show the distal paw. Sample that part of the longer
+  // foreleg pattern before the independent sock goes down.
+  return furPatchedLayer(source, ...patchLimbParts.flatMap(([limb, paw]): FurPatchPaint[] => {
+    const surface = geometry[paw];
+    if (!surface) return [];
+    const paint = { guide: pixels, surface, idle: idle[paw]?.bounds, movingPaw: true };
+    const limbPatches = forelegFurPatches(config.furPatches, limb), socks = furPatchesFor(config.furPatches, paw);
+    if (reverseForeleg) return [
+      { ...paint, patches: limbPatches, reverseY: true },
+      { ...paint, patches: socks },
+    ];
+    return [{ ...paint, patches: [...limbPatches, ...socks] }];
+  }));
+}
+
+
 export function catInkGeometry(appearance: CatConfig, typing: boolean, frame: number, pose: CatPose = {}): CatInkGeometry {
   const config = catRenderConfig(appearance, pose.furPatternColors);
   const count = frameCount(appearance, typing ? 'typing' : 'sit', pose.typingAnimation);
@@ -1665,25 +2278,195 @@ export function catInkGeometry(appearance: CatConfig, typing: boolean, frame: nu
   return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers), ...head };
 }
 
+// A surface owns opaque fur only. Its outline evidence comes from the
+// original component art, so black fur and custom colors remain independent.
+function opaqueFurMask(
+  pixels: Uint8ClampedArray, guide: Uint8ClampedArray, native: Uint8ClampedArray,
+  config: CatRenderConfig, keep?: (index: number) => unknown,
+) {
+  const result = new Uint8Array(inkArea);
+  const nativeInk = pixel80CatOutline({ palette: config.palette, coat: 'native' });
+  const adaptiveInk = pixel80CatOutline(config);
+  const rgbEquals = (data: Uint8ClampedArray, i: number, ink: readonly number[]) =>
+    data[i] === ink[0] && data[i + 1] === ink[1] && data[i + 2] === ink[2];
+  for (let index = 0; index < inkArea; index++) {
+    const i = index * 4;
+    if (pixels[i + 3] !== 255 || keep?.(index) || isOutline(guide, i)
+      || (native[i + 3] && rgbEquals(native, i, nativeInk)) || rgbEquals(pixels, i, adaptiveInk)) continue;
+    // The source's very edge is locked even where a breed has its own
+    // silhouette and the shared outline guide has no corresponding pixel.
+    if (index % CAT_SIZE === 0 || index % CAT_SIZE === CAT_SIZE - 1
+      || !pixels[i - 4 + 3] || !pixels[i + 4 + 3]
+      || !pixels[i - CAT_SIZE * 4 + 3] || !pixels[i + CAT_SIZE * 4 + 3]) continue;
+    result[index] = 1;
+  }
+  return result;
+}
+
+function restrictFurParts(
+  geometry: CatInkGeometry, parts: readonly (keyof CatInkGeometry)[], allowed: Uint8Array,
+  hidden?: Uint8Array,
+): CatInkGeometry {
+  const result: CatInkGeometry = {};
+  for (const part of parts) {
+    const surface = geometry[part];
+    if (surface?.mask) result[part] = { bounds: surface.bounds,
+      mask: surface.mask.map((pixel, i) => pixel && allowed[i] && !hidden?.[i] ? 1 : 0) };
+  }
+  return result;
+}
+
+const photoHeadGeometry = new Map<string, CatInkGeometry>();
+
+function photoHeadFur(
+  config: CatRenderConfig, typing: boolean, frame: number, gaze: Gaze, pose: CatPose, closeEyes = false, petLoveEyes = false,
+) {
+  const placement = catHeadPlacement(typing, frame, pose.typingLayout);
+  const key = JSON.stringify([config, typing, typing ? frame : catHeadEye(config, false, frame), gaze, closeEyes, petLoveEyes,
+    pose.earLayout, pose.typingLayout, pose.markingLayout, pose.outlineVersion, pose.legacyNoseOutline,
+    pose.typingAnimation, pose.typingMode, pose.typingEffects, pose.typingInkVersion, pose.typingMouthVersion]);
+  const cached = photoHeadGeometry.get(key);
+  if (cached) return cached;
+  const { ctx } = makeLayer(CAT_SIZE);
+  drawCatHead(ctx, config, typing, frame, gaze, { ...pose, closeEyes, petLoveEyes, scale: placement.scale, maskFur: true });
+  const { data } = ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE);
+  const allowed = new Uint8Array(inkArea);
+  for (let i = 0; i < inkArea; i++) allowed[i] = data[i * 4 + 3] === 255 ? 1 : 0;
+  const geometry = restrictFurParts(catHeadInkGeometry(config, typing, pose), headInkParts, placedHeadMask(allowed, placement));
+  if (photoHeadGeometry.size >= 80) photoHeadGeometry.delete(photoHeadGeometry.keys().next().value!);
+  photoHeadGeometry.set(key, geometry);
+  return geometry;
+}
+
+const photoBodyMasks = new WeakMap<CatLayer, Uint8Array>();
+const photoBodyGeometry = new WeakMap<CatLayer, WeakMap<CatInkGeometry, CatInkGeometry>>();
+
+function photoBodyFur(
+  config: CatRenderConfig, typing: boolean, frame: number, pose: CatPose, layers: ReturnType<typeof frontCatLayers>,
+) {
+  const { body, frontPaws, historicalBody } = layers;
+  // New photo results use the front-facing body and the separate moving
+  // paws. Historical typing cels mix fur and props and have no such contract.
+  if (historicalBody) return {};
+  const geometry = catBodyInkGeometry(config, typing, frame, pose, layers);
+  let cache = photoBodyGeometry.get(body);
+  if (!cache) photoBodyGeometry.set(body, cache = new WeakMap());
+  const cached = cache.get(geometry);
+  if (cached) return cached;
+  let allowed = photoBodyMasks.get(body);
+  if (!allowed) {
+    const native = readBodyPixels((config.palette === 'CC01' ? orangePath : breedPath(config.palette)) + 'body');
+    const stock = bodyGuide('body');
+    const data = outlineGuidePixels(body);
+    allowed = opaqueFurMask(data, stock, native, config);
+    if (config.tail !== 'CT01' && geometry.tail?.mask) {
+      const path = (Object.hasOwn(sharedTailStyles, config.tail) ? tailArtPaths[layers.tailArtVersion] : tailPath)
+        + 'idle_' + config.tail;
+      const raw = readBodyPixels(path);
+      const tail = opaqueFurMask(data, raw, raw, config);
+      for (let i = 0; i < inkArea; i++) if (geometry.tail.mask[i]) allowed[i] = tail[i]!;
+    }
+    photoBodyMasks.set(body, allowed);
+  }
+  const stationary = restrictFurParts(geometry, frontPaws ? ['torso', 'tail'] : bodyInkParts, allowed);
+  const result = frontPaws ? { ...stationary, ...photoMovingPawFur(geometry, frontPaws, config) } : stationary;
+  cache.set(geometry, result);
+  return result;
+}
+
+const photoPawMasks = new WeakMap<CatLayer, Uint8Array>();
+
+function photoMovingPawFur(geometry: CatInkGeometry, raw: CatLayer, config: CatRenderConfig) {
+  let allowed = photoPawMasks.get(raw);
+  if (!allowed) {
+    const data = outlineGuidePixels(raw);
+    const stock = { ...config, palette: 'CC01' as const, coat: 'native' as const };
+    allowed = opaqueFurMask(data, data, data, stock);
+    photoPawMasks.set(raw, allowed);
+  }
+  return restrictFurParts(geometry, ['leftPaw', 'rightPaw'], allowed);
+}
+
+// Use the same part masks as playback, subtracting what is above each
+// surface in the captured pose. Bounds remain stable under occlusion.
+export function visiblePhotoFur(
+  appearance: CatConfig, typing: boolean, frame: number, gaze: Gaze, pose: CatPose,
+): CatInkGeometry {
+  const config = catRenderConfig(appearance, pose.furPatternColors);
+  const layers = frontCatLayers(config, typing, frame, pose);
+  const placement = catHeadPlacement(typing, frame, pose.typingLayout);
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  if (typing) {
+    ctx.translate(placement.x, placement.y);
+    ctx.scale(placement.scale, placement.scale);
+  }
+  drawCatHead(ctx, config, typing, frame, gaze, { ...pose, scale: placement.scale });
+  const headCover = catLayerAlpha(canvas);
+  const head = photoHeadFur(config, typing, frame, gaze, pose);
+  const body = photoBodyFur(config, typing, frame, pose, layers);
+  const pawCover = layers.frontPaws && catLayerAlpha(layers.frontPaws);
+  const upper = makeLayer(CAT_SIZE);
+  if (layers.laptop) upper.ctx.drawImage(layers.laptop, 0, 0);
+  if (typing && usesFallingTyping(layers.animation) && layers.mode === 'frenzy' && pose.typingEffects !== false) {
+    const heat = pose.frenzyHeatFrame;
+    if (heat === undefined) drawFallingTypingCel(upper.ctx, 'air', frame);
+    else {
+      const steam = heat < frenzySteamLoopStart ? heat : frenzySteamLoopStart + frame % frontTyping.pawFrames;
+      drawFallingTypingCel(upper.ctx, 'steam', steam);
+      drawFallingTypingCel(upper.ctx, 'sparks', frame);
+    }
+  }
+  const upperCover = catLayerAlpha(upper.canvas);
+  const hidden = {
+    head: upperCover.map((pixel, i) => pixel || pawCover?.[i] ? 1 : 0),
+    body: upperCover.map((pixel, i) => pixel || pawCover?.[i] || headCover[i] ? 1 : 0),
+    paws: pawCover ? upperCover : upperCover.map((pixel, i) => pixel || headCover[i] ? 1 : 0),
+  };
+  const all = new Uint8Array(inkArea).fill(1);
+  return {
+    ...restrictFurParts(body, ['torso', 'tail'], all, hidden.body),
+    ...restrictFurParts(body, ['leftPaw', 'rightPaw'], all, hidden.paws),
+    ...restrictFurParts(head, headInkParts, all, hidden.head),
+  };
+}
+
+function drawPetLoveWarp(ctx: CanvasRenderingContext2D, layer: CatLayer,
+  warp: (source: ImageData, target: ImageData) => void,
+) {
+  const source = makeLayer(80);
+  source.ctx.drawImage(layer, 0, 0, 80, 80);
+  const { canvas, ctx: target } = makeLayer(80);
+  const pixels = target.createImageData(80, 80);
+  warp(source.ctx.getImageData(0, 0, 80, 80), pixels);
+  target.putImageData(pixels, 0, 0);
+  ctx.drawImage(canvas, 0, 0, CAT_SIZE, CAT_SIZE);
+}
+
 function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, typing: boolean, frame: number, gaze: Gaze, pose: CatPose,
-  closeEyes = false,
+  closeEyes = false, liftedPaws: readonly FrontPaw[] = [],
 ) {
   const layers = frontCatLayers(config, typing, frame, pose);
   const { body, arms, frontPaws, laptop, raisedPaws, mode, animation, outlineVersion, laptopVersion } = layers;
   const layout = pose.typingLayout;
   const custom = pose.custom;
   const ink = custom?.ink;
+  const furOnly = ink?.scope === 'photo-fur';
   const legacyCustom = ink ? undefined : custom;
+  const petLove = typing ? undefined : catPetLovePose(pose.petLoveFrame);
+  const movingHead = Boolean(petLove?.drop || petLove?.squint);
+  const shoulders = petLove?.shoulders ?? 0;
+  closeEyes ||= Boolean(petLove?.squint);
   const effort = closeEyes || hasEffortEyes(typing, frame, { ...pose, typingMode: mode });
   const sameIdle = !typing && legacyCustom?.source.action === 'sit';
   const placement = catHeadPlacement(typing, frame, layout);
   const tracking = legacyCustom !== undefined && gaze.space === 'pointer';
   const edits = (tracking || effort ? legacyCustom?.following : undefined) ?? legacyCustom?.paint;
-  const headEdits = typing ? edits?.typingHead : edits?.idleHead;
-  const torsoEdits = typing ? legacyCustom?.typingTorso : legacyCustom?.idleTorso;
+  const headEdits = typing ? edits?.typingHead : edits?.idleHead ?? (movingHead && sameIdle ? edits?.typingHead : undefined);
+  const torsoEdits = typing ? legacyCustom?.typingTorso
+    : legacyCustom?.idleTorso ?? (movingHead && sameIdle ? legacyCustom?.typingTorso : undefined);
   const fullEdits = edits?.full;
   const headOptions = {
-    closeEyes, scale: placement.scale, earLayout: pose.earLayout,
+    closeEyes, petLoveEyes: petLove?.squint, scale: placement.scale, earLayout: pose.earLayout,
     markingLayout: pose.markingLayout, legacyNoseOutline: pose.legacyNoseOutline, outlineVersion,
     hideGlints: tracking ? [true, true] as const : legacyCustom?.fixedGlints,
     typingMode: mode, typingAnimation: animation, typingEffects: pose.typingEffects,
@@ -1704,17 +2487,43 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     ctx.translate(-160, -278);
   }
 
+  const authoredTorsoPart = !layers.historicalBody && config.bodyBase === 'native'
+    ? catPhotoPartFor(config.photoCoatParts, 'torso', config.palette, config.coat) : undefined;
+  const furBody = furOnly && bodyInkParts.some(part => ink.parts[part])
+    ? photoBodyFur(config, typing, frame, pose, layers) : undefined;
+  const swing = legacyCustom?.idleTorso || (sameIdle && fullEdits) ? 0 : petLove?.sweep ?? 0;
+  const paintTail = swing && ink?.parts.tail ? (tail: CatLayer) => {
+    const edited = makeLayer(CAT_SIZE);
+    edited.ctx.drawImage(tail, 0, 0);
+    applyCatInk(edited.ctx, ink, furBody ?? catBodyInkGeometry(config, typing, frame, pose, layers), ['tail']);
+    return edited.canvas;
+  } : undefined;
+  const movingBody = swing ? bodyWithSelectedTail(layers.bodyBase, config, false, layout, outlineVersion,
+    layers.tailArtVersion, swing, paintTail) : body;
+  const paintedBody = withAuthoredCoatPart(movingBody, authoredTorsoPart ? catPhotoPartPath + authoredTorsoPart : undefined);
+  const patchedBody = config.furPatches?.length ? (() => {
+    const idle = catBodyInkGeometry(config, false, 0, pose, frontCatLayers(config, false, 0, pose));
+    const geometry = separatedFurPatchBody(idle);
+    const guide = bodyGuide(layers.historicalBody ? 'typing_body' : 'body');
+    const torso = furPatchPaintForPart(config, 'torso', guide, geometry);
+    return furPatchedLayer(paintedBody, { ...torso, neck: connectedNeckFur(config.furPatches) },
+      ...patchLimbParts.flatMap(parts => liftedPaws.includes(parts[1]) ? []
+        : parts.map(part => furPatchPaintForPart(config, part, guide, geometry))));
+  })() : paintedBody;
+
   if (fallingLetters) drawFallingTypingCel(ctx, mode, frame);
+  const bentBody = shoulders ? makeLayer(CAT_SIZE) : undefined;
+  const bodyTarget = bentBody?.ctx ?? ctx;
   if (legacyCustom && torsoEdits) {
     const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
-    layer.drawImage(body, 0, 0);
+    layer.drawImage(patchedBody, 0, 0);
     copyCatEdits(layer, torsoEdits);
     // Pose-specific arms and props stay above the stationary torso.
     layer.globalCompositeOperation = 'destination-in';
     layer.drawImage(body, 0, 0);
-    ctx.drawImage(canvas, 0, 0);
+    bodyTarget.drawImage(canvas, 0, 0);
   } else {
-    ctx.drawImage(body, 0, 0);
+    bodyTarget.drawImage(patchedBody, 0, 0);
   }
   if (arms && animation === 'reference-v2' && legacyCustom && torsoEdits) {
     // This atlas contains stationary forearm fur as well as the moving
@@ -1729,25 +2538,41 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     layer.drawImage(arms, 0, 0);
     layer.globalCompositeOperation = 'destination-out';
     layer.drawImage(paws, 0, 0);
-    ctx.drawImage(canvas, 0, 0);
+    bodyTarget.drawImage(canvas, 0, 0);
 
     clearCustomLayer(legacyCustom);
     layer.drawImage(arms, 0, 0);
     layer.globalCompositeOperation = 'destination-in';
     layer.drawImage(paws, 0, 0);
-    ctx.drawImage(canvas, 0, 0);
+    bodyTarget.drawImage(canvas, 0, 0);
   } else if (arms && !frontPaws) {
-    ctx.drawImage(arms, 0, 0);
+    bodyTarget.drawImage(arms, 0, 0);
   }
-  const bodyParts = frontPaws ? ['torso', 'tail'] as const : bodyInkParts;
+  const bodyParts = swing ? ['torso', 'leftPaw', 'rightPaw'] as const
+    : frontPaws ? ['torso', 'tail'] as const : bodyInkParts;
   if (ink && bodyParts.some(part => ink.parts[part])) {
-    applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), bodyParts);
+    const parts = furOnly ? bodyParts.filter(part => part !== 'leftPaw' && part !== 'rightPaw' || !liftedPaws.includes(part)) : bodyParts;
+    applyCatInk(bodyTarget, ink, furBody ?? catBodyInkGeometry(config, typing, frame, pose, layers), parts);
+  }
+
+  if (bentBody) {
+    drawPetLoveWarp(ctx, bentBody.canvas, (source, target) => warpCatPetLoveShoulders(source, target, shoulders));
   }
 
   ctx.save();
   const headX = typing ? placement.x : 2 * Math.round(stretch * 7);
   const headY = typing ? placement.y : 0;
-  if (legacyCustom && headEdits) {
+  if (petLove && movingHead) {
+    const { canvas, ctx: head } = makeLayer(CAT_SIZE);
+    drawCatHead(head, config, false, frame, gaze, headOptions);
+    if (headEdits) copyCatEdits(head, headEdits);
+    if (ink && headInkParts.some(part => ink.parts[part])) {
+      const geometry = furOnly ? photoHeadFur(config, false, frame, gaze, pose, closeEyes, petLove.squint)
+        : catHeadInkGeometry(config, false, pose);
+      applyCatInk(head, ink, geometry, headInkParts);
+    }
+    drawPetLoveWarp(ctx, canvas, (source, target) => warpCatPetLoveHead(source, target, petLove.drop, petLove.crease));
+  } else if (legacyCustom && headEdits) {
     const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
     layer.translate(headX, headY);
     layer.scale(placement.scale, placement.scale);
@@ -1762,12 +2587,14 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     drawCatHead(ctx, config, typing, frame, gaze, headOptions);
   }
   ctx.restore();
-  if (ink && headInkParts.some(part => ink.parts[part])) {
+  if (!movingHead && ink && headInkParts.some(part => ink.parts[part])) {
     // A pixel erased from the visible head must remain transparent at the
     // neckline where arms overlap it. Only the head owns the saved erasure.
     ctx.save();
     if (!typing) ctx.translate(headX, 0);
-    applyCatInk(ctx, ink, catHeadInkGeometry(config, typing, pose), headInkParts);
+    const geometry = furOnly ? photoHeadFur(config, typing, frame, gaze, pose, closeEyes)
+      : catHeadInkGeometry(config, typing, pose);
+    applyCatInk(ctx, ink, geometry, headInkParts);
     ctx.restore();
   }
   if (laptop) {
@@ -1780,9 +2607,11 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
       }
     };
     if (frontPaws && arms) {
-      ctx.drawImage(arms, 0, 0);
+      const pawLayer = config.furPatches?.length
+        ? furPatchedMovingPaws(arms, frontPaws, config, catBodyInkGeometry(config, typing, frame, pose, layers), pose) : arms;
+      ctx.drawImage(pawLayer, 0, 0);
       if (ink?.parts.leftPaw || ink?.parts.rightPaw) {
-        applyCatInk(ctx, ink, catBodyInkGeometry(config, typing, frame, pose, layers), ['leftPaw', 'rightPaw']);
+        applyCatInk(ctx, ink, furBody ?? catBodyInkGeometry(config, typing, frame, pose, layers), ['leftPaw', 'rightPaw']);
       }
     }
     if (raisedPaws) ctx.drawImage(raisedPaws, 0, 0);
@@ -1833,13 +2662,16 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     if (isFrontTyping(animation) && !fallingLetters && pose.typingEffects !== false) {
       drawTypingRegion(ctx, frontTyping.path + 'letters', frontTyping.region, frame);
     }
-  } else if (sameIdle && fullEdits) {
+  } else if (sameIdle && fullEdits && !movingHead) {
     ctx.save();
     ctx.translate(0, -catHeadPlacement(false, legacyCustom.source.frame).y);
     copyCatEdits(ctx, fullEdits);
     ctx.restore();
   }
-  if (tracking && !effort) {
+  if (petLove) {
+    drawAtlasRegion(ctx, imageFor(catPetLove.path + 'hearts'), catPetLove.hearts, petLove.frame, catPetLove.columns);
+  }
+  if (tracking && !effort && !movingHead) {
     ctx.translate(headX, headY);
     ctx.scale(placement.scale, placement.scale);
     // Paint the moving reflection above the custom iris while respecting erasures.
@@ -1973,7 +2805,9 @@ function drawBottomCatEdgeHead(ctx: CanvasRenderingContext2D, config: CatRenderC
     ...pose, hideGlints: tracking && legacy ? [true, true] : legacy?.fixedGlints,
   });
   if (ink && headInkParts.some(part => ink.parts[part])) {
-    applyCatInk(head.ctx, ink, catHeadInkGeometry(config, false, pose), headInkParts);
+    const geometry = ink.scope === 'photo-fur' ? photoHeadFur(config, false, frame, gaze, pose)
+      : catHeadInkGeometry(config, false, pose);
+    applyCatInk(head.ctx, ink, geometry, headInkParts);
   } else if (legacy) {
     const edits = (tracking ? legacy.following : undefined) ?? legacy.paint;
     const headEdits = edits.idleHead ?? edits.typingHead;
@@ -2023,13 +2857,16 @@ function drawCatEdge(ctx: CanvasRenderingContext2D, config: CatRenderConfig, fra
   for (const paw of paws) {
     const layers = frontCatLayers(config, true, paw.frame, pawPose);
     if (!layers.arms || !layers.frontPaws) continue;
-    let sprite = peekPawCrop(layers.arms, layers.frontPaws, paw.x);
+    const arm = config.furPatches?.length
+      ? furPatchedMovingPaws(layers.arms, layers.frontPaws, config, catBodyInkGeometry(config, true, paw.frame, pawPose, layers), pawPose)
+      : layers.arms;
+    let sprite = peekPawCrop(arm, layers.frontPaws, paw.x);
     if (ink?.parts[paw.part]) {
       const layer = makeLayer(peekPawWidth, peekPawHeight);
       layer.ctx.drawImage(sprite, 0, 0);
       layer.ctx.translate(-paw.x, -peekPawTop);
       const geometry = catBodyInkGeometry(config, true, paw.frame, pawPose, layers);
-      applyCatInk(layer.ctx, ink, geometry, [paw.part]);
+      applyCatInk(layer.ctx, ink, ink.scope === 'photo-fur' ? photoMovingPawFur(geometry, layers.frontPaws, config) : geometry, [paw.part]);
       sprite = layer.canvas;
     }
     ctx.save();
@@ -2041,15 +2878,80 @@ function drawCatEdge(ctx: CanvasRenderingContext2D, config: CatRenderConfig, fra
 }
 
 let listeningScratch: ReturnType<typeof makeLayer> | undefined;
-let listeningOutput: ImageData | undefined;
 let listeningAppearance = '';
 let listeningCustom: CatCustomization | undefined;
 let listeningBase: Uint32Array | undefined;
+const listeningFrames = new Map<number, {canvas: HTMLCanvasElement; fur: Uint8ClampedArray}>();
 
-function drawListeningLayer(ctx: CanvasRenderingContext2D, part: keyof typeof catListening.regions, frame: number, darkEyes = false) {
+const headphonePaintShades = {
+  headband: [null, 0x4b79aa, 0x71a0cf, 0xa6c9e6],
+  earcups: [0x395d87, 0x4b79aa, 0x719dcf, 0xa0c4e2],
+} as const;
+
+function coloredHeadphoneAtlas(part: keyof typeof headphonePaintShades, color: CatConfig['headphoneColor']) {
   const path = catListening.path + part;
-  const layer = part === 'closed_eyes' && darkEyes ? coloredCatIris(path, '#201B1E') : imageFor(path);
+  const source = imageFor(path);
+  if (color === 'natural') return source;
+  const key = `${path}/${color}`;
+  const cached = tinted.get(key);
+  if (cached) return cached;
+  const { canvas, ctx } = makeLayer(source.naturalWidth, source.naturalHeight);
+  ctx.drawImage(source, 0, 0);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const replacements = catHeadphoneColors[color].shades.map(hex => Number.parseInt(hex.slice(1), 16));
+  const shades: readonly (number | null)[] = headphonePaintShades[part];
+  const { data } = image;
+  for (let i = 0; i < data.length; i += 4) {
+    if (!data[i + 3]) continue;
+    const original = (data[i]! << 16) | (data[i + 1]! << 8) | data[i + 2]!;
+    const replacement = replacements[shades.indexOf(original)];
+    if (replacement === undefined) continue;
+    data[i] = replacement >>> 16;
+    data[i + 1] = (replacement >>> 8) & 255;
+    data[i + 2] = replacement & 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  tinted.set(key, canvas);
+  return canvas;
+}
+
+function drawListeningLayer(ctx: CanvasRenderingContext2D, part: keyof typeof catListening.regions, frame: number, config: CatRenderConfig) {
+  const path = catListening.path + part;
+  const layer = part === 'earcups' || part === 'headband' ? coloredHeadphoneAtlas(part, config.headphoneColor)
+    : part === 'closed_eyes' && config.palette === 'CC02' ? coloredCatIris(path, '#201B1E') : imageFor(path);
   drawAtlasRegion(ctx, layer, catListening.regions[part], frame, catListening.columns);
+}
+
+const listeningEyePixels = new Map<number, [number[], number[]]>();
+
+function drawPixel80ListeningEyes(ctx: CanvasRenderingContext2D, frame: number, fur: Uint8ClampedArray) {
+  const path = catListening.path + 'closed_eyes';
+  const source = imageFor(path);
+  const {x, y, width, height} = catListening.regions.closed_eyes;
+  const sx = frame % catListening.columns * width;
+  const sy = Math.floor(frame / catListening.columns) * height;
+  const half = width / 2;
+  let eyes = listeningEyePixels.get(frame);
+  if (!eyes) {
+    const {ctx: mask} = makeLayer(width, height);
+    mask.drawImage(source, sx, sy, width, height, 0, 0, width, height);
+    const {data} = mask.getImageData(0, 0, width, height);
+    eyes = [[], []];
+    for (let row = 0; row < height; row++) {
+      for (let column = 0; column < width; column++) {
+        if (data[(row * width + column) * 4 + 3]) {
+          eyes[column < half ? 0 : 1].push(((row + y) * CAT_SIZE + column + x) * 4);
+        }
+      }
+    }
+    listeningEyePixels.set(frame, eyes);
+  }
+  for (const [side, pixels] of eyes.entries()) {
+    const dark = pixels.filter(i => fur[i + 3] && 3 * fur[i]! + 6 * fur[i + 1]! + fur[i + 2]! < 740).length;
+    const layer = dark > pixels.length / 3 ? coloredCatIris(path, '#AA9DA8') : source;
+    const offset = side * half;
+    ctx.drawImage(layer, sx + offset, sy, half, height, x + offset, y, half, height);
+  }
 }
 
 function drawCatListening(ctx: CanvasRenderingContext2D, config: CatRenderConfig, frame: number, pose: CatPose) {
@@ -2060,6 +2962,7 @@ function drawCatListening(ctx: CanvasRenderingContext2D, config: CatRenderConfig
     listeningAppearance = appearance;
     listeningCustom = custom;
     listeningBase = undefined;
+    listeningFrames.clear();
   }
   const scratch = listeningScratch ??= makeLayer(CAT_SIZE);
   if (!listeningBase) {
@@ -2070,22 +2973,32 @@ function drawCatListening(ctx: CanvasRenderingContext2D, config: CatRenderConfig
     drawCatFront(context, config, false, 0, noGaze, basePose, true);
     listeningBase = new Uint32Array(context.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data.buffer);
   }
-  const output = listeningOutput ??= new ImageData(CAT_SIZE, CAT_SIZE);
-  warpListeningPixels(listeningBase, new Uint32Array(output.data.buffer), frame);
-  scratch.ctx.putImageData(output, 0, 0);
+  const pixel80 = pixel80Keys.has(catListening.path + 'closed_eyes');
+  let painted = listeningFrames.get(frame);
+  if (!painted) {
+    const layer = makeLayer(CAT_SIZE);
+    const output = layer.ctx.createImageData(CAT_SIZE, CAT_SIZE);
+    warpListeningPixels(listeningBase, new Uint32Array(output.data.buffer), frame, pixel80);
+    layer.ctx.putImageData(output, 0, 0);
+    painted = {canvas: layer.canvas, fur: output.data};
+    listeningFrames.set(frame, painted);
+  }
 
   ctx.save();
   ctx.resetTransform();
-  drawListeningLayer(ctx, 'notes', frame);
-  drawListeningLayer(ctx, 'headband', frame);
-  ctx.drawImage(scratch.canvas, 0, 0);
-  drawListeningLayer(ctx, 'closed_eyes', frame, config.palette === 'CC02');
-  drawListeningLayer(ctx, 'earcups', frame);
+  drawListeningLayer(ctx, 'notes', frame, config);
+  drawListeningLayer(ctx, 'headband', frame, config);
+  ctx.drawImage(painted.canvas, 0, 0);
+  if (pixel80) drawPixel80ListeningEyes(ctx, frame, painted.fur);
+  else drawListeningLayer(ctx, 'closed_eyes', frame, config);
+  drawListeningLayer(ctx, 'earcups', frame, config);
   ctx.restore();
 }
 
 const fileActionDrawing = new Map<string, HTMLCanvasElement>();
 const fileActionInk = new WeakMap<HTMLCanvasElement, CatInkGeometry>();
+const fileActionSleeves = new WeakMap<HTMLCanvasElement, CatInkGeometry>();
+const sittingSleeves = new WeakMap<CatInkSurface, CatInkBounds>();
 const fileActionArmColors = new WeakMap<CatLayer, {
   paint: ReturnType<typeof createTypingArmPainter>;
   frames: WeakMap<HTMLCanvasElement, HTMLCanvasElement>;
@@ -2118,39 +3031,113 @@ function coloredFileActionArms(source: HTMLCanvasElement, body: CatLayer, config
   return outlinedCatLayer(colored, source, config, outline);
 }
 
+function fileActionPartGeometry(source: HTMLCanvasElement) {
+  const cached = fileActionInk.get(source);
+  if (cached) return cached;
+  const mask = catLayerAlpha(source);
+  const geometry = {
+    leftPaw: fittedInkSurface(mask.map((pixel, index) => index % CAT_SIZE < 150 ? pixel : 0)),
+    rightPaw: fittedInkSurface(mask.map((pixel, index) => index % CAT_SIZE >= 150 ? pixel : 0)),
+  };
+  fileActionInk.set(source, geometry);
+  return geometry;
+}
+
+function fileActionSleeveGeometry(source: HTMLCanvasElement, paws: CatInkGeometry, raised: boolean) {
+  const cached = fileActionSleeves.get(source);
+  if (cached) return cached;
+  const arms = fileActionPartGeometry(source);
+  const geometry: CatInkGeometry = {};
+  for (const [, side] of patchLimbParts) {
+    const arm = arms[side], paw = paws[side]?.bounds;
+    if (!arm) continue;
+    const { x, y, width, height } = arm.bounds;
+    // The overlap between the two cels is hidden by the paw. Project the
+    // sleeve up to that joint, measuring from the shoulder in either pose.
+    const joint = paw && (raised ? paw.y + paw.height * 0.75 : paw.y + paw.height * 0.25);
+    const shoulder = raised ? y + height : y;
+    const reach = Math.max(4, joint === undefined ? height : raised ? shoulder - joint : joint - shoulder);
+    geometry[side] = { mask: arm.mask, bounds: { x, y: raised ? shoulder - reach : shoulder, width, height: reach } };
+  }
+  fileActionSleeves.set(source, geometry);
+  return geometry;
+}
+
+function furPatchedFileActionArms(
+  source: CatLayer, guide: HTMLCanvasElement, config: CatRenderConfig, paws: CatInkGeometry, pose: CatPose, raised: boolean,
+) {
+  const idle = catBodyInkGeometry(config, false, 0, pose, frontCatLayers(config, false, 0, pose));
+  const sleeves = fileActionSleeveGeometry(guide, paws, raised);
+  const pixels = outlineGuidePixels(guide);
+  return furPatchedLayer(source, ...patchLimbParts.flatMap(([limb, side]): FurPatchPaint[] => {
+    const surface = sleeves[side], base = idle[side];
+    const patches = forelegFurPatches(config.furPatches, limb);
+    if (!surface || !base || !patches.length) return [];
+    let sleeve = sittingSleeves.get(base);
+    if (!sleeve) {
+      const { x, y, width } = base.bounds;
+      sleeve = { x, y: 201, width, height: y - 201 };
+      sittingSleeves.set(base, sleeve);
+    }
+    return [{ patches, guide: pixels, surface, idle: sleeve, reverseY: raised }];
+  }));
+}
+
 function drawCatFileAction(ctx: CanvasRenderingContext2D, config: CatRenderConfig, { kind, frame }: CatFileActionPose, pose: CatPose) {
   const asset = catFileActions[kind];
   const closed = asset.closedFrames.includes(frame);
   const appearance = closed ? { ...config, mouth: 'CN08' as const } : config;
-  drawCatFront(ctx, appearance, false, 0, noGaze, pose, closed);
+  const frontPaws = fileActionCel(kind, 'paws', frame);
+  const rawArms = fileActionCel(kind, 'arms', frame);
+  const ink = pose.custom?.ink;
+  const hasPawPatches = hasMovingFurPatches(config);
+  const geometry = ink?.parts.leftPaw || ink?.parts.rightPaw || hasPawPatches
+    ? fileActionPartGeometry(frontPaws) : undefined;
+  // Remove the resting projection of a lifted limb so the same patch
+  // doesn't show twice along the sides of the prop.
+  const liftedPaws = geometry && (hasPawPatches || ink?.scope === 'photo-fur') ? patchLimbParts.flatMap(([, side]) =>
+    geometry[side] || fileActionPartGeometry(rawArms)[side] ? [side] : []) : [];
+  drawCatFront(ctx, appearance, false, 0, noGaze, pose, closed, liftedPaws);
 
   const outline = pose.outlineVersion ?? 'adaptive';
   const path = config.palette === 'CC01' ? orangePath : breedPath(config.palette);
   const body = frontBodyLayer(path, 'body', config, undefined, outline);
-  const frontPaws = fileActionCel(kind, 'paws', frame);
   const paws = coloredFrontPaws(frontPaws, body, config, outline);
+  const arms = coloredFileActionArms(rawArms, body, config, outline);
+  const raised = kind === 'shredder';
+  const propsPath = asset.path + 'props';
+  const coarseProps = pixel80Keys.has(propsPath);
+  const props = imageFor(propsPath);
   ctx.save();
   ctx.resetTransform();
-  if (closed) drawListeningLayer(ctx, 'closed_eyes', 0, config.palette === 'CC02');
-  ctx.drawImage(coloredFileActionArms(fileActionCel(kind, 'arms', frame), body, config, outline), 0, 0);
-  drawAtlasRegion(ctx, imageFor(asset.path + 'props'), asset.regions.props, frame, asset.columns);
-  const ink = pose.custom?.ink;
-  if (ink?.parts.leftPaw || ink?.parts.rightPaw) {
-    let geometry = fileActionInk.get(frontPaws);
-    if (!geometry) {
-      const mask = catLayerAlpha(frontPaws);
-      geometry = {
-        leftPaw: fittedInkSurface(mask.map((pixel, index) => index % CAT_SIZE < 150 ? pixel : 0)),
-        rightPaw: fittedInkSurface(mask.map((pixel, index) => index % CAT_SIZE >= 150 ? pixel : 0)),
-      };
-      fileActionInk.set(frontPaws, geometry);
-    }
+  if (closed) {
+    if (coarseProps) drawPixel80ListeningEyes(ctx, 0, ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data);
+    else drawListeningLayer(ctx, 'closed_eyes', 0, config);
+  }
+  ctx.drawImage(geometry && hasPawPatches ? furPatchedFileActionArms(arms, rawArms, config, geometry, pose, raised) : arms, 0, 0);
+  drawAtlasRegion(ctx, props, asset.regions.props, frame, asset.columns);
+  if (geometry) {
     const { canvas, ctx: pawLayer } = makeLayer(CAT_SIZE);
-    pawLayer.drawImage(paws, 0, 0);
-    applyCatInk(pawLayer, ink, geometry, ['leftPaw', 'rightPaw']);
+    pawLayer.drawImage(hasPawPatches ? furPatchedMovingPaws(paws, frontPaws, config, geometry, pose, raised) : paws, 0, 0);
+    if (ink) {
+      const paint = ink.scope === 'photo-fur' ? photoMovingPawFur(geometry, frontPaws, config) : geometry;
+      applyCatInk(pawLayer, ink, paint, ['leftPaw', 'rightPaw']);
+    }
     ctx.drawImage(canvas, 0, 0);
   } else {
     ctx.drawImage(paws, 0, 0);
+  }
+  const inFront = kind === 'shredder' || (kind === 'zip' && frame >= 3 && frame <= 10)
+    || (kind === 'convert' && ((frame >= 2 && frame <= 6) || frame === 14));
+  if (coarseProps && inFront) {
+    // Paws overlap the sheet, while the near edge of the prop conceals
+    // their lowest pixels as they press down, including custom paw ink.
+    ctx.beginPath();
+    if (kind === 'shredder') ctx.rect(84, 208, 132, 52);
+    else if (kind === 'zip') ctx.rect(84, 240, 136, 16);
+    else ctx.rect(84, 220, 136, 20);
+    ctx.clip();
+    drawAtlasRegion(ctx, props, asset.regions.props, frame, asset.columns);
   }
   ctx.restore();
 }
@@ -2187,6 +3174,8 @@ export function render(canvas: HTMLCanvasElement, config: PetConfig, action: Act
         ctx.scale(-1, 1);
       }
       ctx.drawImage(left.canvas, 0, 0, SIZE, SIZE);
+    } else if (config.frame === 'CAT' && action === 'sit' && catPetLovePose(catPose.petLoveFrame)) {
+      drawCatFront(ctx, catRenderConfig(config, catPose.furPatternColors), false, 0, gaze, { ...catPose, stretch: undefined });
     } else if (config.frame === 'CAT' && action === 'sit' && catPose.fileAction) {
       drawCatFileAction(ctx, catRenderConfig(config, catPose.furPatternColors), catPose.fileAction, catPose);
     } else if (config.frame === 'CAT' && action === 'sit' && catPose.jelly) {

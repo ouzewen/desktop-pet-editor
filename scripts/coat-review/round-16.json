@@ -1,0 +1,42 @@
+{
+  "id": "round-16",
+  "label": "第 16 轮 · 白下巴与白胸的边界",
+  "groups": [
+    {
+      "id": "chin-shadow",
+      "label": "白下巴 · 胸口交界",
+      "title": "白下巴 · 胸口交界",
+      "description": "在 B4E 上比较两种浅灰米色阴影，主要看下巴轮廓和白毛的连贯感。",
+      "reference": "output/aseprite-coat-parts-round15/B4E-sit.png",
+      "referenceLabel": "B4E 原稿",
+      "detail": "output/aseprite-coat-parts-round16/B4E-chin-before-after.png",
+      "detailLabel": "看同帧待机、打字与下巴放大",
+      "retouch": {
+        "x": 112,
+        "y": 149,
+        "width": 82,
+        "height": 51,
+        "label": "下巴与白胸",
+        "idleOnly": true
+      },
+      "options": [
+        {
+          "id": "S1",
+          "label": "连续浅弧",
+          "description": "沿下巴底缘画一条连续的浅灰米色弧线，两端淡入白胸。",
+          "image": "output/aseprite-coat-parts-round16/S1-sit.png",
+          "typing": "output/aseprite-coat-parts-round16/S1-typing.png",
+          "motion": "output/aseprite-coat-parts-round16/S1-motion.webp"
+        },
+        {
+          "id": "S2",
+          "label": "两侧短弧",
+          "description": "只在下巴两侧留下浅阴影，中间保留连片白毛。",
+          "image": "output/aseprite-coat-parts-round16/S2-sit.png",
+          "typing": "output/aseprite-coat-parts-round16/S2-typing.png",
+          "motion": "output/aseprite-coat-parts-round16/S2-motion.webp"
+        }
+      ]
+    }
+  ]
+}

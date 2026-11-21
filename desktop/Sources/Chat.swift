@@ -25,7 +25,7 @@ final class PetMemory {
         } else {
             let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? URL(fileURLWithPath: NSTemporaryDirectory())
-            let folder = base.appendingPathComponent("DesktopPet", isDirectory: true)
+            let folder = base.appendingPathComponent(DesktopPetStorage.directoryName, isDirectory: true)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             file = folder.appendingPathComponent("pet-memory.sqlite").path
         }

@@ -1,0 +1,132 @@
+{
+  "id": "round-12",
+  "label": "第 12 轮 · 额顶、胸肩与前肢",
+  "groups": [
+    {
+      "id": "forehead",
+      "label": "额顶",
+      "title": "额顶",
+      "description": "同一蓝灰底稿，固定胸斑与前肢，只换画面左侧额斑。",
+      "reference": "output/aseprite-coat-parts-round12/base-sit.png",
+      "referenceLabel": "绘制底稿",
+      "options": [
+        {
+          "id": "F1",
+          "label": "贴顶小楔",
+          "description": "从耳根旁起笔，贴上缘收成小楔形。",
+          "image": "output/aseprite-coat-parts-round12/F1-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/F1-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/F1-motion.webp"
+        },
+        {
+          "id": "F2",
+          "label": "圆弧顶斑",
+          "description": "向下多盖一段，内缘用大弧收口。",
+          "image": "output/aseprite-coat-parts-round12/F2-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/F2-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/F2-motion.webp"
+        },
+        {
+          "id": "F3",
+          "label": "延到眉上",
+          "description": "从额顶向眼上延伸，给眼睛留出空间。",
+          "image": "output/aseprite-coat-parts-round12/F3-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/F3-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/F3-motion.webp"
+        },
+        {
+          "id": "F4",
+          "label": "斜扫额斑",
+          "description": "额角斜向额心，收口比圆弧顶斑更窄。",
+          "image": "output/aseprite-coat-parts-round12/F4-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/F4-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/F4-motion.webp"
+        }
+      ]
+    },
+    {
+      "id": "chest",
+      "label": "下巴、胸口与肩",
+      "title": "下巴、胸口与肩",
+      "description": "固定额斑和前肢，只换白毛的覆盖范围与连开关系。",
+      "reference": "output/aseprite-coat-parts-round12/base-sit.png",
+      "referenceLabel": "绘制底稿",
+      "options": [
+        {
+          "id": "B1",
+          "label": "独立小胸斑",
+          "description": "白毛集中在胸上部。",
+          "image": "output/aseprite-coat-parts-round12/C1-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/C1-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/C1-motion.webp"
+        },
+        {
+          "id": "B2",
+          "label": "下巴连细胸线",
+          "description": "白下巴接住细条胸毛，向下收窄。",
+          "image": "output/aseprite-coat-parts-round12/C2-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/C2-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/C2-motion.webp"
+        },
+        {
+          "id": "B3",
+          "label": "下巴连宽胸斑",
+          "description": "下巴和前胸相接，留出肩部底毛。",
+          "image": "output/aseprite-coat-parts-round12/C3-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/C3-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/C3-motion.webp"
+        },
+        {
+          "id": "B4",
+          "label": "胸白包双肩",
+          "description": "白毛从下巴连到胸肩，左右各沿一条弧线收口。",
+          "image": "output/aseprite-coat-parts-round12/C4-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/C4-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/C4-motion.webp"
+        }
+      ]
+    },
+    {
+      "id": "foreleg",
+      "label": "前肢横环",
+      "title": "前肢横环",
+      "description": "固定额斑和胸斑，只换画面右前肢。",
+      "reference": "output/aseprite-coat-parts-round12/base-sit.png",
+      "referenceLabel": "绘制底稿",
+      "options": [
+        {
+          "id": "L1",
+          "label": "单条细环",
+          "description": "接近手腕的一条短横环。",
+          "image": "output/aseprite-coat-parts-round12/L1-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/L1-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/L1-motion.webp"
+        },
+        {
+          "id": "L2",
+          "label": "单条宽环",
+          "description": "横环较宽，延伸到前爪上段。",
+          "image": "output/aseprite-coat-parts-round12/L2-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/L2-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/L2-motion.webp"
+        },
+        {
+          "id": "L3",
+          "label": "双横环",
+          "description": "上下两条，留出一段底毛。",
+          "image": "output/aseprite-coat-parts-round12/L3-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/L3-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/L3-motion.webp"
+        },
+        {
+          "id": "L4",
+          "label": "斜口横环",
+          "description": "沿前肢向下斜收，两侧高度不同。",
+          "image": "output/aseprite-coat-parts-round12/L4-sit.png",
+          "typing": "output/aseprite-coat-parts-round12/L4-typing.png",
+          "motion": "output/aseprite-coat-parts-round12/L4-motion.webp"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "round-03",
+  "label": "第 3 轮 · 手绘花色",
+  "groups": [
+    {
+      "id": "push",
+      "title": "Push · 额顶黑斑",
+      "label": "Push 额顶",
+      "description": "三款都保留左小右大，右斑停在眼睛上方。重点看两块怎么沿额顶与耳根分布。",
+      "reference": "output/cat-photo-pattern-batch/van-reference.jpg",
+      "options": [
+        { "id": "B1", "label": "沿耳根下收", "description": "左斑较小，右斑沿耳根自然收窄", "image": "output/aseprite-coat-parts-round3/push-1.png" },
+        { "id": "B2", "label": "右侧略斜", "description": "右斑从耳根斜向额头，左边留小斑", "image": "output/aseprite-coat-parts-round3/push-2.png" },
+        { "id": "B3", "label": "顺额线往中间伸", "description": "右斑靠近额心，眼睛上方保留白毛", "image": "output/aseprite-coat-parts-round3/push-3.png" }
+      ]
+    },
+    {
+      "id": "calico-head",
+      "title": "黎巴嫩三花 · 头部边缘",
+      "label": "三花头部",
+      "description": "左眼边橘、右额深色。固定身体，只对照脸上颜色交界和脸颊的小色块。",
+      "reference": "output/cat-photo-prepainted-crown-review/photos/05-lebanon/01.jpg",
+      "options": [
+        { "id": "H1", "label": "白颊更完整", "description": "左眼橘斑保留，简化右颊零碎橘边", "image": "output/aseprite-coat-parts-round3/head-1.png" },
+        { "id": "H2", "label": "圆收眼周", "description": "左斑圆收，右颊留一小块橘色", "image": "output/aseprite-coat-parts-round3/head-2.png" },
+        { "id": "H3", "label": "较长的脸侧边缘", "description": "左右保留更连续的原色区", "image": "output/aseprite-coat-parts-round3/head-3.png" }
+      ]
+    },
+    {
+      "id": "calico-chest",
+      "title": "黎巴嫩三花 · 中央白胸",
+      "label": "三花胸口",
+      "description": "三款固定同一颗头，复用原有身体两侧。只看白胸中央的面积和收口。",
+      "reference": "output/cat-photo-prepainted-crown-review/photos/05-lebanon/03.jpg",
+      "options": [
+        { "id": "C1", "label": "较窄的白胸", "description": "白毛从下巴接下来，两侧收得较早", "image": "output/aseprite-coat-parts-round3/chest-1.png" },
+        { "id": "C2", "label": "宽上窄下", "description": "上胸保留宽度，向中间渐收", "image": "output/aseprite-coat-parts-round3/chest-2.png" },
+        { "id": "C3", "label": "较宽的连片白胸", "description": "白毛往两侧多延伸一些", "image": "output/aseprite-coat-parts-round3/chest-3.png" }
+      ]
+    }
+  ]
+}

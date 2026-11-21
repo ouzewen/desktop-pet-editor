@@ -1,5 +1,6 @@
 import { catKeepsBreedPigment, catPatternFurColors, nativeCatFur, type CatRenderConfig } from './cat';
 import { bodyPatternChannel, breedPatternShade, shadeBreedPattern } from './cat-body-pattern';
+import { pixel80CalicoDarkInk, pixel80WarmOutline } from './cat-outline';
 
 type RGB = readonly [number, number, number];
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
@@ -19,7 +20,7 @@ function mix(from: RGB, to: RGB, amount: number): RGB {
 
 // The shared Aseprite cels use the orange shadow, fur and highlight tones.
 // Keep their silhouette and shading while assigning the chosen coat pigments.
-export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig) {
+export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig, ink?: RGB) {
   const selected = config.tailPattern ?? config.bodyPattern;
   const originalPattern = selected === 'native';
   const keepPigment = config.tailPattern !== 'plain' && catKeepsBreedPigment(config);
@@ -30,6 +31,7 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
   const point = (originalPattern || keepPigment) && (config.palette === 'CC04' || config.palette === 'CC08');
   const calico = (originalPattern || keepPigment) && config.palette === 'CC03';
   const outline: RGB = config.palette === 'CC02' ? [32, 27, 30] : [68, 36, 22];
+  const warmInk = ink && calico ? pixel80WarmOutline(config.coat) : undefined;
   let shadow = mix(base, marking, 0.8);
   let light = mix(base, pale, 0.3);
   if (point) {
@@ -61,27 +63,27 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
   for (let offset = 0; offset < data.length; offset += 4) {
     if (!data[offset + 3]) continue;
     const green = data[offset + 1]!;
+    const y = Math.floor(offset / 4 / width);
+    const position = (y - top) / Math.max(1, bottom - top);
+    const darkPatch = calico && position > 0.39 && position < 0.7;
     let color: RGB;
     if (green < 65) {
-      color = outline;
+      color = ink && darkPatch && config.coat === 'native'
+        ? pixel80CalicoDarkInk : (!darkPatch && warmInk) || ink || outline;
     } else {
       color = green < 179
         ? mix(shadow, base, clamp((green - 138) / 41))
         : mix(base, light, clamp((green - 179) / 17));
       if (calico) {
-        const y = Math.floor(offset / 4 / width);
-        const position = (y - top) / Math.max(1, bottom - top);
         if (position < 0.19) color = mix(pale, shadow, 0.13 * clamp((179 - green) / 41));
-        if (position > 0.39 && position < 0.7) {
+        if (darkPatch) {
           const dark = config.coat === 'native' ? [67, 60, 61] as const : mix(marking, outline, 0.3);
           color = mix(dark, light, 0.08 * clamp((green - 138) / 58));
         }
       }
       if (channel !== undefined && !pigmentShade) color = mix(color, marking, patterns[offset + channel]! / 255);
     }
-    data[offset] = color[0];
-    data[offset + 1] = color[1];
-    data[offset + 2] = color[2];
+    data.set(color, offset);
     if (pigmentShade && channel !== undefined && green >= 65) {
       const ink = patterns[offset + channel]! / 255;
       if (ink) shadeBreedPattern(data, offset, pigmentShade, ink);

@@ -44,7 +44,10 @@ function coatPigments(palette: CatArtPalette, scheme: Exclude<CatCoatScheme, 'na
 
   const stripes = [[92, deepMarking], [128, marking], [173, base], [220, light]] as const;
   const charcoal = [[39, deepMarking], [50, marking], [74, base], [96, light]] as const;
-  const spots = [[43, deepMarking], [62, mix(deepMarking, marking, 0.45)], [100, marking]] as const;
+  const diluteCalico = scheme === 'breed:CC12' || scheme === 'diluteMist' || scheme === 'dilutePeach';
+  const spots = diluteCalico
+    ? [[43, mix(marking, [73, 81, 100], 0.32)], [67, marking], [100, mix(marking, pale, 0.23)]] as const
+    : [[43, deepMarking], [62, mix(deepMarking, marking, 0.45)], [100, marking]] as const;
   const points = [
     [55, deepMarking], [83, marking], [108, mix(marking, base, 0.22)],
     [173, base], [224, light], [248, pale],
@@ -129,5 +132,17 @@ export function recolorCatCoat(
     data[offset] = r;
     data[offset + 1] = g;
     data[offset + 2] = b;
+  }
+}
+
+// Round 2 A3 translates native charcoal fur, keeping the existing relief,
+// outline, pink ears and other pigments on their own colors.
+export function recolorPhotoInkBlack({ data }: ImageData, minimumRed = 38) {
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    if (!data[i + 3] || r < minimumRed || r > 110 || b < r || Math.abs(r - g) >= 18 || b - g >= 32) continue;
+    data[i] = Math.max(18, 40 + Math.round((r - 75) * 0.76));
+    data[i + 1] = Math.max(18, 39 + Math.round((g - 71) * 0.76));
+    data[i + 2] = Math.max(18, 41 + Math.round((b - 83) * 0.76));
   }
 }

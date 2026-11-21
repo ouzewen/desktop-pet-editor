@@ -17,10 +17,81 @@ struct AppearancePreset: Decodable {
     let naturalSwatches: [String: String]?
 }
 
+struct FurPatch: Codable, Identifiable, Equatable {
+    var id: String
+    var preset: String
+    var shape: String
+    var x: Int
+    var y: Int
+    var width: Int
+    var height: Int
+    var color: String
+    var flipped: Bool
+    var joinChin: Bool?
+
+    init(preset: FurPatchPreset) {
+        id = UUID().uuidString
+        self.preset = preset.id
+        shape = preset.shapes[0].id
+        x = preset.x
+        y = preset.y
+        width = preset.width
+        height = preset.height
+        color = preset.color
+        flipped = false
+    }
+
+    var config: [String: Any] {
+        var fields: [String: Any] = ["id": id, "preset": preset, "shape": shape, "x": x, "y": y,
+                                     "width": width, "height": height, "color": color, "flipped": flipped]
+        if let joinChin { fields["joinChin"] = joinChin }
+        return fields
+    }
+}
+
+struct FurPatchPreset: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let part: String
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+    let color: String
+    let shapes: [Shape]
+    let mirror: String?
+
+    struct Shape: Decodable, Identifiable {
+        let id: String
+        let name: String
+    }
+}
+
+struct FurPatchBounds: Decodable {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+}
+
+struct FurPatchDimensions: Decodable {
+    let min: Int
+    let max: Int
+
+    var range: ClosedRange<Int> { min...max }
+}
+
 struct AppearanceCatalog: Decodable {
     let fieldsByFrame: [String: [String: [AppearanceOption]]]
     let presets: [AppearancePreset]
     let faceBasePalettes: Set<String>
+    let coatCards: [String: [AppearanceOption]]
+    let photoEarMarks: [String: [AppearanceOption]]
+    let photoEarPigments: [AppearanceOption]
+    let furPatchPresets: [FurPatchPreset]
+    let furPatchBounds: [String: FurPatchBounds]
+    let furPatchDimensions: FurPatchDimensions
+    let furPatchLimit: Int
 
     func matchingPreset(_ config: [String: Any]) -> String? {
         let candidates = presets.filter { $0.frame == config["frame"] as? String }
@@ -39,36 +110,74 @@ struct AppearanceCatalog: Decodable {
     }
 }
 
+struct AppearanceThumbnails {
+    let breeds: [String: NSImage]
+    let parts: [String: [String: NSImage]]
+
+    init(data: Data) throws {
+        struct PNGs: Decodable {
+            let breeds: [String: Data]
+            let parts: [String: [String: Data]]
+        }
+        let pngs = try JSONDecoder().decode(PNGs.self, from: data)
+        breeds = pngs.breeds.compactMapValues(NSImage.init(data:))
+        parts = pngs.parts.mapValues { $0.compactMapValues(NSImage.init(data:)) }
+    }
+}
+
 enum TypingSyncStatus {
-    case checking, needsPermission, unavailable, active
+    case off, needsPermission, unavailable, active
 
     var text: String {
         switch self {
-        case .checking: return "正在检查打字同步"
-        case .needsPermission: return "请授权输入监控以同步打字"
-        case .unavailable: return "打字同步未连接，正在重试"
-        case .active: return "全局打字同步已开启"
+        case .off: return "打字监听已关闭"
+        case .needsPermission: return "打字功能等待输入监控权限"
+        case .unavailable: return "输入监控暂未连接"
+        case .active: return "输入监控已连接"
         }
     }
+}
 
-    var buttonTitle: String {
-        self == .needsPermission ? "开启打字同步" : "检查打字同步"
-    }
+enum CustomAppearanceMode: String {
+    case patches, brush
 }
 
 final class WorkbenchState: ObservableObject {
     @Published var catalog: AppearanceCatalog?
-    @Published var appearance: [String: String] = [:]
+    @Published var thumbnails: AppearanceThumbnails?
+    @Published var coatOverlayRevision = 0
+    @Published var appearance: [String: String] = [:] {
+        didSet { if appearance != oldValue { clearApplyConfirmation() } }
+    }
+    @Published private(set) var furPatches: [FurPatch] = [] {
+        didSet { if furPatches != oldValue { clearApplyConfirmation() } }
+    }
+    @Published private(set) var selectedFurPatchID: String?
+
+    var selectedFurPatch: FurPatch? {
+        furPatches.first { $0.id == selectedFurPatchID }
+    }
     @Published var preset = "preset_cat_orange"
+    @Published var choosingBreed = false
     @Published var action = "sit"
     @Published var petSize: Double = 240
     @Published var visible = true
+    @Published var temporarilyHidden = false
+    var petIsVisible: Bool { visible && !temporarilyHidden }
     @Published var eyeFollow = true
     @Published var message = ""
     @Published var applying = false
-    @Published var typingStatus = TypingSyncStatus.checking
+    @Published var typingAnimationEnabled = false
+    @Published var typingStatsEnabled = false
+    @Published var showTypingStats = true
+    @Published var typingStatus = TypingSyncStatus.off
+    @Published var selectionTranslationEnabled = false
+    @Published var translationNeedsPermission = false
+    var needsKeyboardMonitoring: Bool { typingAnimationEnabled || typingStatsEnabled }
     @Published var customPresets: [CustomPresetInfo] = []
-    @Published var customSelected: String?
+    @Published var customSelected: String? {
+        didSet { if customSelected != oldValue { clearApplyConfirmation() } }
+    }
     /// Purely descriptive; it never reaches the renderer or the pet config.
     @Published var gender: String {
         didSet { UserDefaults.standard.set(gender, forKey: "petGender") }
@@ -88,16 +197,42 @@ final class WorkbenchState: ObservableObject {
         }
     }
     @Published var loadingCustom = false
-    @Published var openingPixelEditor = false
+    @Published var customMode: CustomAppearanceMode?
+    @Published var pixelEditor: PixelEditorModel?
+    @Published var editingCustom = false
+    @Published var hasPendingBrush = false {
+        didSet { if hasPendingBrush != oldValue { clearApplyConfirmation() } }
+    }
+    @Published var catPhotos: [CatPhotoInput?] = [nil, nil, nil]
+    @Published var photoStatus = ""
+    @Published var generatingPhoto = false
+    @Published var hasPhotoResult = false
+    @Published var photoEarMarks: [String: String] = [:]
+    @Published var photoEarColors: [String: String] = [:]
+    @Published var showsMeetingRecordings = false
+    @Published var availableUpdateVersion: String?
+    @Published var updateSessionInProgress = false
+    @Published var checkUpdate: (() -> Void)?
+    var installUpdate: () -> Void = {}
     var choosePreset: (String) -> Void = { _ in }
+    var renderCoatThumbnails: () async -> [String: NSImage] = { [:] }
     var refresh: () -> Void = {}
     var apply: () -> Void = {}
     var reset: () -> Void = {}
-    var enableTyping: () -> Void = {}
+    var setTypingAnimation: (Bool) -> Void = { _ in }
+    var setTypingStats: (Bool) -> Void = { _ in }
+    var setShowTypingStats: (Bool) -> Void = { _ in }
+    var setSelectionTranslation: (Bool) -> Void = { _ in }
+    var openInputSettings: () -> Void = {}
+    var openAccessibilitySettings: () -> Void = {}
     var setSize: (Double) -> Void = { _ in }
     var setVisibility: (Bool) -> Void = { _ in }
     var setEyeFollow: (Bool) -> Void = { _ in }
-    var openPixelEditor: () -> Void = {}
+    var exportAppearance: () -> Void = {}
+    var changeCustomMode: (CustomAppearanceMode?) -> Void = { _ in }
+    var chooseCatPhoto: (Int) -> Void = { _ in }
+    var generateFromCatPhoto: () -> Void = {}
+    var saveCustomAppearance: (String, @escaping (Bool) -> Void) -> Void = { _, done in done(false) }
     var chooseCustom: (CustomPresetInfo) -> Void = { _ in }
     var clearCustom: () -> Void = {}
     var deleteCustom: (CustomPresetInfo) -> Void = { _ in }
@@ -123,11 +258,83 @@ final class WorkbenchState: ObservableObject {
         birthDate = stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
     }
 
+    private func clearApplyConfirmation() {
+        if message == "已应用到桌宠" { message = "" }
+    }
+
     func update(_ config: [String: Any]) {
         appearance = config.compactMapValues { $0 as? String }
+        let photoParts = config["photoCoatParts"] as? [String] ?? []
+        photoEarMarks = ["left", "right"].reduce(into: [:]) { marks, side in
+            marks[side] = photoParts.first { $0.hasPrefix("ear-\(side)-") }
+        }
+        photoEarColors = config["photoEarColors"] as? [String: String] ?? [:]
+        selectedFurPatchID = nil
+        if let raw = config["furPatches"], let data = try? JSONSerialization.data(withJSONObject: raw),
+           let patches = try? JSONDecoder().decode([FurPatch].self, from: data) {
+            furPatches = patches
+        } else {
+            furPatches = []
+        }
         if !nameDirty { nameText = appearance["name", default: ""] }
         resetUnavailablePreview()
         refresh()
+    }
+
+    func furPatchPreset(_ id: String) -> FurPatchPreset? {
+        catalog?.furPatchPresets.first { $0.id == id }
+    }
+
+    func selectFurPatch(_ id: String?) {
+        selectedFurPatchID = id
+        if id != nil { action = "sit" }
+        refresh()
+    }
+
+    func addFurPatch(_ preset: FurPatchPreset) {
+        guard let catalog, furPatches.count < catalog.furPatchLimit else { return }
+        let patch = FurPatch(preset: preset)
+        furPatches.append(patch)
+        selectFurPatch(patch.id)
+    }
+
+    func adjustFurPatch(_ patch: FurPatch) {
+        guard let index = furPatches.firstIndex(where: { $0.id == patch.id }),
+              let catalog, let preset = furPatchPreset(patch.preset),
+              let bounds = catalog.furPatchBounds[preset.part] else { return }
+        var next = patch
+        next.x = min(bounds.x + bounds.width, max(bounds.x, next.x))
+        next.y = min(bounds.y + bounds.height, max(bounds.y, next.y))
+        let dimensions = catalog.furPatchDimensions
+        next.width = min(dimensions.max, max(dimensions.min, next.width))
+        next.height = min(dimensions.max, max(dimensions.min, next.height))
+        let previous = furPatches[index]
+        guard next.x != previous.x || next.y != previous.y || next.width != previous.width
+                || next.height != previous.height || next.color != previous.color
+                || next.shape != previous.shape || next.flipped != previous.flipped else { return }
+        furPatches[index] = next
+        refresh()
+    }
+
+    func removeFurPatch(_ id: String) {
+        furPatches.removeAll { $0.id == id }
+        if selectedFurPatchID == id { selectedFurPatchID = furPatches.last?.id }
+        refresh()
+    }
+
+    func mirrorFurPatch(_ patch: FurPatch) {
+        guard let catalog, furPatches.count < catalog.furPatchLimit,
+              let original = furPatchPreset(patch.preset) else { return }
+        let oppositeID = original.mirror ?? original.id
+        guard let opposite = furPatchPreset(oppositeID), let bounds = catalog.furPatchBounds[opposite.part] else { return }
+        var copy = patch
+        copy.id = UUID().uuidString
+        copy.preset = opposite.id
+        let x = opposite.id == original.id ? 302 - patch.x : opposite.x - (patch.x - original.x)
+        copy.x = min(bounds.x + bounds.width, max(bounds.x, x))
+        copy.flipped.toggle()
+        furPatches.append(copy)
+        selectFurPatch(copy.id)
     }
 
     func commitName() {
@@ -141,7 +348,7 @@ final class WorkbenchState: ObservableObject {
     func resetUnavailablePreview() {
         if appearance["frame"] != "CAT" {
             if action == "typing-gentle" || action == "typing-fast" { action = "typing" }
-            if action == "listening" { action = "sit" }
+            if ["listening", "shredder", "zip", "convert"].contains(action) { action = "sit" }
         }
     }
 }
@@ -218,10 +425,11 @@ private struct PixelColorSelect: View {
     let defaultSwatch: [Color]
     let palette: PixelPalette
     @Binding var selection: String
+    var mixedName: String? = nil
     @State private var isPresented = false
 
     private var currentName: String {
-        options.first { $0.id == selection }?.name ?? options.first?.name ?? ""
+        options.first { $0.id == selection }?.name ?? mixedName ?? options.first?.name ?? ""
     }
 
     var body: some View {
@@ -295,104 +503,71 @@ private struct PupilColorEditor: View {
     @Binding var layers: String
     @Binding var outer: String
     @Binding var inner: String
-    @State private var editingInner = false
 
     private var isDouble: Bool { layers == "round" }
-    private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                Text("瞳孔")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                HStack(spacing: 2) {
-                    modeButton("单瞳", value: "none")
-                    modeButton("双瞳", value: "round")
+        VStack(alignment: .leading, spacing: 10) {
+            colorField(isDouble ? "外层瞳色" : "瞳色", selection: $outer,
+                       naturalKey: isDouble ? "eyeColor" : "singleEyeColor", id: "outer")
+            DisclosureGroup("瞳孔样式") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 4) {
+                        modeButton("单瞳", value: "none")
+                        modeButton("双瞳", value: "round")
+                    }
+                    if isDouble {
+                        colorField("内层瞳色", selection: $inner, naturalKey: "innerEyeColor", id: "inner")
+                    }
                 }
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(2)
-                .background(PixelBox(corner: 2).fill(palette.panelDeep.opacity(0.45)))
-                Spacer(minLength: 3)
-                if isDouble {
-                    layerButton("外层", color: outer, inner: false)
-                    layerButton("内层", color: inner, inner: true)
-                } else {
-                    Text(layers.isEmpty ? "左右瞳孔不同" : "瞳色 · \(colorName(outer))")
-                        .font(PixelFont.font(11))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(1)
-                }
+                .padding(.top, 6)
             }
-            Rectangle().fill(palette.borderSoft.opacity(0.62)).frame(height: 1)
-            if isDouble && editingInner {
-                colorGrid("内层瞳色", id: "inner", selection: $inner, naturalKey: "innerEyeColor")
-            } else {
-                colorGrid(isDouble ? "外层瞳色" : "瞳色", id: "outer", selection: $outer,
-                          naturalKey: isDouble ? "eyeColor" : "singleEyeColor")
-            }
+            .font(PixelFont.font(12))
+            .foregroundStyle(palette.ink)
         }
     }
 
     private func modeButton(_ title: String, value: String) -> some View {
-        Button {
-            layers = value
-            editingInner = false
-        } label: { Text(title) }
-        .buttonStyle(EyeChoiceStyle(palette: palette, selected: layers == value))
-        .accessibilityAddTraits(layers == value ? .isSelected : [])
-        .accessibilityIdentifier("\(side)-eye-mode-\(value)")
+        Button(title) { layers = value }
+            .buttonStyle(EyeChoiceStyle(palette: palette, selected: layers == value))
+            .accessibilityAddTraits(layers == value ? .isSelected : [])
+            .accessibilityIdentifier("\(side)-eye-mode-\(value)")
     }
 
-    private func colorName(_ id: String) -> String {
-        colors.first { $0.id == id }?.name ?? "左右不同"
-    }
-
-    private func layerButton(_ title: String, color: String, inner: Bool) -> some View {
-        let summary = colorName(color)
-        return Button("\(title) · \(summary)") { editingInner = inner }
-            .buttonStyle(EyeChoiceStyle(palette: palette, selected: editingInner == inner))
-            .accessibilityLabel("\(title)瞳色")
-            .accessibilityValue(summary)
-            .accessibilityAddTraits(editingInner == inner ? .isSelected : [])
-            .accessibilityIdentifier("\(side)-eye-layer-\(inner ? "inner" : "outer")")
-    }
-
-    private func colorGrid(_ title: String, id: String, selection: Binding<String>, naturalKey: String) -> some View {
-        let defaultSwatch = WBTheme.swatchColors(naturalSwatches[naturalKey].map { [$0] })
-        return LazyVGrid(columns: colorColumns, alignment: .leading, spacing: 3) {
-            ForEach(colors, id: \.id) { option in
-                let selected = selection.wrappedValue == option.id
-                Button {
-                    selection.wrappedValue = option.id
-                } label: {
-                    ColorOptionLabel(option: option, defaultSwatch: defaultSwatch, palette: palette, size: 12)
-                }
-                .buttonStyle(EyeChoiceStyle(palette: palette, selected: selected))
-                .accessibilityLabel("\(title) \(option.name)")
-                .accessibilityAddTraits(selected ? .isSelected : [])
-                .accessibilityIdentifier("\(side)-eye-\(id)-\(option.id)")
-            }
+    private func colorField(_ title: String, selection: Binding<String>, naturalKey: String, id: String) -> some View {
+        let swatch = WBTheme.swatchColors(naturalSwatches[naturalKey].map { [$0] })
+        return HStack(spacing: 10) {
+            Text(title)
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.inkSoft)
+            PixelColorSelect(title: title, options: colors, defaultSwatch: swatch, palette: palette,
+                             selection: selection, mixedName: "左右不同")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("\(side)-eye-color-\(id)")
         }
     }
 }
 
-private enum AppearanceEditor: String {
-    case ears, eyes, nose, mouth, tail, coat, accessories
+private enum AppearancePage: String, CaseIterable {
+    case breeds = "品种"
+    case coat = "毛色与花纹"
+    case face = "头部"
+    case tail = "尾巴"
+    case accessories = "配饰"
+    case photo = "照片生成"
+}
 
-    var title: String {
-        switch self {
-        case .ears: "耳朵"
-        case .eyes: "眼睛"
-        case .nose: "鼻子"
-        case .mouth: "嘴巴"
-        case .tail: "尾巴"
-        case .coat: "毛色与花纹"
-        case .accessories: "配饰"
-        }
-    }
+private struct CoatThumbnailKey: Equatable {
+    let appearance: [String: String]
+    let patches: [FurPatch]
+    let overlayRevision: Int
+}
 
-    static let rows: [[Self]] = [[.ears, .eyes], [.nose, .mouth], [.tail, .coat], [.accessories]]
+private enum FacePart: String, CaseIterable {
+    case ears = "耳朵"
+    case eyes = "眼睛"
+    case nose = "鼻子"
+    case mouth = "嘴巴"
 }
 
 private enum EyeEditScope: String, CaseIterable {
@@ -443,17 +618,132 @@ private struct SpritePreview: NSViewRepresentable {
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
 
+final class WorkbenchPreviewWebView: WKWebView {
+    override var acceptsFirstResponder: Bool { false }
+}
+
+private enum PreviewBackdrop: String, CaseIterable, Identifiable {
+    case warm, gray, light, dark
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .warm: "暖沙色"
+        case .gray: "灰底"
+        case .light: "浅底"
+        case .dark: "深底"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .warm: Color(pixelHex: 0xECDFC3)
+        case .gray: Color(pixelHex: 0xC5CAD0)
+        case .light: Color(pixelHex: 0xF2F1EE)
+        case .dark: Color(pixelHex: 0x424853)
+        }
+    }
+}
+
 // MARK: - Workbench
+
+private struct FurPatchSelection: View {
+    let patch: FurPatch
+    let size: CGFloat
+    let tint: Color
+    let change: (FurPatch) -> Void
+    @State private var start: FurPatch?
+
+    private enum Handle: Hashable {
+        case move, width, height, corner
+    }
+
+    var body: some View {
+        let scale = size / 320
+        let x = CGFloat(patch.x) * scale
+        let y = CGFloat(patch.y) * scale
+        let width = CGFloat(patch.width) * scale
+        let height = CGFloat(patch.height) * scale
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .allowsHitTesting(false)
+            Rectangle()
+                .fill(Color.white.opacity(0.001))
+                .overlay(Rectangle().strokeBorder(tint, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                .frame(width: width, height: height)
+                .position(x: x, y: y)
+                .gesture(drag(.move))
+                .accessibilityLabel("拖动斑块")
+            handle(.width, at: CGPoint(x: x + width / 2, y: y), label: "调整宽度")
+            handle(.height, at: CGPoint(x: x, y: y + height / 2), label: "调整高度")
+            handle(.corner, at: CGPoint(x: x + width / 2, y: y + height / 2), label: "调整大小")
+        }
+        .frame(width: size, height: size)
+    }
+
+    private func handle(_ kind: Handle, at point: CGPoint, label: String) -> some View {
+        Rectangle()
+            .fill(tint)
+            .overlay(Rectangle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+            .frame(width: 7, height: 7)
+            .frame(width: 14, height: 14)
+            .contentShape(Rectangle())
+            .position(x: min(size - 7, max(7, point.x)), y: min(size - 7, max(7, point.y)))
+            .gesture(drag(kind))
+            .accessibilityLabel(label)
+    }
+
+    private func drag(_ kind: Handle) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .onChanged { drag in
+                let origin = start ?? patch
+                if start == nil { start = origin }
+                var next = origin
+                let dx = drag.translation.width * 320 / size
+                let dy = drag.translation.height * 320 / size
+                if kind == .move {
+                    next.x += Int(dx.rounded())
+                    next.y += Int(dy.rounded())
+                } else {
+                    if kind != .height { next.width += Int((2 * dx).rounded()) }
+                    if kind != .width { next.height += Int((2 * dy).rounded()) }
+                }
+                change(next)
+            }
+            .onEnded { _ in start = nil }
+    }
+}
 
 struct WorkbenchView: View {
     @ObservedObject var state: WorkbenchState
     let preview: WKWebView
     let typingActivity: TypingActivity
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var expandedAppearance: AppearanceEditor?
-    @State private var eyeScope = EyeEditScope.both
+    let meetingPage: ((PixelPalette) -> AnyView)?
+    @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
+    @State private var appearancePage = AppearancePage.breeds
+    @State private var facePart = FacePart.ears
+    @State private var eyeScope: EyeEditScope?
+    @State private var coatThumbnails: (key: CoatThumbnailKey, images: [String: NSImage])?
+    @State private var showingGuide = false
+    @State private var showingFeedback = false
+    @State private var feedbackDraft = FeedbackDraft()
+    @State private var previewBackdrop = PreviewBackdrop.warm
+    @State private var inspectingTransparency = false
+    @State private var showingBackdropChoices = false
+    @State private var showingTypingActions = false
+    @State private var showingFileActions = false
+    @State private var showingProfile = false
+    @State private var showingDesktopSettings = false
+    @State private var showingWorkbenchThemes = false
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { workbenchTheme.palette }
+
+    private var systemColorScheme: ColorScheme {
+        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+    }
+
+    private var checkerPalette: PixelPalette { .workbench(systemColorScheme) }
 
     private let dogFields = [
         ("ear", "耳朵"), ("muzzle", "嘴鼻"), ("tail", "尾巴"), ("pattern", "面部花纹"),
@@ -472,39 +762,172 @@ struct WorkbenchView: View {
         (state.catalog?.presets ?? []).filter { $0.frame == "CAT" }
     }
 
-    // The workbench only previews states you cannot reach by using the pet
-    // itself. Left/right drag animation stays on the desktop pet, so it is not
-    // offered here.
-    private var actionOptions: [(String, String)] {
-        if state.appearance["frame"] == "CAT" {
-            return [("sit", "待机"), ("typing-gentle", "慢敲键盘"), ("typing-fast", "比较快"), ("typing", "特别快"), ("listening", "听音乐")]
+    private let typingActions = [("typing-gentle", "慢速"), ("typing-fast", "快速"), ("typing", "极速")]
+    private let fileActions = [("shredder", "碎纸机"), ("zip", "压缩"), ("convert", "格式转换")]
+
+    private var typingIsSelected: Bool { typingActions.contains { $0.0 == state.action } }
+
+    private var typingActionTitle: String {
+        guard typingIsSelected, let speed = typingActions.first(where: { $0.0 == state.action })?.1 else {
+            return "打字"
         }
-        return [
-            ("sit", "待机"),
-            ("typing", "打字"),
-        ]
+        return "打字 · \(speed)"
+    }
+
+    private func selectPreviewAction(_ action: String) {
+        state.action = action
+        state.refresh()
     }
 
     var body: some View {
         ZStack {
-            PixelBackdrop(palette: palette)
+            palette.background.ignoresSafeArea()
             VStack(spacing: 14) {
                 header
-                HStack(alignment: .top, spacing: 16) {
-                    previewPanel
-                    detailPane
+                pageNavigation
+                ZStack {
+                    VStack(spacing: 14) {
+                        HStack(alignment: .top, spacing: 16) {
+                            previewPanel
+                            detailPane
+                        }
+                        .frame(maxHeight: .infinity)
+                        footer
+                    }
+                    .opacity(state.showsMeetingRecordings ? 0 : 1)
+                    .allowsHitTesting(!state.showsMeetingRecordings)
+                    .accessibilityHidden(state.showsMeetingRecordings)
+
+                    if state.showsMeetingRecordings, let meetingPage {
+                        PixelPanel(palette: palette, padding: 0) {
+                            meetingPage(palette)
+                        }
+                    }
                 }
                 .frame(maxHeight: .infinity)
-                footer
             }
             .padding(.horizontal, 20)
             .padding(.top, 30)
             .padding(.bottom, 16)
         }
         .frame(minWidth: 860, minHeight: 640)
+        .environment(\.workbenchChrome, true)
+        .sheet(isPresented: $showingGuide) {
+            WorkbenchGuideSheet(palette: palette, recordingAvailable: meetingPage != nil,
+                                opensOnRecording: state.showsMeetingRecordings)
+        }
+        .sheet(isPresented: $showingFeedback) {
+            FeedbackSheet(draft: $feedbackDraft, palette: palette)
+        }
+        .environment(\.workbenchTheme, workbenchTheme)
+        .preferredColorScheme(.light)
+    }
+
+    private var pageNavigation: some View {
+        HStack(spacing: 8) {
+            if meetingPage != nil {
+                Button("外观设置") { state.showsMeetingRecordings = false }
+                    .workbenchButton(palette: palette, selected: !state.showsMeetingRecordings)
+                    .accessibilityIdentifier("workbench-page-appearance")
+                Button("会议录音") { state.showsMeetingRecordings = true }
+                    .workbenchButton(palette: palette, selected: state.showsMeetingRecordings)
+                    .accessibilityIdentifier("workbench-page-recording")
+            }
+            Spacer()
+            workbenchThemeMenu
+        }
+    }
+
+    private var workbenchThemeMenu: some View {
+        Button {
+            showingWorkbenchThemes.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                themeSwatch(workbenchTheme)
+                Text("工作台配色")
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+            .fixedSize()
+        }
+        .workbenchButton(palette: palette)
+        .accessibilityIdentifier("workbench-theme")
+        .accessibilityValue(workbenchTheme.title)
+        .popover(isPresented: $showingWorkbenchThemes, arrowEdge: .bottom) {
+            VStack(spacing: 5) {
+                ForEach(WorkbenchTheme.allCases) { theme in
+                    let selected = workbenchTheme == theme
+                    Button {
+                        showingWorkbenchThemes = false
+                        workbenchTheme = theme
+                    } label: {
+                        HStack(spacing: 6) {
+                            themeSwatch(theme)
+                            Text(theme.title)
+                            Spacer()
+                            actionSelectionMark(selected)
+                        }
+                    }
+                    .workbenchButton(palette: palette, selected: selected)
+                    .accessibilityIdentifier("workbench-theme-\(theme.rawValue)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .frame(width: 150)
+            .padding(9)
+        }
+    }
+
+    private func themeSwatch(_ theme: WorkbenchTheme) -> some View {
+        let colors = theme.palette
+        return RoundedRectangle(cornerRadius: 2)
+            .fill(colors.background)
+            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(colors.border, lineWidth: 1))
+            .frame(width: 11, height: 11)
+            .accessibilityHidden(true)
     }
 
     private var header: some View {
+        let hasUpdate = state.availableUpdateVersion != nil
+        return HStack(spacing: 12) {
+            headerTitle
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(WindowDragArea())
+
+            if let version = state.availableUpdateVersion {
+                Text("发现新版 \(version)")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.ink)
+            }
+
+            Button(hasUpdate ? "安装并重启" : "检查更新") {
+                if hasUpdate {
+                    state.installUpdate()
+                } else {
+                    state.checkUpdate?()
+                }
+            }
+            .workbenchButton(palette: palette, prominent: hasUpdate)
+            .disabled(!hasUpdate && (state.checkUpdate == nil || state.updateSessionInProgress))
+            .accessibilityIdentifier(hasUpdate ? "workbench-install-update" : "workbench-check-update")
+
+            if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+                Text("v\(version)")
+                    .font(PixelFont.font(12))
+                    .foregroundStyle(palette.inkSoft)
+            }
+
+            Button("查看使用说明") { showingGuide = true }
+                .workbenchButton(palette: palette)
+                .fixedSize()
+                .accessibilityIdentifier("workbench-open-guide")
+
+            Button("意见反馈") { showingFeedback = true }
+                .workbenchButton(palette: palette)
+                .accessibilityIdentifier("workbench-feedback")
+        }
+    }
+
+    private var headerTitle: some View {
         HStack(spacing: 12) {
             ZStack {
                 PixelBox(corner: 3).fill(palette.panel)
@@ -519,95 +942,252 @@ struct WorkbenchView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("桌宠工作台")
-                    .font(PixelFont.font(24))
+                    .font(.system(size: 23, weight: .semibold))
                     .foregroundStyle(palette.ink)
-                Text("挑选品种与外观，实时预览后应用到桌面")
+                Text(state.showsMeetingRecordings ? "录音历史、逐字稿与摘要" : "挑选品种与外观，实时预览后应用到桌面")
                     .font(PixelFont.font(12))
                     .foregroundStyle(palette.inkSoft)
             }
 
-            Spacer(minLength: 8)
         }
-        .overlay(WindowDragArea())
     }
 
     private var previewPanel: some View {
-        PixelPanel(palette: palette, padding: 12) {
-            VStack(spacing: 10) {
-                ZStack {
-                    PixelChecker(even: palette.panelAlt, odd: palette.panelDeep, cell: 12)
-                    SpritePreview(web: preview)
-                        .frame(width: 300, height: 300)
-                        .accessibilityLabel("桌宠动作预览")
+        let canvasInk = previewBackdrop == .dark && !inspectingTransparency ? Color.white :
+            inspectingTransparency ? checkerPalette.ink : Color(pixelHex: 0x302A24)
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("预览").font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    previewBackdropControls
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(PixelBox(corner: 2))
-                .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
-                .overlay(alignment: .topLeading) { nameBadge.padding(7) }
-                .overlay(alignment: .topTrailing) { frameBadge.padding(7) }
+                previewStage
 
-                HStack(spacing: 4) {
-                    ForEach(actionOptions, id: \.0) { action, title in
-                        Button(title) {
-                            state.action = action
-                            state.refresh()
-                        }
-                        .buttonStyle(PixelTabStyle(palette: palette, selected: state.action == action))
-                        .frame(maxWidth: .infinity)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
+                        .font(.system(size: 24, weight: .semibold))
+                        .lineLimit(1)
+                    if let breed = state.catalog?.presets.first(where: { $0.id == state.preset })?.name,
+                       breed != state.appearance["name"] {
+                        Text(breed).font(.system(size: 12)).opacity(0.8)
                     }
+                    Spacer()
+                    Button("档案") { showingProfile.toggle() }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("workbench-profile")
+                        .popover(isPresented: $showingProfile, arrowEdge: .bottom) {
+                            namePanel.frame(width: 340).padding(10)
+                        }
                 }
+                .foregroundStyle(canvasInk)
 
+                previewActionControls
+                    .disabled(state.pixelEditor?.isFurOnly == true || (state.hasPhotoResult && state.editingCustom))
+                    .disabled(state.pixelEditor != nil || state.editingCustom || state.applying || state.loadingCustom)
+            }
+            .foregroundStyle(canvasInk)
+            .padding(15)
+            .background {
+                if inspectingTransparency {
+                    PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 12)
+                } else {
+                    previewBackdrop.color
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.black.opacity(0.09), lineWidth: 1))
+            if state.showTypingStats {
                 TypingActivitySummary(activity: typingActivity, palette: palette)
             }
         }
-        .frame(width: 376)
+        .frame(width: 410)
     }
 
-    private var nameBadge: some View {
-        HStack(spacing: 5) {
-            Rectangle().fill(palette.accent).frame(width: 6, height: 6)
-            Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.ink)
-                .lineLimit(1)
+    private var previewStage: some View {
+        let editing = state.pixelEditor != nil || state.customMode == .patches
+        return GeometryReader { geometry in
+            // Let the preview take the space left between its controls and the typing summary.
+            let side = max(1, min(320, geometry.size.width, geometry.size.height))
+            SpritePreview(web: preview)
+                .frame(width: side, height: side)
+                .accessibilityLabel("桌宠动作预览")
+                .overlay {
+                    if let editor = state.pixelEditor {
+                        PixelDrawingCanvas(model: editor, side: side, palette: palette)
+                    } else if state.customMode == .patches, let patch = state.selectedFurPatch, state.action == "sit" {
+                        FurPatchSelection(patch: patch, size: side, tint: palette.accent,
+                                          change: state.adjustFurPatch)
+                            .id(patch.id)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(editing)
+                .disabled(state.editingCustom || state.applying)
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(PixelBox(corner: 1).fill(palette.panel.opacity(0.92)))
-        .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2))
     }
 
-    private var frameBadge: some View {
-        Text(state.appearance["frame"] == "CAT" ? "猫" : "犬")
-            .font(PixelFont.font(12))
-            .foregroundStyle(palette.inkSoft)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(PixelBox(corner: 1).fill(palette.panelAlt.opacity(0.92)))
-            .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2))
+    private var previewBackdropControls: some View {
+        Button {
+            showingBackdropChoices.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                backdropSwatch(inspectingTransparency ? nil : previewBackdrop)
+                Text("背景")
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+        }
+        .workbenchButton(palette: palette)
+        .accessibilityIdentifier("preview-background")
+        .accessibilityValue(inspectingTransparency ? "透明度检查" : previewBackdrop.title)
+        .popover(isPresented: $showingBackdropChoices, arrowEdge: .bottom) {
+            VStack(spacing: 5) {
+                ForEach(PreviewBackdrop.allCases) { backdrop in
+                    backdropChoice(backdrop.title, id: backdrop.rawValue, backdrop: backdrop,
+                                   selected: !inspectingTransparency && previewBackdrop == backdrop) {
+                        previewBackdrop = backdrop
+                        inspectingTransparency = false
+                    }
+                }
+                backdropChoice("透明度检查", id: "transparency", backdrop: nil, selected: inspectingTransparency) {
+                    inspectingTransparency.toggle()
+                }
+            }
+            .frame(width: 150)
+            .padding(9)
+        }
+    }
+
+    private func backdropChoice(_ title: String, id: String, backdrop: PreviewBackdrop?, selected: Bool,
+                                change: @escaping () -> Void) -> some View {
+        Button {
+            change()
+            showingBackdropChoices = false
+        } label: {
+            HStack(spacing: 6) {
+                backdropSwatch(backdrop)
+                Text(title)
+                Spacer()
+                actionSelectionMark(selected)
+            }
+        }
+        .workbenchButton(palette: palette, selected: selected)
+        .accessibilityIdentifier("preview-background-\(id)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func backdropSwatch(_ backdrop: PreviewBackdrop?) -> some View {
+        Group {
+            if let backdrop {
+                backdrop.color
+            } else {
+                PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 3)
+            }
+        }
+        .frame(width: 11, height: 11)
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(palette.border, lineWidth: 1))
+        .accessibilityHidden(true)
+    }
+
+    private var previewActionControls: some View {
+        let cat = state.appearance["frame"] == "CAT"
+        let fileActionTitle = fileActions.first(where: { $0.0 == state.action })?.1
+        return HStack(spacing: 5) {
+            Text("动作")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(palette.inkSoft)
+                .padding(.horizontal, 5)
+                .fixedSize()
+            previewActionButton("待机", action: "sit")
+            if cat {
+                previewActionMenu(typingActionTitle, id: "preview-action-typing-mode", selected: typingIsSelected,
+                                  choices: typingActions, showing: $showingTypingActions)
+                previewActionButton("听音乐", action: "listening")
+                Spacer(minLength: 0)
+                previewActionMenu(fileActionTitle ?? "文件动作", id: "preview-more-actions", selected: fileActionTitle != nil,
+                                  choices: fileActions, showing: $showingFileActions)
+            } else {
+                previewActionButton("打字", action: "typing", id: "typing-mode")
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(5)
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private func previewActionMenu(_ title: String, id: String, selected: Bool,
+                                   choices: [(String, String)], showing: Binding<Bool>) -> some View {
+        Button {
+            showing.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                actionSelectionMark(selected)
+                Text(title)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+            .fixedSize()
+        }
+        .workbenchButton(palette: palette, selected: selected)
+        .accessibilityIdentifier(id)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .popover(isPresented: showing, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(choices, id: \.0) { action, title in
+                    previewActionButton(title, action: action) { showing.wrappedValue = false }
+                }
+            }
+            .padding(9)
+        }
+    }
+
+    private func previewActionButton(_ title: String, action: String, id: String? = nil,
+                                     completion: (() -> Void)? = nil) -> some View {
+        let selected = state.action == action
+        return Button {
+            selectPreviewAction(action)
+            completion?()
+        } label: {
+            HStack(spacing: 5) {
+                actionSelectionMark(selected)
+                Text(title)
+            }
+            .fixedSize()
+        }
+        .workbenchButton(palette: palette, selected: selected)
+        .accessibilityIdentifier("preview-action-\(id ?? action)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func actionSelectionMark(_ selected: Bool) -> some View {
+        if selected {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(palette.accentDeep)
+                .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
     private var detailPane: some View {
         if state.catalog != nil {
-            ScrollViewReader { scroll in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 12) {
-                        namePanel
-                        breedPanel
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    if let editor = state.pixelEditor, editor.isFurOnly {
+                        PixelPanel(palette: palette, padding: 12) {
+                            pixelEditorControls
+                        }
+                    } else {
                         appearancePanel
+                            .disabled(state.pixelEditor != nil || state.editingCustom || state.loadingCustom)
                         customPanel
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 6)
                 }
-                .onChange(of: expandedAppearance) { editor in
-                    guard let editor, let row = AppearanceEditor.rows.first(where: { $0.contains(editor) }) else { return }
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        scroll.scrollTo(row, anchor: .top)
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.bottom, 6)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             PixelPanel(palette: palette) {
                 VStack(spacing: 10) {
@@ -619,6 +1199,12 @@ struct WorkbenchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    private func sectionTab(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .workbenchButton(palette: palette, selected: selected)
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     @State private var editingProfile = false
@@ -702,7 +1288,7 @@ struct WorkbenchView: View {
                     Button(editingProfile ? "保存" : "编辑") {
                         if editingProfile { saveProfile() } else { beginProfileEdit() }
                     }
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: editingProfile))
+                    .workbenchButton(palette: palette, prominent: editingProfile)
                     .accessibilityIdentifier(editingProfile ? "profile-save" : "profile-edit")
                 }
 
@@ -760,7 +1346,7 @@ struct WorkbenchView: View {
                                 }
                                 if hasBirthDraft {
                                     Button("清除") { hasBirthDraft = false }
-                                        .buttonStyle(PixelButtonStyle(palette: palette))
+                                        .workbenchButton(palette: palette)
                                 }
                             }
                             HStack(spacing: 8) {
@@ -843,56 +1429,267 @@ struct WorkbenchView: View {
             .fixedSize()
     }
 
-    private var breedPanel: some View {
-        PixelPanel(palette: palette, padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("品种")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
+    @State private var savingAppearance = false
+    @State private var customName = ""
 
-                PixelSelect(
-                    options: visiblePresets.map { (id: $0.id, name: $0.name) },
-                    selection: Binding(
-                        get: { state.preset },
-                        set: { state.choosePreset($0) }
-                    ),
-                    palette: palette
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("品种")
-                .disabled(state.loadingCustom)
+    @State private var customExpanded = false
+
+    private var customPanel: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Button {
+                        customExpanded.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: customExpanded ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(palette.inkSoft)
+                                .frame(width: 10)
+                            Text("自定义外观")
+                                .font(PixelFont.font(12))
+                                .foregroundStyle(palette.ink)
+                            if !state.customPresets.isEmpty {
+                                Text("\(state.customPresets.count)")
+                                    .font(PixelFont.font(10))
+                                    .foregroundStyle(palette.inkSoft)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(customExpanded ? "收起自定义外观" : "展开自定义外观")
+                    .accessibilityIdentifier("custom-appearance-toggle")
+
+                    Spacer(minLength: 8)
+
+                    if customExpanded {
+                        Button("存为形象") { savingAppearance.toggle() }
+                            .workbenchButton(palette: palette)
+                            .accessibilityIdentifier("save-custom-appearance")
+                        Button("导出 PNG") { state.exportAppearance() }
+                            .workbenchButton(palette: palette)
+                            .accessibilityIdentifier("export-appearance")
+                    }
+                }
+
+                if customExpanded {
+                    if savingAppearance && (appearancePage != .photo || !state.hasPhotoResult) {
+                        saveAppearanceForm
+                    }
+                    pixelEditorControls
+                    if !state.customPresets.isEmpty || state.customSelected != nil || state.hasPendingBrush {
+                        PixelDivider(palette: palette)
+                        HStack {
+                            Text(!state.customPresets.isEmpty ? "已保存形象" : "当前笔迹")
+                                .font(PixelFont.font(11))
+                                .foregroundStyle(palette.inkSoft)
+                            Spacer()
+                            if state.customSelected != nil || state.hasPendingBrush {
+                                Button("取消笔迹叠加") { state.clearCustom() }
+                                    .workbenchButton(palette: palette)
+                                    .disabled(state.pixelEditor != nil)
+                            }
+                        }
+                        LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
+                            ForEach(state.customPresets) { preset in
+                                customChip(preset)
+                            }
+                        }
+                        .disabled(state.pixelEditor != nil)
+                    }
+                }
+            }
+            .disabled(customExpanded && (state.editingCustom || state.loadingCustom || state.applying))
+        }
+    }
+
+    private var photoGenerator: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(state.catPhotos.indices, id: \.self) { slot in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button {
+                            state.chooseCatPhoto(slot)
+                        } label: {
+                            VStack(spacing: 4) {
+                                if let photo = state.catPhotos[slot] {
+                                    Image(nsImage: photo.image)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 65, height: 49)
+                                        .accessibilityHidden(true)
+                                }
+                                Text(slot == 0 ? "首图" : "补图 \(slot)")
+                                Text(state.catPhotos[slot] == nil ? (slot == 0 ? "上传" : "添加") : "更换")
+                                    .font(PixelFont.font(10))
+                            }
+                            .frame(minWidth: 65, minHeight: 55)
+                        }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier(slot == 0 ? "cat-photo-upload" : "cat-photo-upload-\(slot + 1)")
+                        .disabled(state.editingCustom || state.applying || state.pixelEditor != nil
+                                  || (slot > 0 && state.catPhotos[slot - 1] == nil))
+                        if slot > 0 && state.catPhotos[slot] != nil {
+                            Button("移除") {
+                                var photos = state.catPhotos
+                                photos.remove(at: slot)
+                                state.catPhotos = photos + [nil]
+                                state.photoStatus = ""
+                            }
+                            .workbenchButton(palette: palette)
+                            .accessibilityLabel("移除补图 \(slot)")
+                            .disabled(state.editingCustom || state.applying || state.pixelEditor != nil)
+                        }
+                    }
+                }
+            }
+            if state.catPhotos[0] != nil {
+                Button(state.generatingPhoto ? "正在生成…" : "生成桌宠") { state.generateFromCatPhoto() }
+                    .workbenchButton(palette: palette, prominent: true)
+                    .accessibilityIdentifier("cat-photo-generate")
+                    .disabled(state.editingCustom || state.loadingCustom || state.applying || state.pixelEditor != nil)
+            }
+            Text(state.photoStatus.isEmpty
+                 ? (CatPhotoClient.recognizesLocally ? "照片在本机识别。" : "点击生成后，照片会发送到云端识别。")
+                    + "首图建议用正面照，可加两张同猫补图，拍清被挡住的部位。"
+                 : state.photoStatus)
+                .font(PixelFont.font(10))
+                .foregroundStyle(palette.inkSoft)
+                .accessibilityIdentifier("cat-photo-status")
+            if state.hasPhotoResult {
+                PixelDivider(palette: palette)
+                Text("生成结果")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+                HStack(spacing: 8) {
+                    Button("调整花纹与颜色") { appearancePage = .coat }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("photo-result-appearance")
+                    Button("毛色画笔") { state.changeCustomMode(.brush) }
+                        .workbenchButton(palette: palette, prominent: true)
+                        .accessibilityIdentifier("photo-result-brush")
+                    Button("存为形象") { savingAppearance.toggle() }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("photo-result-save")
+                }
+                if savingAppearance { saveAppearanceForm }
+                if let catalog = state.catalog {
+                    photoEarControls(catalog.fieldsByFrame["CAT"]?["ear"] ?? [], catalog: catalog)
+                }
             }
         }
     }
 
-    private var customPanel: some View {
-        PixelPanel(palette: palette, padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+    private func photoEarControls(_ shapes: [AppearanceOption], catalog: AppearanceCatalog) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                photoEarShape("画面左耳", side: "left", options: shapes)
+                photoEarShape("画面右耳", side: "right", options: shapes)
+            }
+            DisclosureGroup("耳斑") {
+                HStack(alignment: .top, spacing: 10) {
+                    photoEarMark("画面左耳斑", side: "left", catalog: catalog)
+                    photoEarMark("画面右耳斑", side: "right", catalog: catalog)
+                }
+                .padding(.top, 6)
+            }
+            .font(PixelFont.font(12))
+            .foregroundStyle(palette.ink)
+        }
+    }
+
+    private func photoEarShape(_ title: String, side: String, options: [AppearanceOption]) -> some View {
+        let key = "\(side)Ear"
+        return VStack(alignment: .leading, spacing: 4) {
+            profileLabel(title)
+            PixelSelect(options: options.map { ($0.id, $0.name) },
+                        selection: Binding(get: { state.appearance[key] ?? state.appearance["ear"] ?? "CE01" },
+                                           set: { appearanceBinding(key).wrappedValue = $0 }),
+                        palette: palette)
+                .accessibilityLabel(title)
+                .accessibilityValue(options.first { $0.id == (state.appearance[key] ?? state.appearance["ear"]) }?.name ?? "")
+                .accessibilityIdentifier("photo-ear-shape-\(side)")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func photoEarMark(_ title: String, side: String, catalog: AppearanceCatalog) -> some View {
+        let key = "\(side)Ear"
+        let options = catalog.photoEarMarks[side] ?? []
+        return VStack(alignment: .leading, spacing: 5) {
+            profileLabel(title)
+            PixelSelect(options: [("none", "无耳斑")] + options.map { ($0.id, $0.name) },
+                        selection: Binding(get: { state.photoEarMarks[side] ?? "none" }, set: { mark in
+                            state.photoEarMarks[side] = mark == "none" ? nil : mark
+                            if mark != "none" && state.appearance[key] == nil {
+                                state.appearance[key] = state.appearance["ear"] ?? "CE01"
+                            }
+                            state.refresh()
+                        }), palette: palette)
+                .accessibilityLabel(title)
+                .accessibilityIdentifier("photo-ear-mark-\(side)")
+            if state.photoEarMarks[side] != nil {
+                PixelSelect(options: catalog.photoEarPigments.map { ($0.id, $0.name) },
+                            selection: Binding(get: { state.photoEarColors[side] ?? "orange" }, set: {
+                                state.photoEarColors[side] = $0
+                                state.refresh()
+                            }), palette: palette)
+                    .accessibilityLabel(title + "颜色")
+                    .accessibilityIdentifier("photo-ear-pigment-\(side)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var saveAppearanceForm: some View {
+        HStack(spacing: 8) {
+            TextField("形象名称", text: $customName)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(saveCurrentAppearance)
+                .accessibilityIdentifier("custom-appearance-name")
+            Button("保存", action: saveCurrentAppearance)
+                .workbenchButton(palette: palette, prominent: true)
+                .disabled(customName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private var pixelEditorControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let editor = state.pixelEditor {
                 HStack {
-                    Text("自定义")
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.inkSoft)
-                    Spacer()
-                    if state.customSelected != nil {
-                        Button("取消叠加") { state.clearCustom() }
-                            .buttonStyle(PixelButtonStyle(palette: palette))
-                            .disabled(state.applying)
+                    if editor.isFurOnly {
+                        Text("毛色画笔")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(palette.ink)
+                        Spacer(minLength: 8)
                     }
-                    Button("像素编辑") { state.openPixelEditor() }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
-                        .disabled(state.openingPixelEditor || state.loadingCustom)
+                    Button("完成编辑") { state.changeCustomMode(nil) }
+                        .workbenchButton(palette: palette, prominent: editor.isFurOnly)
+                        .accessibilityIdentifier("finish-pixel-editing")
                 }
-                if state.customPresets.isEmpty {
-                    Text("从左侧预览开始编辑，保存后会出现在这里。")
-                        .font(PixelFont.font(10))
-                        .foregroundStyle(palette.inkSoft)
-                } else {
-                    LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
-                        ForEach(state.customPresets) { preset in
-                            customChip(preset)
-                        }
-                    }
-                }
+                PixelEditorTools(model: editor, palette: palette)
+                Text(editor.isFurOnly
+                     ? "点小地图切换部位。画笔只改可见毛发，恢复原毛色可擦掉笔迹。"
+                     : "点小地图切换部位，在左侧逐格点绘。完成编辑后可预览动作。")
+                    .font(PixelFont.font(10))
+                    .foregroundStyle(palette.inkSoft)
+            } else {
+                Button("像素编辑器") { state.changeCustomMode(.brush) }
+                    .workbenchButton(palette: palette)
+                    .accessibilityIdentifier("custom-appearance-brush")
+            }
+        }
+    }
+
+    private func saveCurrentAppearance() {
+        state.saveCustomAppearance(customName) { saved in
+            if saved {
+                savingAppearance = false
+                customName = ""
             }
         }
     }
@@ -950,156 +1747,363 @@ struct WorkbenchView: View {
     @ViewBuilder
     private var appearancePanel: some View {
         if let catalog = state.catalog {
-            let frame = state.appearance["frame", default: "M1"]
+            let frame = state.appearance["frame", default: "CAT"]
             let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
-            let fieldsForFrame = catalog.fieldsByFrame[optionGroup] ?? [:]
-            let localMarkings = catalog.fieldsByFrame["CAT_MARKINGS"] ?? [:]
+            let fields = catalog.fieldsByFrame[optionGroup] ?? [:]
+            let markings = catalog.fieldsByFrame["CAT_MARKINGS"] ?? [:]
+            let canChooseFaceBase = catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"])
 
             PixelPanel(palette: palette, padding: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("外观")
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.inkSoft)
-
-                    if frame == "CAT" {
-                        let canChooseFaceBase = catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"])
-                        catAppearance(fields: fieldsForFrame, markings: localMarkings, canChooseFaceBase: canChooseFaceBase)
-                    } else {
+                if frame == "CAT" {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("外观").font(.system(size: 23, weight: .semibold)).foregroundStyle(palette.ink)
+                        appearanceNavigation
+                        Divider()
+                        if appearancePage == .face { faceNavigation }
+                        appearanceContent(fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase)
+                            .disabled(state.choosingBreed && appearancePage != .breeds)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .onChange(of: state.preset) { _ in eyeScope = nil }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
                         LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
                             ForEach(dogFields, id: \.0) { key, title in
-                                if let options = fieldsForFrame[key] {
+                                if let options = fields[key] {
                                     fieldPicker(title: title, key: key, options: options)
                                 }
                             }
                         }
-                        paletteRow(options: fieldsForFrame["palette"] ?? [])
+                        paletteRow(options: fields["palette"] ?? [])
                     }
                 }
             }
         }
     }
 
-    private func catAppearance(
-        fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
-    ) -> some View {
-        VStack(spacing: 6) {
-            ForEach(AppearanceEditor.rows, id: \.self) { row in
-                VStack(spacing: 6) {
-                    HStack(spacing: 6) {
-                        ForEach(row, id: \.self) { editor in
-                            appearanceTile(editor, summary: appearanceSummary(editor, fields: fields, markings: markings))
+    private var appearanceNavigation: some View {
+        HStack(spacing: 4) {
+            ForEach(AppearancePage.allCases.filter { $0 != .photo }, id: \.self) { page in
+                if page == .coat {
+                    Rectangle().fill(palette.borderSoft).frame(width: 1, height: 18)
+                        .padding(.horizontal, 2)
+                }
+                sectionTab(page.rawValue, selected: appearancePage == page) {
+                    if appearancePage != page { eyeScope = nil }
+                    appearancePage = page
+                }
+                .accessibilityIdentifier("appearance-\(page)")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var faceNavigation: some View {
+        HStack(spacing: 4) {
+            ForEach(FacePart.allCases, id: \.self) { part in
+                sectionTab(part.rawValue, selected: facePart == part) {
+                    if facePart != part { eyeScope = nil }
+                    facePart = part
+                }
+                .accessibilityIdentifier("appearance-\(part)")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var breedGrid: some View {
+        let presets = visiblePresets
+        let preferredRows = [
+            ["preset_cat_black", "preset_cat_CC09", "preset_cat_orange", "preset_cat_british_blue"],
+            ["preset_cat_american_shorthair", "preset_cat_CC11", "preset_cat_siamese", "preset_cat_ragdoll"],
+            ["preset_cat_li_hua", "preset_cat_CC10", "preset_cat_calico", "preset_cat_CC12"],
+        ]
+        let arrangedIDs = Set(preferredRows.joined())
+        let rows = preferredRows.map { row in
+            row.compactMap { id in presets.first { $0.id == id } }
+        } + [presets.filter { !arrangedIDs.contains($0.id) }]
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 7), count: 4)
+
+        return VStack(spacing: 7) {
+            ForEach(rows.indices, id: \.self) { index in
+                if !rows[index].isEmpty {
+                    LazyVGrid(columns: columns, spacing: 7) {
+                        ForEach(rows[index], id: \.id) { preset in
+                            appearanceCard(preset.name, image: state.thumbnails?.breeds[preset.id],
+                                           selected: state.preset == preset.id, imageHeight: 84, labelHeight: 17) {
+                                state.choosePreset(preset.id)
+                            }
+                            .accessibilityIdentifier("breed-\(preset.id)")
                         }
                     }
-                    if let editor = expandedAppearance, row.contains(editor) {
-                        appearanceEditor(editor, fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(PixelBox(corner: 2).fill(palette.panelAlt.opacity(0.55)))
-                            .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
-                    }
                 }
-                .id(row)
             }
         }
-    }
-
-    private func appearanceTile(_ editor: AppearanceEditor, summary: String) -> some View {
-        let expanded = expandedAppearance == editor
-        return Button {
-            expandedAppearance = expanded ? nil : editor
-        } label: {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(editor.title)
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.ink)
-                    Text(summary)
-                        .font(PixelFont.font(11))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 2)
-                PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 10)
-                    .rotationEffect(.degrees(expanded ? 180 : -90))
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(PixelBox(corner: 2).fill(expanded ? palette.accent.opacity(0.28) : palette.panelAlt))
-            .overlay(PixelBox(corner: 2).stroke(expanded ? palette.accent : palette.borderSoft, lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(editor.title)
-        .accessibilityValue(summary)
-        .accessibilityAddTraits(expanded ? .isSelected : [])
-        .accessibilityIdentifier("appearance-\(editor.rawValue)")
-    }
-
-    private func appearanceSummary(
-        _ editor: AppearanceEditor, fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]]
-    ) -> String {
-        func name(_ key: String) -> String? {
-            (fields[key] ?? markings[key])?.first { $0.id == state.appearance[key] }?.name
-        }
-        let keys: [String]
-        switch editor {
-        case .ears: keys = ["ear", "earColor"]
-        case .eyes:
-            let colors = fields["eyeColor"] ?? []
-            let left = pupilSummary(side: .left, colors: colors)
-            let right = pupilSummary(side: .right, colors: colors)
-            return left == right ? left : "左右眼分别设置"
-        case .nose: keys = ["nose", "noseColor"]
-        case .mouth: keys = ["mouth"]
-        case .tail: keys = ["tail", "tailPattern"]
-        case .coat: keys = ["coat", "bodyPattern"]
-        case .accessories: keys = ["accessory"]
-        }
-        return keys.compactMap(name).joined(separator: " · ")
     }
 
     @ViewBuilder
-    private func appearanceEditor(
-        _ editor: AppearanceEditor, fields: [String: [AppearanceOption]],
-        markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
+    private func appearanceContent(
+        fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]],
+        canChooseFaceBase: Bool
     ) -> some View {
-        switch editor {
-        case .ears:
-            partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fields)
-        case .eyes:
-            pupilControls(colors: fields["eyeColor"] ?? [])
-        case .nose:
-            partColorRow("nose", shapeTitle: "鼻形", colorTitle: "鼻色", fields: fields)
-        case .mouth:
-            if let options = fields["mouth"] { fieldPicker(title: "嘴形", key: "mouth", options: options) }
-        case .tail:
-            HStack(alignment: .top, spacing: 10) {
-                if let options = fields["tail"] { fieldPicker(title: "尾形", key: "tail", options: options) }
-                if let options = markings["tailPattern"] { fieldPicker(title: "尾纹", key: "tailPattern", options: options) }
+        switch appearancePage {
+        case .breeds:
+            breedGrid
+        case .face:
+            switch facePart {
+            case .ears:
+                if state.hasPhotoResult, let catalog = state.catalog {
+                    VStack(alignment: .leading, spacing: 11) {
+                        photoEarControls(fields["ear"] ?? [], catalog: catalog)
+                        if let colors = fields["earColor"] {
+                            fieldPicker(title: "内耳色", key: "earColor", options: colors,
+                                        defaultSwatch: WBTheme.swatchColors(naturalSwatches["earColor"].map { [$0] }))
+                        }
+                    }
+                } else {
+                    partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fields)
+                }
+            case .eyes:
+                pupilControls(colors: fields["eyeColor"] ?? [])
+            case .nose:
+                partColorRow("nose", shapeTitle: "鼻形", colorTitle: "鼻色", fields: fields)
+            case .mouth:
+                if let options = fields["mouth"] { partChoices("嘴形", key: "mouth", options: options) }
             }
         case .coat:
-            VStack(alignment: .leading, spacing: 10) {
-                if let options = fields["coat"] { coatPicker(options: options, palettes: fields["palette"] ?? []) }
-                HStack(alignment: .top, spacing: 10) {
-                    if let options = fields["pattern"] { fieldPicker(title: "额头花纹", key: "pattern", options: options) }
-                    if canChooseFaceBase, let options = markings["faceBase"] {
-                        fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
-                    } else {
-                        staticField(title: "脸部底纹", value: "均匀底色")
-                    }
-                    if let options = markings["cheekPattern"] { fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options) }
+            VStack(alignment: .leading, spacing: 11) {
+                coatCards
+                if let options = fields["coat"] { extraCoatPicker(options: options, palettes: fields["palette"] ?? []) }
+                DisclosureGroup("细调花纹") {
+                    markingsControls(fields, markings, canChooseFaceBase: canChooseFaceBase)
+                        .padding(.top, 8)
                 }
-                HStack(alignment: .top, spacing: 10) {
-                    if let options = markings["bodyBase"] { fieldPicker(title: "身体底色", key: "bodyBase", options: options) }
-                    if let options = fields["bodyPattern"] { fieldPicker(title: "身体花纹", key: "bodyPattern", options: options) }
+                .font(PixelFont.font(12))
+                .foregroundStyle(palette.ink)
+            }
+        case .tail:
+            if let options = fields["tail"] { partChoices("尾形", key: "tail", options: options, imageHeight: 88) }
+        case .accessories:
+            VStack(alignment: .leading, spacing: 11) {
+                if let options = fields["accessory"] { accessoryRow(options) }
+                if let colors = fields["headphoneColor"] {
+                    fieldPicker(title: "耳机颜色", key: "headphoneColor", options: colors, defaultSwatch: [])
                 }
             }
-        case .accessories:
-            if let options = fields["accessory"] { accessoryRow(options) }
+        case .photo:
+            photoGenerator
         }
     }
 
+    private var currentCoatCards: [AppearanceOption] {
+        state.catalog?.coatCards[state.appearance["palette", default: "CC01"]] ?? []
+    }
+
+    private var ownPaletteCoat: String {
+        "breed:\(state.appearance["palette", default: "CC01"])"
+    }
+
+    private var selectedCoat: String {
+        let coat = state.appearance["coat", default: ""]
+        return coat == ownPaletteCoat ? "native" : coat
+    }
+
+    private var coatCards: some View {
+        // A different coat selection still uses the same set of thumbnails.
+        let key = CoatThumbnailKey(appearance: state.appearance.filter { $0.key != "coat" && $0.key != "name" },
+                                   patches: state.furPatches, overlayRevision: state.coatOverlayRevision)
+        let images = coatThumbnails?.key == key ? coatThumbnails?.images : nil
+        return VStack(alignment: .leading, spacing: 6) {
+            if let breed = nativeCatPreset { profileLabel("\(breed.name)的花色") }
+            LazyVGrid(columns: presetColumns, spacing: 8) {
+                ForEach(currentCoatCards, id: \.id) { coat in
+                    appearanceCard(coat.name, image: images?[coat.id], selected: selectedCoat == coat.id,
+                                   imageHeight: 104) {
+                        appearanceBinding("coat").wrappedValue = coat.id
+                    }
+                    .accessibilityIdentifier("coat-\(coat.id)")
+                }
+            }
+        }
+        .task(id: key) {
+            guard images == nil else { return }
+            let rendered = await state.renderCoatThumbnails()
+            if !Task.isCancelled, !rendered.isEmpty { coatThumbnails = (key, rendered) }
+        }
+    }
+
+    private func markingsControls(
+        _ fields: [String: [AppearanceOption]], _ markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 7) {
+                if let options = fields["pattern"] { fieldPicker(title: "额头花纹", key: "pattern", options: options) }
+                if canChooseFaceBase, let options = markings["faceBase"] {
+                    fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
+                } else {
+                    staticField(title: "脸部底纹", value: "均匀底色")
+                }
+                if let options = markings["cheekPattern"] { fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options) }
+            }
+            HStack(alignment: .top, spacing: 7) {
+                if let options = markings["bodyBase"] { fieldPicker(title: "身体底色", key: "bodyBase", options: options) }
+                if let options = fields["bodyPattern"] { fieldPicker(title: "身体花纹", key: "bodyPattern", options: options) }
+                if let options = markings["tailPattern"] { fieldPicker(title: "尾纹", key: "tailPattern", options: options) }
+            }
+        }
+    }
+
+    private func appearanceCard(
+        _ title: String, image: NSImage?, selected: Bool, imageHeight: CGFloat, labelHeight: CGFloat = 20,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                ZStack {
+                    if let image {
+                        Image(nsImage: image)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .padding(5)
+                    }
+                }
+                .frame(height: imageHeight)
+                .clipped()
+                .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(palette.ink)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(height: labelHeight)
+            }
+            .padding(4)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .topTrailing) {
+                if selected {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
+                        .foregroundStyle(palette.accentDeep).padding(7).accessibilityHidden(true)
+                }
+            }
+        }
+        .workbenchButton(palette: palette, selected: selected, card: true)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func partChoices(
+        _ title: String, key: String, options: [AppearanceOption], imageHeight: CGFloat = 59
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            profileLabel(title)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: min(5, max(1, options.count))),
+                      spacing: 6) {
+                ForEach(options, id: \.id) { option in
+                    appearanceCard(option.name, image: state.thumbnails?.parts[key]?[option.id],
+                                   selected: state.appearance[key] == option.id, imageHeight: imageHeight) {
+                        appearanceBinding(key).wrappedValue = option.id
+                    }
+                    .accessibilityIdentifier("\(key)-shape-\(option.id)")
+                }
+            }
+        }
+    }
+
+    private let patchRegions = [
+        ("head", "头脸"), ("torso", "胸口／后身"),
+        ("leftForeleg", "画面左前肢"), ("rightForeleg", "画面右前肢"),
+        ("leftPaw", "画面左前爪"), ("rightPaw", "画面右前爪"),
+    ]
+
+    private func furPatchEditor(_ catalog: AppearanceCatalog) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Menu("按部位添加斑块") {
+                ForEach(patchRegions, id: \.0) { part, label in
+                    Menu(label) {
+                        ForEach(catalog.furPatchPresets.filter { $0.part == part }) { preset in
+                            Button(preset.name) { state.addFurPatch(preset) }
+                        }
+                    }
+                }
+            }
+            .fixedSize()
+            .disabled(state.furPatches.count >= catalog.furPatchLimit)
+            .accessibilityIdentifier("fur-patch-add")
+            if !state.furPatches.isEmpty {
+                Menu {
+                    ForEach(Array(state.furPatches.enumerated()), id: \.element.id) { index, patch in
+                        Button("\(index + 1) · \(state.furPatchPreset(patch.preset)?.name ?? "斑块")") {
+                            state.selectFurPatch(patch.id)
+                        }
+                    }
+                } label: {
+                    if let patch = state.selectedFurPatch, let preset = state.furPatchPreset(patch.preset) {
+                        let index = state.furPatches.firstIndex { $0.id == patch.id } ?? 0
+                        Label("\(index + 1) · \(preset.name)", systemImage: "square.on.square")
+                    } else {
+                        Text("选择斑块（\(state.furPatches.count)）")
+                    }
+                }
+                .accessibilityIdentifier("fur-patch-selection")
+            }
+            if let patch = state.selectedFurPatch, let preset = state.furPatchPreset(patch.preset) {
+                furPatchControls(patch, preset: preset, catalog: catalog)
+            }
+        }
+    }
+
+    private func furPatchControls(_ patch: FurPatch, preset: FurPatchPreset, catalog: AppearanceCatalog) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(preset.shapes) { shape in
+                        Button(shape.name) { editFurPatch(patch) { $0.shape = shape.id } }
+                    }
+                } label: {
+                    Text(preset.shapes.first { $0.id == patch.shape }?.name ?? "形状")
+                }
+                .accessibilityLabel("斑块形状")
+                .accessibilityIdentifier("fur-patch-shape")
+                ColorPicker("颜色", selection: Binding(
+                    get: { WBTheme.swatchColors([patch.color]).first ?? .white },
+                    set: { color in
+                        guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return }
+                        let channels = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent].map { Int(($0 * 255).rounded()) }
+                        let code = String(format: "#%02X%02X%02X", channels[0], channels[1], channels[2])
+                        editFurPatch(patch) { $0.color = code }
+                    }), supportsOpacity: false)
+                    .fixedSize()
+            }
+            HStack(spacing: 8) {
+                Stepper("宽 \(patch.width)", value: Binding(
+                    get: { patch.width }, set: { width in editFurPatch(patch) { $0.width = width } }),
+                        in: catalog.furPatchDimensions.range)
+                Stepper("高 \(patch.height)", value: Binding(
+                    get: { patch.height }, set: { height in editFurPatch(patch) { $0.height = height } }),
+                        in: catalog.furPatchDimensions.range)
+            }
+            .font(PixelFont.font(11))
+            HStack(spacing: 7) {
+                Button("翻转") { editFurPatch(patch) { $0.flipped.toggle() } }
+                Button("镜像复制") { state.mirrorFurPatch(patch) }
+                    .disabled(state.furPatches.count >= catalog.furPatchLimit)
+                Button("删除") { state.removeFurPatch(patch.id) }
+                Spacer(minLength: 0)
+                Button("收起选框") { state.selectFurPatch(nil) }
+            }
+            .workbenchButton(palette: palette, selected: false)
+            Text(state.action == "sit" ? "拖选框移动，拖方块调宽高。" : "切回待机可继续在预览上拖动。")
+                .font(PixelFont.font(10))
+                .foregroundStyle(palette.inkSoft)
+        }
+    }
+
+    private func editFurPatch(_ patch: FurPatch, change: (inout FurPatch) -> Void) {
+        var updated = patch
+        change(&updated)
+        state.adjustFurPatch(updated)
+    }
 
     private var nameCountColor: Color {
         let count = state.appearance["name", default: ""].count
@@ -1112,8 +2116,8 @@ struct WorkbenchView: View {
     ) -> some View {
         let colorKey = part + "Color"
         if let shapes = fields[part], let colors = fields[colorKey] {
-            HStack(alignment: .top, spacing: 10) {
-                fieldPicker(title: shapeTitle, key: part, options: shapes)
+            VStack(alignment: .leading, spacing: 11) {
+                partChoices(shapeTitle, key: part, options: shapes)
                 fieldPicker(title: colorTitle, key: colorKey, options: colors,
                             defaultSwatch: WBTheme.swatchColors(naturalSwatches[colorKey].map { [$0] }))
             }
@@ -1151,6 +2155,7 @@ struct WorkbenchView: View {
         case "eyeColor": "eye-color-picker"
         case "earColor": "ear-color-picker"
         case "noseColor": "nose-color-picker"
+        case "headphoneColor": "headphone-color-picker"
         default: "\(key)-picker"
         }
         return VStack(alignment: .leading, spacing: 3) {
@@ -1172,54 +2177,58 @@ struct WorkbenchView: View {
         }
     }
 
+    private var hasDifferentEyes: Bool {
+        func differs(_ suffix: String, inherited: String, defaultValue: String) -> Bool {
+            pupilValue(.left, suffix, inherited: inherited, defaultValue: defaultValue)
+                != pupilValue(.right, suffix, inherited: inherited, defaultValue: defaultValue)
+        }
+        let leftIsDouble = pupilValue(.left, "InnerPupil", inherited: "innerPupil", defaultValue: "round") == "round"
+        return differs("InnerPupil", inherited: "innerPupil", defaultValue: "round")
+            || differs("EyeColor", inherited: "eyeColor", defaultValue: "natural")
+            || (leftIsDouble && differs("InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural"))
+    }
+
     private func pupilControls(colors: [AppearanceOption]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 2) {
-                ForEach(EyeEditScope.allCases, id: \.self) { scope in
-                    Button {
-                        eyeScope = scope
-                    } label: {
-                        Text(scope.title).frame(maxWidth: .infinity)
+        let scope = eyeScope ?? (hasDifferentEyes ? .left : .both)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 5) {
+                if scope != .both || hasDifferentEyes {
+                    ForEach(EyeEditScope.allCases, id: \.self) { option in
+                        sectionTab(option.title, selected: scope == option) { eyeScope = option }
+                            .accessibilityIdentifier("\(option.rawValue)-eye-pupil-picker")
                     }
-                    .buttonStyle(EyeChoiceStyle(palette: palette, selected: eyeScope == scope))
-                    .accessibilityAddTraits(eyeScope == scope ? .isSelected : [])
-                    .accessibilityIdentifier("\(scope.rawValue)-eye-pupil-picker")
+                } else {
+                    Button("左右分别编辑") { eyeScope = .left }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("split-eye-colors")
                 }
+                Spacer(minLength: 0)
             }
-            .padding(3)
-            .background(PixelBox(corner: 2).fill(palette.panelDeep.opacity(0.45)))
             PupilColorEditor(
-                side: eyeScope.rawValue, colors: colors, naturalSwatches: naturalSwatches, palette: palette,
-                layers: pupilBinding("InnerPupil", inherited: "innerPupil", defaultValue: "round"),
-                outer: pupilBinding("EyeColor", inherited: "eyeColor", defaultValue: "natural"),
-                inner: pupilBinding("InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural")
+                side: scope.rawValue, colors: colors, naturalSwatches: naturalSwatches, palette: palette,
+                layers: pupilBinding(scope, "InnerPupil", inherited: "innerPupil", defaultValue: "round"),
+                outer: pupilBinding(scope, "EyeColor", inherited: "eyeColor", defaultValue: "natural"),
+                inner: pupilBinding(scope, "InnerEyeColor", inherited: "innerEyeColor", defaultValue: "natural")
             )
-            .id(eyeScope)
+            .id(scope)
         }
     }
 
-    private func pupilSummary(side: EyeEditScope, colors: [AppearanceOption]) -> String {
-        let prefix = side.rawValue
-        let isDouble = (state.appearance[prefix + "InnerPupil"] ?? state.appearance["innerPupil"] ?? "round") == "round"
-        let outer = state.appearance[prefix + "EyeColor"] ?? state.appearance["eyeColor"]
-        let outerName = colors.first { $0.id == outer }?.name ?? "原色"
-        guard isDouble else { return "单瞳 · \(outerName)" }
-        let inner = state.appearance[prefix + "InnerEyeColor"] ?? state.appearance["innerEyeColor"]
-        let innerName = colors.first { $0.id == inner }?.name ?? "原色"
-        return "双瞳 · \(outerName) / \(innerName)"
+    private func pupilValue(_ side: EyeEditScope, _ suffix: String, inherited: String, defaultValue: String) -> String {
+        state.appearance[side.rawValue + suffix] ?? state.appearance[inherited] ?? defaultValue
     }
 
-    private func pupilBinding(_ suffix: String, inherited: String, defaultValue: String) -> Binding<String> {
-        let keys = (eyeScope == .both ? ["left", "right"] : [eyeScope.rawValue]).map { $0 + suffix }
+    private func pupilBinding(_ scope: EyeEditScope, _ suffix: String, inherited: String, defaultValue: String) -> Binding<String> {
+        let sides = scope == .both ? [EyeEditScope.left, .right] : [scope]
         return Binding(
             get: {
-                let values = keys.map { state.appearance[$0] ?? state.appearance[inherited] ?? defaultValue }
+                let values = sides.map { pupilValue($0, suffix, inherited: inherited, defaultValue: defaultValue) }
                 guard let first = values.first, values.allSatisfy({ $0 == first }) else { return "" }
                 return first
             },
             set: { value in
                 var appearance = state.appearance
-                for key in keys { appearance[key] = value }
+                for side in sides { appearance[side.rawValue + suffix] = value }
                 state.appearance = appearance
                 state.refresh()
             }
@@ -1233,11 +2242,22 @@ struct WorkbenchView: View {
 
     private var naturalSwatches: [String: String] { nativeCatPreset?.naturalSwatches ?? [:] }
 
-    private func coatPicker(options: [AppearanceOption], palettes: [AppearanceOption]) -> some View {
-        let paletteID = state.appearance["palette", default: "CC01"]
-        let nativeColors = palettes.first { $0.id == paletteID }?.colors ?? nativeCatPreset?.colors
-        return fieldPicker(title: "毛色搭配", key: "coat", options: options,
-                           defaultSwatch: WBTheme.paletteColors(paletteID, catalogColors: nativeColors))
+    private func extraCoatPicker(options: [AppearanceOption], palettes: [AppearanceOption]) -> some View {
+        let curatedIDs = Set(state.catalog?.coatCards.values.flatMap { $0.dropFirst().map(\.id) } ?? [])
+        let original = currentCoatCards.first?.id
+        let nativeColors = palettes.first { $0.id == state.appearance["palette"] }?.colors
+        let extras = options.filter { $0.id != original && $0.id != ownPaletteCoat && !curatedIDs.contains($0.id) }.map { option in
+            option.id == "native" ? AppearanceOption(id: option.id, name: "底稿色", colors: nativeColors) : option
+        }
+        let ordered = extras.filter { !$0.id.hasPrefix("breed:") } + extras.filter { $0.id.hasPrefix("breed:") }
+        return VStack(alignment: .leading, spacing: 3) {
+            profileLabel("特别毛色")
+            PixelColorSelect(title: "特别毛色", options: ordered, defaultSwatch: [], palette: palette,
+                             selection: Binding(get: { selectedCoat }, set: { appearanceBinding("coat").wrappedValue = $0 }),
+                             mixedName: "选择特别毛色")
+                .accessibilityIdentifier("coat-picker")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func paletteRow(options: [AppearanceOption]) -> some View {
@@ -1283,104 +2303,124 @@ struct WorkbenchView: View {
 
 
     private var footer: some View {
-        PixelPanel(palette: palette, padding: 12) {
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    PixelStatusBadge(text: statusText, color: statusColor, palette: palette)
-                    Spacer(minLength: 8)
-                    Button("打字同步") {
-                        state.enableTyping()
+        PixelPanel(palette: palette, padding: 10) {
+            HStack(spacing: 12) {
+                Button("桌宠设置") { showingDesktopSettings.toggle() }
+                    .workbenchButton(palette: palette)
+                    .accessibilityIdentifier("workbench-desktop-settings")
+                    .popover(isPresented: $showingDesktopSettings, arrowEdge: .top) {
+                        desktopSettings.padding(15).frame(width: 260)
                     }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-                    .help(state.typingStatus.text)
-                    .accessibilityIdentifier("typing-sync-button")
-
-                    applyButton
-                }
-
-                PixelDivider(palette: palette)
-
-                HStack(spacing: 10) {
-                    Toggle("显示桌宠", isOn: $state.visible)
-                        .toggleStyle(PixelToggleStyle(palette: palette))
-                        .onChange(of: state.visible) { state.setVisibility($0) }
-
-                    Rectangle().fill(palette.borderSoft).frame(width: 2, height: 14)
-
-                    Toggle("眼神跟随", isOn: $state.eyeFollow)
-                        .toggleStyle(PixelToggleStyle(palette: palette))
-                        .accessibilityIdentifier("eye-follow-toggle")
-                        .help("让猫咪眼睛的小高光跟随鼠标方向")
-                        .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
-
-                    Rectangle().fill(palette.borderSoft).frame(width: 2, height: 14)
-
-                    Text("大小")
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.inkSoft)
-                    PixelSlider(
-                        value: $state.petSize,
-                        range: 120...320,
-                        step: 10,
-                        palette: palette
-                    )
-                    .frame(width: 140)
+                Text("桌宠大小").font(.system(size: 12)).foregroundStyle(palette.inkSoft)
+                Slider(value: $state.petSize, in: 120...320)
+                    .frame(width: 115)
+                    .tint(palette.accentDeep)
                     .accessibilityLabel("桌宠大小")
                     .onChange(of: state.petSize) { state.setSize($0) }
-                    Text("\(Int(state.petSize)) px")
-                        .font(PixelFont.font(12))
-                        .foregroundStyle(palette.ink)
-                        .frame(width: 52, alignment: .leading)
-
-                    Spacer(minLength: 8)
-
-                    Button("归位") { state.reset() }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
-                        .help("将桌宠移回屏幕")
-                }
+                Text("\(Int(state.petSize)) px")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(palette.inkSoft)
+                    .fixedSize()
+                Spacer(minLength: 8)
+                applyStatus
+                applyButton
             }
+        }
+    }
+
+    private var desktopSettings: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Toggle("显示桌宠", isOn: Binding(get: { state.petIsVisible }, set: state.setVisibility))
+            Toggle("眼神跟随", isOn: $state.eyeFollow)
+                .accessibilityIdentifier("eye-follow-toggle")
+                .help("让猫咪眼睛的小高光跟随鼠标方向")
+                .onChange(of: state.eyeFollow) { state.setEyeFollow($0) }
+            Toggle("打字动画", isOn: Binding(get: { state.typingAnimationEnabled }, set: state.setTypingAnimation))
+                .help("按键时让桌面上的小猫打字，需要输入监控")
+                .accessibilityIdentifier("typing-animation-toggle")
+            Toggle("本地打字统计", isOn: Binding(get: { state.typingStatsEnabled }, set: state.setTypingStats))
+                .help("在本机记录活跃打字时长和按键次数，需要输入监控")
+                .accessibilityIdentifier("typing-stats-toggle")
+            Toggle("显示打字统计", isOn: Binding(get: { state.showTypingStats }, set: state.setShowTypingStats))
+                .help("在预览下方显示今日数据，统计由本地打字统计开关控制")
+                .accessibilityIdentifier("typing-stats-display-toggle")
+            Text(state.typingStatus.text)
+                .font(.system(size: 11))
+                .foregroundStyle(palette.inkSoft)
+            Toggle("划词翻译", isOn: Binding(get: { state.selectionTranslationEnabled }, set: state.setSelectionTranslation))
+                .disabled(!TranslationEngine.isAvailable)
+                .help(TranslationEngine.isAvailable ? "选中英文后显示翻译按钮，需要辅助功能权限" : "需要 macOS 15 或更新版本")
+                .accessibilityIdentifier("selection-translation-toggle")
+            Divider()
+            if state.typingStatus == .needsPermission {
+                Button("输入监控设置", action: state.openInputSettings)
+                    .workbenchButton(palette: palette)
+            }
+            if state.translationNeedsPermission {
+                Button("辅助功能设置", action: state.openAccessibilitySettings)
+                    .workbenchButton(palette: palette)
+            }
+            Button("归位", action: state.reset)
+                .workbenchButton(palette: palette)
+                .help("将桌宠移回屏幕")
+        }
+        .toggleStyle(.checkbox)
+        .font(.system(size: 12))
+    }
+
+    private var applyStatus: some View {
+        let message: String
+        if state.applying {
+            message = "正在应用当前外观…"
+        } else if state.loadingCustom {
+            message = "正在载入自定义形象…"
+        } else {
+            message = state.message.isEmpty ? "将当前外观显示到桌面" : state.message
+        }
+
+        let applied = message == "已应用到桌宠"
+        let failed = message.contains("无法") || message.contains("失败")
+        return HStack(spacing: 5) {
+            if applied || failed {
+                Image(systemName: applied ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundStyle(applied ? palette.green : palette.red)
+                    .accessibilityHidden(true)
+            }
+            Text(message)
+                .font(.system(size: 12, weight: applied || failed ? .semibold : .regular))
+                .foregroundStyle(applied || failed ? palette.ink : palette.inkSoft)
+                .lineLimit(1)
+                .help(message)
+                .accessibilityIdentifier("workbench-apply-status")
         }
     }
 
     private var applyButton: some View {
-        let disabled = state.catalog == nil || state.applying || state.loadingCustom
+        let disabled = state.catalog == nil || state.applying || state.loadingCustom || state.editingCustom || state.choosingBreed
         return Button {
             state.apply()
         } label: {
             HStack(spacing: 5) {
-                if !state.applying {
-                    PixelGlyph(kind: .check, color: palette.ink, size: 10)
+                if state.applying {
+                    ProgressView().controlSize(.mini).accessibilityHidden(true)
+                } else {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .semibold))
                 }
                 Text(state.applying ? "正在应用…" : "应用到桌宠")
             }
+            .fixedSize()
         }
-        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+        .workbenchButton(palette: palette, prominent: true)
         .disabled(disabled)
         .opacity(disabled ? 0.55 : 1)
         .keyboardShortcut(.defaultAction)
-    }
-
-    private var statusText: String {
-        if state.loadingCustom { return "正在载入自定义形象…" }
-        return state.message.isEmpty ? state.typingStatus.text : state.message
-    }
-
-    private var statusColor: Color {
-        if state.loadingCustom { return palette.accent }
-        if !state.message.isEmpty {
-            let failed = state.message.contains("无法") || state.message.contains("失败")
-            return failed ? palette.red : palette.green
-        }
-        switch state.typingStatus {
-        case .active: return palette.green
-        case .needsPermission: return palette.accent
-        case .checking, .unavailable: return palette.inkSoft
-        }
+        .accessibilityIdentifier("workbench-apply")
     }
 
     private func appearanceBinding(_ key: String) -> Binding<String> {
-        Binding(get: { state.appearance[key, default: ""] }, set: { value in
+        Binding(get: { state.appearance[key, default: key == "headphoneColor" ? "natural" : ""] }, set: { value in
             state.appearance[key] = value
+            if key == "headphoneColor" { state.action = "listening" }
             state.refresh()
         })
     }

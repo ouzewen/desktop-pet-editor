@@ -1,0 +1,34 @@
+{
+  "id": "round-15",
+  "label": "第 15 轮 · 按点绘修订白肩",
+  "groups": [
+    {
+      "id": "shoulder-bib",
+      "label": "白毛包肩",
+      "title": "白毛包肩 · 点绘修订",
+      "description": "把第 14 轮 B4C 的 81 个改色像素按原位置落进胸肩素材，可以继续微调。",
+      "reference": "output/aseprite-coat-parts-round14/B4C-sit.png",
+      "referenceLabel": "第 14 轮 · B4C 原稿",
+      "detail": "output/aseprite-coat-parts-round15/B4E-before-after.png",
+      "detailLabel": "看待机、特别快打字同帧及胸肩放大",
+      "retouch": {
+        "x": 84,
+        "y": 138,
+        "width": 153,
+        "height": 82,
+        "label": "胸肩白斑",
+        "idleOnly": true
+      },
+      "options": [
+        {
+          "id": "B4E",
+          "label": "点绘修订版",
+          "description": "沿用你画的白肩轮廓。",
+          "image": "output/aseprite-coat-parts-round15/B4E-sit.png",
+          "typing": "output/aseprite-coat-parts-round15/B4E-typing.png",
+          "motion": "output/aseprite-coat-parts-round15/B4E-motion.webp"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>猫咪内部素材库</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/review.css">
+  <link rel="stylesheet" href="/library.css">
+  <script type="module" src="/library.js"></script>
+</head>
+<body>
+  <main class="library">
+    <header class="library-top">
+      <div><h1>内部素材库</h1><p>查看照片生成的整猫效果和自动选件使用的组件。</p></div>
+      <a class="secondary" href="/">返回花色评审</a>
+    </header>
+    <nav class="library-nav" aria-label="素材库板块">
+      <a href="#portraits-title">整体形象</a>
+      <a href="#components-title">单独组件</a>
+      <a href="/combinations">搭配试验</a>
+    </nav>
+    <p id="library-status" role="status">正在读取素材…</p>
+    <section aria-labelledby="portraits-title">
+      <h2 id="portraits-title">整体形象</h2>
+      <div id="portraits" class="library-grid"></div>
+    </section>
+    <section aria-labelledby="components-title">
+      <h2 id="components-title">单独组件</h2>
+      <p class="component-direction">左右以预览画面为准。</p>
+      <div class="component-filters" aria-label="按部位筛选组件">
+        <label>大类 <select id="part-group"></select></label>
+        <label>部位 <select id="part-category"></select></label>
+        <label>具体位置 <select id="part-region"></select></label>
+      </div>
+      <p id="component-count" role="status"></p>
+      <div id="components"></div>
+    </section>
+  </main>
+  <dialog id="preview">
+    <div class="preview-head"><h2 id="preview-title"></h2><form method="dialog"><button type="submit" aria-label="关闭预览">×</button></form></div>
+    <img id="preview-image" alt="">
+  </dialog>
+</body>
+</html>

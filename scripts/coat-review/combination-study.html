@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>花色组合试验</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/review.css">
+  <link rel="stylesheet" href="/library.css">
+  <style>
+    .study-layout { display: grid; grid-template-columns: minmax(180px, 285px) 1fr; gap: 24px; align-items: center; margin: 24px 0; }
+    .study-preview { width: 100%; image-rendering: pixelated; background: #eee7dc; border: 1px solid var(--line); border-radius: 12px; }
+    .study-controls { align-content: center; }
+    .study-map { width: 100%; height: auto; border-radius: 12px; }
+    .study-note { color: var(--muted); line-height: 1.65; }
+    .match-images { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+    .match-images img { width: 100%; height: 134px; object-fit: contain; background: #f1e9de; border-radius: 6px; }
+    .match-images img:nth-child(2) { image-rendering: pixelated; }
+    .study h3 { margin: 10px 0 6px; }
+    .study .library-card p { margin-bottom: 7px; }
+    @media(max-width: 620px) {.study-layout {grid-template-columns: 1fr;} .study-preview {max-width: 320px;margin: 0 auto;}}
+  </style>
+</head>
+<body>
+<main class="library study">
+  <header class="library-top">
+    <div><h1>花色组合试验</h1><p>用 8 张手绘透明图层，在同一底稿上试装 24 种组合。</p></div>
+    <a class="secondary" href="/library">返回内部素材库</a>
+  </header>
+  <div class="study-layout">
+    <img id="result" class="study-preview" src="/study/F3-E1-L-C2.png" alt="组合试装 F3-E1-L-C2">
+    <div class="study-controls">
+      <div class="component-filters">
+        <label>额头<select id="forehead"><option value="F1">左额深斑</option><option value="F2">左右额深斑</option><option value="F3" selected>橘深分额</option></select></label>
+        <label>右耳<select id="ear"><option value="E0">浅耳</option><option value="E1" selected>右侧深耳</option></select></label>
+        <label>脸颊<select id="cheek"><option value="L">左颊</option><option value="R">右颊</option></select></label>
+        <label>胸口<select id="chest"><option value="C1">小胸斑</option><option value="C2" selected>宽胸斑</option></select></label>
+      </div>
+      <p id="selection" role="status">F3-E1-L-C2</p>
+      <p class="study-note">额头与同侧耳根的深色相接时更自然。单独盖在脸颊上的圆斑容易显得突兀。</p>
+      <div class="library-tools"><a href="/study/cat-coat-combination-study.aseprite" download>下载 Aseprite 分层源稿</a></div>
+    </div>
+  </div>
+  <section>
+    <h2>24 种组合总览</h2>
+    <a href="/study/grid.png"><img class="study-map" src="/study/grid.png" alt="24 张花色组合预览"></a>
+  </section>
+  <section>
+    <h2>正面待机的部位范围</h2>
+    <p class="study-note">以 320×320 正面底稿为坐标。额头斑实测约占额头的 23% 或 51%，右耳深斑占右耳约 20%，小胸与宽胸分别约占胸口 29% 和 65%。</p>
+    <div class="library-tools"><a href="/study/head-map.png">放大头部分区</a><a href="/study/body-map.png">放大身体分区</a></div>
+    <a href="/study/component-windows.png"><img class="study-map" src="/study/component-windows.png" alt="逐项标注的头部和身体正面待机分区图"></a>
+  </section>
+  <section>
+    <h2>细分部位与可重叠交界</h2>
+    <p class="study-note">耳朵、脸颊和脚尖的参考窗延伸到有毛的边缘。花色跨区时先看原图的连开关系，再决定交界怎么接。</p>
+    <a href="/study/overlap-map.png"><img class="study-map" src="/study/overlap-map.png" alt="耳朵、眼周脸颊、胸肩与脚尖的细分和可重叠交界"></a>
+  </section>
+  <section>
+    <h2>色块边缘改前改后</h2>
+    <p class="study-note">先在分区里确定落点和面积，再沿脸侧、颈线与胸肩绘制轮廓。对照图分别替换脸颊、白胸，最后两件一起试装。</p>
+    <a href="/study/edge-refinement.png"><img class="study-map" src="/study/edge-refinement.png" alt="上一版与本次脸颊和白胸边缘对照"></a>
+    <div class="library-tools"><a href="/study/edge-comparison.png">查看第一轮边缘对照</a></div>
+  </section>
+  <section>
+    <h2>公开照片试配</h2>
+    <p class="study-note">每张左边是公开参考，右边是按现有组件目测挑选的试配。</p>
+    <div class="library-grid">
+      <article class="library-card">
+        <div class="match-images"><img loading="lazy" src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Beautiful_Black_and_white_cat_from_Chioggia.jpg" alt="Chioggia 黑白猫原图"><img loading="lazy" src="/study/match-chioggia.png" alt="黑白猫试配"></div>
+        <h3>Chioggia 黑白猫</h3>
+        <p>用白底、双侧额斑和深耳，省去多余的小颊斑与胸斑。照片里的深色还伸到眼上，值得补一款连到眉骨的额眼斑。</p>
+        <p><a href="https://commons.wikimedia.org/wiki/File:Beautiful_Black_and_white_cat_from_Chioggia.jpg">原图 · Giuliano Sorello · CC BY-SA 4.0</a></p>
+      </article>
+      <article class="library-card">
+        <div class="match-images"><img loading="lazy" src="https://upload.wikimedia.org/wikipedia/commons/2/29/Ginger_and_white_cat.jpg" alt="橘白虎斑猫原图"><img loading="lazy" src="/study/match-ginger.png" alt="橘白虎斑试配"></div>
+        <h3>橘白虎斑</h3>
+        <p>沿用已有橘虎斑、白口鼻和宽白胸，更接近原图。照片里白毛从嘴边往喉咙连，可以给现有白胸加一款贴合口鼻的接法。</p>
+        <p><a href="https://commons.wikimedia.org/wiki/File:Ginger_and_white_cat.jpg">原图 · Karin Laurila · CC0</a></p>
+      </article>
+      <article class="library-card">
+        <div class="match-images"><img loading="lazy" src="https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/Female_Calico_cat.jpg/500px-Female_Calico_cat.jpg" alt="三花猫原图"><img loading="lazy" src="/study/match-calico.png" alt="三花猫试配"></div>
+        <h3>深色躯干三花</h3>
+        <p>沿用三花眼周与连片白胸，头脸比较接近。照片里的身体深色占比更大，适合增加深底躯干的大面积方案，继续保留胸口的白色轮廓。</p>
+        <p><a href="https://commons.wikimedia.org/wiki/File:Female_Calico_cat.jpg">原图 · Rotinato · CC BY-SA 4.0</a></p>
+      </article>
+    </div>
+  </section>
+</main>
+<script>
+  const selections = ['forehead', 'ear', 'cheek', 'chest'].map(id => document.getElementById(id));
+  for (const field of selections) field.addEventListener('change', () => {
+    const id = selections.map(field => field.value).join('-');
+    const result = document.getElementById('result');
+    result.src = '/study/' + id + '.png';
+    result.alt = '组合试装 ' + id;
+    document.getElementById('selection').textContent = id;
+  });
+</script>
+</body>
+</html>

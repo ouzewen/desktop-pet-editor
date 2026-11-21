@@ -24,7 +24,7 @@ final class LocalRuntime {
     private var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let folder = base.appendingPathComponent("DesktopPet", isDirectory: true)
+        let folder = base.appendingPathComponent(DesktopPetStorage.directoryName, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }
@@ -43,7 +43,7 @@ final class LocalRuntime {
         return files.first { $0.pathExtension.lowercased() == "gguf" }
     }
 
-    func prepare(progress: @escaping (String) -> Void, completion: @escaping (Bool) -> Void) {
+    func prepare(progress: @escaping (String) -> Void, needsChatModel: Bool = true, completion: @escaping (Bool) -> Void) {
         probe(port: 11434) { [weak self] external in
             guard let self else { return }
             if external {
@@ -68,7 +68,8 @@ final class LocalRuntime {
                 }
                 self.baseURL = URL(string: "http://127.0.0.1:\(LocalRuntime.embeddedPort)")!
                 self.isEmbedded = true
-                self.ensureModel(progress: progress, completion: completion)
+                if needsChatModel { self.ensureModel(progress: progress, completion: completion) }
+                else { completion(true) }
             }
         }
     }

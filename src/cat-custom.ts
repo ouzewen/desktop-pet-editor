@@ -1,15 +1,18 @@
-import { canChooseCatFaceBase, catKeepsBreedPigment, catPresets, catRenderConfig, currentFurPatternColors, hasShortCalicoChest, readPetConfig, usesOrangeCatArt,
+import * as legacyRenderer from './cat-legacy-render';
+import * as firstPixel80Renderer from './cat-pixel80-v1-render';
+import { canChooseCatFaceBase, catKeepsBreedPigment, catRenderConfig, currentFurPatternColors, hasShortCalicoChest, legacyCatPresets, readPetConfig, usesOrangeCatArt, usesWhiteCatCoat,
   type CatConfig, type FurPatternColors, type PetConfig } from './cat';
 import { catTypingFrameCountFor, currentTypingAnimation, frenzySteamLoopStart, isFrontTyping, usesFallingTyping, type TypingAnimation } from './cat-typing';
-import { captureCatInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
+import { captureCatInk, capturePhotoFurInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
 import { atlasNoseTips, faceTiles, frontTypingEffects, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
-import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catOpenEyeCoverage, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
+import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catOpenEyeCoverage, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, visiblePhotoFur, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
 
 const size = 320;
 const straight: Gaze = { x: 0, y: 0 };
 
 export type CatEditSource = {
   config: CatConfig;
+  artVersion?: 'pixel80' | 'pixel80-v2';
   action: 'sit' | 'typing';
   frame: number;
   typingMode: TypingMode;
@@ -44,7 +47,7 @@ export type CatCustomization = {
   following?: CatHeadEdits;
 };
 
-function readSource(value: unknown): CatEditSource | undefined {
+export function readCatEditSource(value: unknown): CatEditSource | undefined {
   if (!value || typeof value !== 'object') return;
   const record = value as Partial<CatEditSource>;
   try {
@@ -83,7 +86,10 @@ function readSource(value: unknown): CatEditSource | undefined {
       || (action === 'typing' && referenceAnimation && typingLayout !== 'aligned')
       || (earLayout !== 'shared' && earLayout !== 'legacy')
       || (markingLayout !== 'clean-forehead' && markingLayout !== 'shared' && markingLayout !== 'legacy')
-      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'breed-pigment' && furPatternColors !== 'calico-chest'
+      || (furPatternColors !== currentFurPatternColors && furPatternColors !== 'clean-honey-gold'
+        && furPatternColors !== 'honey-gold' && furPatternColors !== 'independent-fur'
+        && furPatternColors !== 'connected-chest' && furPatternColors !== 'clean-face'
+        && furPatternColors !== 'breed-pigment' && furPatternColors !== 'calico-chest'
         && furPatternColors !== 'matched' && furPatternColors !== 'original')
       || !Number.isInteger(gaze.x) || !Number.isInteger(gaze.y)) return;
     if (gaze.space === 'pointer') {
@@ -92,7 +98,8 @@ function readSource(value: unknown): CatEditSource | undefined {
       || Math.abs(gaze.y) > 2) return;
     // Saves from before the nose cleanup have no flag and used the outlined art.
     const legacyNoseOutline = hasLegacyNoseOutline(config) && record.legacyNoseOutline !== false;
-    return { config, action, frame, typingMode, typingAnimation, frenzyHeatFrame, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
+    const artVersion = record.artVersion === 'pixel80' || record.artVersion === 'pixel80-v2' ? record.artVersion : undefined;
+    return { config, artVersion, action, frame, typingMode, typingAnimation, frenzyHeatFrame, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
       earLayout, markingLayout, furPatternColors, legacyNoseOutline, gaze };
   } catch {
     return;
@@ -111,7 +118,7 @@ export function prepareStructuredCatCustomization(reference: unknown): CatCustom
   if (config.frame !== 'CAT') throw Error('自定义笔迹须关联猫咪外观');
   // Pose metadata is only context for the editor. Old poses are not needed
   // to play any per-part ink, even if one is no longer supported.
-  const source = readSource(reference) ?? {
+  const source = readCatEditSource(reference) ?? {
     config, action: 'sit', frame: 0, gaze: straight, typingMode: 'gentle',
     typingAnimation: currentTypingAnimation, typingLayout: 'aligned', laptopVersion: 'clean', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
     outlineVersion: 'adaptive', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(config.pattern),
@@ -121,14 +128,35 @@ export function prepareStructuredCatCustomization(reference: unknown): CatCustom
 }
 
 export function saveCatInk(reference: unknown, changes: CatInkChange[]): CatInkSource {
-  const source = readSource(reference);
+  const source = readCatEditSource(reference);
   if (!source || !Array.isArray(changes)) throw Error('像素编辑预览无效，请重新打开编辑器');
-  const previous = (reference as Partial<CatInkSource>).pixelEdits;
+  const saved = (reference as Partial<CatInkSource>).pixelEdits;
+  const previous = saved === undefined ? undefined : readCatInk(saved);
   const typing = source.action === 'typing';
-  const geometry = catInkGeometry(source.config, typing, source.frame, source);
   const offsetY = typing ? 0 : catHeadPlacement(false, source.frame).y;
-  const pixelEdits = captureCatInk(geometry, changes, previous === undefined ? undefined : readCatInk(previous), offsetY);
-  return { ...source, pixelEdits };
+  if (previous?.scope === 'photo-fur') {
+    const geometry = visiblePhotoFur(source.config, typing, source.frame, source.gaze, source);
+    return { ...source, pixelEdits: capturePhotoFurInk(geometry, changes, previous, offsetY) };
+  }
+  const geometry = catInkGeometry(source.config, typing, source.frame, source);
+  return { ...source, pixelEdits: captureCatInk(geometry, changes, previous, offsetY) };
+}
+
+export function photoFurEditorData(source: CatEditSource) {
+  const typing = source.action === 'typing';
+  const geometry = visiblePhotoFur(source.config, typing, source.frame, source.gaze, source);
+  const offsetY = typing ? 0 : catHeadPlacement(false, source.frame).y;
+  const mask = new Uint8Array(size * size);
+  for (const { mask: part } of Object.values(geometry)) {
+    if (!part) continue;
+    for (let i = 0; i < part.length; i++) if (part[i]) mask[i + offsetY * size] = 1;
+  }
+  const original = makeLayer(size);
+  drawSource(original, source);
+  // Chunk the native bridge payload to stay below the argument limit.
+  let bytes = '';
+  for (let i = 0; i < mask.length; i += 8192) bytes += String.fromCharCode(...mask.subarray(i, i + 8192));
+  return { furMask: btoa(bytes), original: original.canvas.toDataURL('image/png') };
 }
 
 function isPale(pixel: number) {
@@ -151,8 +179,15 @@ function savedGlints(edited: Uint32Array, original: Uint32Array, aperture: Uint3
   return { fixed, hide };
 }
 
+function sourceRenderer(source: CatEditSource) {
+  if (source.artVersion === 'pixel80') return firstPixel80Renderer;
+  return source.artVersion === 'pixel80-v2'
+    ? { render, drawCatHead, catGlintAperture, catOpenEyeCoverage, catTypingLaptop }
+    : legacyRenderer;
+}
+
 function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource, custom?: CatCustomization) {
-  render(layer.canvas, source.config, source.action, source.frame, source.gaze, {
+  sourceRenderer(source).render(layer.canvas, source.config, source.action, source.frame, source.gaze, {
     typingMode: source.typingMode, typingAnimation: source.typingAnimation, frenzyHeatFrame: source.frenzyHeatFrame, typingLayout: source.typingLayout,
     typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion, tailArtVersion: source.tailArtVersion,
     laptopVersion: source.laptopVersion, outlineVersion: source.outlineVersion,
@@ -202,7 +237,9 @@ export function seedCatInkForEditor(
 function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, fallback: PetConfig) {
   // Older saves are just PNGs. Match their closest built-in coat and pose once
   // when selected, while keeping the saved image bytes intact.
-  const choices = Object.values(catPresets);
+  const { mouthContrast: _mouthContrast, ...black } = legacyCatPresets.preset_cat_black;
+  const originalBlack = { ...black, coat: 'native', pattern: 'P00' } as const;
+  const choices = [...Object.values(legacyCatPresets), originalBlack];
   const candidates: CatConfig[] = fallback.frame === 'CAT' ? [fallback, ...choices] : choices;
   if (fallback.frame === 'CAT' && fallback.faceBase === 'native' && fallback.bodyBase === 'native'
     && fallback.cheekPattern === fallback.bodyPattern
@@ -274,6 +311,10 @@ function inferSource(edited: Uint32Array, layer: ReturnType<typeof makeLayer>, f
     // Native coats retain their original pixels in either version.
     const outlineVersions: readonly OutlineVersion[] = config.coat === 'native' ? ['adaptive'] : ['adaptive', 'original'];
     const colorVersions: FurPatternColors[] = [currentFurPatternColors];
+    const renderedConfig = catRenderConfig(config);
+    if (renderedConfig.coat === 'breed:CC11') colorVersions.push('honey-gold', 'independent-fur');
+    if (usesWhiteCatCoat(renderedConfig)) colorVersions.push('clean-honey-gold');
+    if (config.bodyBase === 'solid') colorVersions.push('connected-chest', 'clean-face');
     if (hasShortCalicoChest(catRenderConfig(config, 'calico-chest'))) colorVersions.push('calico-chest');
     if (config.bodyPattern !== 'native' || config.pattern !== 'P00') {
       if (catKeepsBreedPigment(catRenderConfig(config))) colorVersions.push('matched');
@@ -338,6 +379,16 @@ function inferHistoricalDetails(edited: Uint32Array, layer: ReturnType<typeof ma
       source = candidate;
       baseline = alternative;
     }
+  }
+  if (source.config.eyeRim === 'none') {
+    const { eyeRim: _eyeRim, ...config } = source.config;
+    consider({ ...source, config });
+  } else if (source.config.palette === 'CC09') {
+    consider({ ...source, config: { ...source.config, eyeRim: 'none' } });
+  }
+  if (source.config.mouthContrast === 'light') {
+    const { mouthContrast: _mouthContrast, ...config } = source.config;
+    consider({ ...source, config });
   }
   if (source.markingLayout === 'clean-forehead') consider({ ...source, markingLayout: 'shared' });
   if (source.markingLayout !== 'legacy') {
@@ -427,8 +478,9 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   const layer = makeLayer(size);
   layer.ctx.drawImage(image, 0, 0, size, size);
   const edited = pixels(layer.ctx);
-  const source = readSource(reference) ?? inferSource(edited, layer, fallback);
+  const source = readCatEditSource(reference) ?? inferSource(edited, layer, fallback);
   const original = drawSource(layer, source);
+  const renderer = sourceRenderer(source);
   const typing = source.action === 'typing';
   const placement = catHeadPlacement(typing, source.frame, source.typingLayout);
   function placeHead() {
@@ -445,9 +497,9 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   };
   const sourceAppearance = catRenderConfig(source.config, source.furPatternColors);
   placeHead();
-  drawCatHead(layer.ctx, sourceAppearance, typing, source.frame, source.gaze, headOptions);
+  renderer.drawCatHead(layer.ctx, sourceAppearance, typing, source.frame, source.gaze, headOptions);
   const headPixels = pixels(layer.ctx);
-  const apertureLayer = catGlintAperture(source.config, typing, source.frame, headOptions);
+  const apertureLayer = renderer.catGlintAperture(source.config, typing, source.frame, headOptions);
   const placedMask = (image: HTMLImageElement) => {
     placeHead();
     layer.ctx.drawImage(image, 0, 0);
@@ -455,11 +507,11 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   };
   const aperture = apertureLayer && placedMask(apertureLayer);
   const reflections = savedGlints(edited, original, aperture);
-  const eyeCoverage = aperture && placedMask(catOpenEyeCoverage(source.config));
+  const eyeCoverage = aperture && placedMask(renderer.catOpenEyeCoverage(source.config));
   let unlitHead: Uint32Array | undefined;
   if (reflections.fixed.some(Boolean)) {
     placeHead();
-    drawCatHead(layer.ctx, sourceAppearance, typing, source.frame, source.gaze, { ...headOptions, hideGlints: [true, true] });
+    renderer.drawCatHead(layer.ctx, sourceAppearance, typing, source.frame, source.gaze, { ...headOptions, hideGlints: [true, true] });
     unlitHead = pixels(layer.ctx);
   }
   let laptopPixels: Uint32Array | undefined;
@@ -472,7 +524,7 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
     const laptopConfig = source.laptopVersion === 'original'
       && source.config.palette === 'CC01' && source.config.tail === 'CT01'
       ? { ...source.config, tail: 'CT02' as const } : source.config;
-    layer.ctx.drawImage(catTypingLaptop(catRenderConfig(laptopConfig, source.furPatternColors),
+    layer.ctx.drawImage(renderer.catTypingLaptop(catRenderConfig(laptopConfig, source.furPatternColors),
       source.typingLayout, source.laptopVersion, source.typingAnimation), 0, 0);
     laptopPixels = pixels(layer.ctx);
   }

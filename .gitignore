@@ -1,5 +1,7 @@
 node_modules/
 build/
+/output/
+/release-archive/
 .playwright-cli/
 .DS_Store
 /public/assets/cat/custom/

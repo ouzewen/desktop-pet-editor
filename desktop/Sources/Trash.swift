@@ -50,7 +50,7 @@ enum TrashService {
 enum DropLog {
     static func write(_ message: String) {
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-        let folder = base.appendingPathComponent("DesktopPet", isDirectory: true)
+        let folder = base.appendingPathComponent(DesktopPetStorage.directoryName, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent("drop.log")
         let line = "\(Date()) \(message)\n"

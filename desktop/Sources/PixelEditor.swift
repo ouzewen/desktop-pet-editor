@@ -68,12 +68,24 @@ struct CustomPresetInfo: Identifiable {
 struct PixelEditSnapshot {
     let png: Data
     let source: Data?
+
+    var isPhotoFur: Bool {
+        guard let source, let metadata = try? JSONSerialization.jsonObject(with: source) as? [String: Any],
+              let edits = metadata["pixelEdits"] as? [String: Any] else { return false }
+        return edits["scope"] as? String == "photo-fur"
+    }
+}
+
+struct PhotoFurEditorSurface {
+    let mask: Data
+    let originalPNG: Data
 }
 
 enum PixelPresetStore {
     static var folder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("DesktopPet/custom", isDirectory: true)
+            .appendingPathComponent(DesktopPetStorage.directoryName, isDirectory: true)
+            .appendingPathComponent("custom", isDirectory: true)
     }
 
     // Older development builds wrote the preset library into the checkout.
@@ -183,12 +195,15 @@ enum PixelPresetStore {
 
     @discardableResult
     static func save(name: String, cells: [UInt32], source: Data?, in folder: URL = PixelPresetStore.folder) -> URL? {
+        guard let png = renderPNG(cells: cells) else { return nil }
+        return save(name: name, snapshot: PixelEditSnapshot(png: png, source: source), in: folder)
+    }
+
+    static func save(name: String, snapshot: PixelEditSnapshot, in folder: URL = PixelPresetStore.folder) -> URL? {
         let slug = slugify(name)
         guard !slug.isEmpty else { return nil }
         let file = "\(slug).png"
         let url = folder.appendingPathComponent(file)
-        guard let png = renderPNG(cells: cells) else { return nil }
-        let snapshot = PixelEditSnapshot(png: png, source: source)
         do {
             var list = try readManifest(in: folder)
             try write(snapshot, to: url)
@@ -290,33 +305,89 @@ enum PixelBrushShape: String, CaseIterable {
     }
 }
 
+struct PixelViewport {
+    static let zoomLevels = [1, 2, 4, 8, 16]
+    let zoom: Int
+    let column: Int
+    let row: Int
+    let center: (column: Int, row: Int)
+
+    var span: Int { PixelEditorModel.side / zoom }
+    var bounds: CGRect { CGRect(x: column, y: row, width: span, height: span) }
+    init(zoom: Int = 8, column: Int = 160, row: Int = 120) {
+        self.zoom = zoom
+        let edge = PixelEditorModel.side - 1
+        let center = (column: min(edge, max(0, column)), row: min(edge, max(0, row)))
+        self.center = center
+        let span = PixelEditorModel.side / zoom
+        let limit = PixelEditorModel.side - span
+        self.column = min(limit, max(0, center.column - span / 2))
+        self.row = min(limit, max(0, center.row - span / 2))
+    }
+
+    func pixel(at point: CGPoint, displaySide: CGFloat) -> (column: Int, row: Int)? {
+        guard point.x >= 0, point.y >= 0, point.x < displaySide, point.y < displaySide else { return nil }
+        return (column + Int(point.x * CGFloat(span) / displaySide),
+                row + Int(point.y * CGFloat(span) / displaySide))
+    }
+}
+
+enum PixelEditTool: Equatable {
+    case paint, erase, sample, restore
+}
+
 final class PixelEditorModel: ObservableObject {
     typealias SourceResolver = (Data, [[UInt32]], @escaping (Data?) -> Void) -> Void
     static let side = 320
     static let brushSizes = 1.0...32.0
 
     @Published private(set) var cells: [UInt32]
-    @Published var brushSize = 8.0
+    @Published var brushSize = 1.0
     @Published var brushShape: PixelBrushShape = .square
     @Published var paintColor = PixelEditorPalette.entries[0].hex
-    @Published var isErasing = false
+    @Published var tool: PixelEditTool = .paint
+    @Published private(set) var viewport = PixelViewport()
+    @Published private(set) var showingOriginal = false
     @Published var name: String = ""
     @Published var message: String = ""
     @Published private(set) var isSaving = false
     private var ink: [Int: UInt32] = [:]
     private var undoStack: [(cells: [UInt32], ink: [Int: UInt32])] = []
     private var strokeOpen = false
+    private var samplingStroke = false
     private var lastPoint: (column: Int, row: Int)?
     private let source: Data?
     private let resolveSource: SourceResolver?
+    private let original: [UInt32]
+    private let furMask: Data?
+
+    var isFurOnly: Bool { furMask != nil }
+    var hasChanges: Bool { !ink.isEmpty }
+    var canUndo: Bool { !undoStack.isEmpty }
+    var displayedCells: [UInt32] { showingOriginal ? original : cells }
+    var isErasing: Bool {
+        get { tool == .erase }
+        set { tool = newValue ? .erase : .paint }
+    }
 
     var pixelChanges: [[UInt32]] {
         ink.sorted { $0.key < $1.key }.map { [UInt32($0.key), $0.value] }
     }
 
-    init?(previewPNG: Data, source: Data? = nil, resolveSource: SourceResolver? = nil) {
+    init?(previewPNG: Data, source: Data? = nil, fur: PhotoFurEditorSurface? = nil,
+          resolveSource: SourceResolver? = nil) {
         guard let cells = PixelPresetStore.pixels(from: previewPNG) else { return nil }
         self.cells = cells
+        if let fur {
+            guard fur.mask.count == cells.count,
+                  let original = PixelPresetStore.pixels(from: fur.originalPNG) else { return nil }
+            self.original = original
+            self.furMask = fur.mask
+            self.brushSize = 4
+        } else {
+            self.original = cells
+            self.furMask = nil
+        }
         self.source = source
         self.resolveSource = resolveSource
     }
@@ -326,10 +397,41 @@ final class PixelEditorModel: ObservableObject {
         isErasing = false
     }
 
+    func zoom(by step: Int) {
+        guard let index = PixelViewport.zoomLevels.firstIndex(of: viewport.zoom),
+              PixelViewport.zoomLevels.indices.contains(index + step) else { return }
+        let center = viewport.center
+        endStroke()
+        viewport = PixelViewport(zoom: PixelViewport.zoomLevels[index + step], column: center.column, row: center.row)
+    }
+
+    func centerViewport(column: Int, row: Int) {
+        endStroke()
+        viewport = PixelViewport(zoom: viewport.zoom, column: column, row: row)
+    }
+
+    func toggleOriginal() {
+        endStroke()
+        showingOriginal.toggle()
+    }
+
+    func breakStrokePath() {
+        lastPoint = nil
+    }
+
     func paint(column: Int, row: Int) {
-        guard !isSaving else { return }
+        guard !isSaving, !showingOriginal, !samplingStroke else { return }
         guard (0..<Self.side).contains(column), (0..<Self.side).contains(row) else {
-            lastPoint = nil
+            breakStrokePath()
+            return
+        }
+        if tool == .sample {
+            let pixel = cells[row * Self.side + column]
+            let alpha = pixel >> 24
+            guard alpha != 0 else { return }
+            let channel = { (shift: UInt32) in min(255, (((pixel >> shift) & 0xFF) * 255 + alpha / 2) / alpha) }
+            chooseColor(channel(16) << 16 | channel(8) << 8 | channel(0))
+            samplingStroke = true
             return
         }
         let start = lastPoint ?? (column, row)
@@ -338,7 +440,9 @@ final class PixelEditorModel: ObservableObject {
         let dy = row - start.row
         let steps = max(1, abs(dx), abs(dy))
         let value: UInt32 = isErasing ? 0 : 0xFF000000 | paintColor
-        let diameter = Int(brushSize)
+        let restoring = tool == .restore
+        let restoringFur = isFurOnly && (isErasing || restoring)
+        let diameter = restoring ? 1 : Int(brushSize)
         let origin = -(diameter - 1) / 2
         let rows = brushShape.rows(diameter: diameter)
         var updated = cells
@@ -354,14 +458,27 @@ final class PixelEditorModel: ObservableObject {
                 guard left <= right else { continue }
                 for targetX in left...right {
                     let index = targetY * Self.side + targetX
+                    if let furMask, furMask[index] != 1 || (original[index] >> 24) != 255 { continue }
+                    if restoringFur {
+                        guard updated[index] != original[index] || (ink[index] ?? 0) != 0 else { continue }
+                        if !strokeOpen {
+                            recordUndo()
+                            strokeOpen = true
+                        }
+                        ink[index] = 0
+                        updated[index] = original[index]
+                        changed = true
+                        continue
+                    }
                     // Paint matching the preview is still deliberate. Erasing empty space does nothing.
-                    guard value == 0 ? updated[index] != 0 : ink[index] != value else { continue }
+                    let changesPixel = restoring ? ink[index] != nil : (value == 0 ? updated[index] != 0 : ink[index] != value)
+                    guard changesPixel else { continue }
                     if !strokeOpen {
                         recordUndo()
                         strokeOpen = true
                     }
-                    ink[index] = value
-                    updated[index] = value
+                    ink[index] = restoring ? nil : value
+                    updated[index] = restoring ? original[index] : value
                     changed = true
                 }
             }
@@ -373,6 +490,7 @@ final class PixelEditorModel: ObservableObject {
 
     func endStroke() {
         strokeOpen = false
+        samplingStroke = false
         lastPoint = nil
     }
 
@@ -389,7 +507,22 @@ final class PixelEditorModel: ObservableObject {
     }
 
     func clear() {
-        guard !isSaving, cells.contains(where: { $0 != 0 }) else { return }
+        guard !isSaving else { return }
+        if let furMask {
+            let changed = cells.indices.filter { furMask[$0] == 1 && (cells[$0] != original[$0] || (ink[$0] ?? 0) != 0) }
+            guard !changed.isEmpty else { return }
+            recordUndo()
+            var restored = cells
+            for index in changed {
+                ink[index] = 0
+                restored[index] = original[index]
+            }
+            cells = restored
+            endStroke()
+            message = ""
+            return
+        }
+        guard cells.contains(where: { $0 != 0 }) else { return }
         recordUndo()
         for (index, value) in cells.enumerated() where value != 0 { ink[index] = 0 }
         cells = Array(repeating: 0, count: Self.side * Self.side)
@@ -415,26 +548,31 @@ final class PixelEditorModel: ObservableObject {
             completion(nil)
             return
         }
-        if source != nil, resolveSource == nil {
-            message = "无法读取这份形象的笔迹，请重新打开像素编辑"
-            completion(nil)
-            return
+        resolveSnapshot { snapshot in
+            guard let snapshot, let url = PixelPresetStore.save(name: trimmed, snapshot: snapshot, in: folder) else {
+                if snapshot != nil { self.message = "保存失败，请重试" }
+                completion(nil)
+                return
+            }
+            self.message = "已保存：\(trimmed)"
+            completion(url)
         }
-        let draft = cells
+    }
+
+    func resolveSnapshot(completion: @escaping (PixelEditSnapshot?) -> Void) {
+        guard !isSaving, let png = PixelPresetStore.renderPNG(cells: cells) else { completion(nil); return }
         let changes = pixelChanges
         endStroke()
         isSaving = true
         message = ""
         let finish: (Data?) -> Void = { resolved in
             self.isSaving = false
-            guard self.source == nil || resolved != nil,
-                  let url = PixelPresetStore.save(name: trimmed, cells: draft, source: resolved, in: folder) else {
-                self.message = "保存失败，请重试"
+            guard self.source == nil || resolved != nil else {
+                self.message = "无法保存笔迹，请重试"
                 completion(nil)
                 return
             }
-            self.message = "已保存：\(trimmed)"
-            completion(url)
+            completion(PixelEditSnapshot(png: png, source: resolved))
         }
         if let source, let resolveSource { resolveSource(source, changes, finish) }
         else { finish(nil) }
@@ -443,69 +581,32 @@ final class PixelEditorModel: ObservableObject {
 
 // MARK: - View
 
-struct PixelEditorView: View {
+struct PixelDrawingCanvas: View {
     @ObservedObject var model: PixelEditorModel
-    var onSaved: (URL) -> Void = { _ in }
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var palette: PixelPalette { .of(colorScheme) }
-    private var brushColor: Color { Color(nsColor: PixelEditorPalette.color(model.paintColor)) }
-    private let gridSide: CGFloat = 320
+    let side: CGFloat
+    let palette: PixelPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text("像素编辑")
-                    .font(PixelFont.font(13))
-                    .foregroundStyle(palette.ink)
-                Spacer()
-                Button("撤销") { model.undo() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-                Button("清空") { model.clear() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-                Button(model.isSaving ? "保存中…" : "保存") {
-                    model.save { url in
-                        if let url { onSaved(url) }
-                    }
-                }
-                .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-            }
-
-            grid
-
-            brushControls
-
-            colorControls
-
-            HStack(spacing: 6) {
-                TextField("给这个形象起个名字", text: $model.name)
-                    .textFieldStyle(.plain)
-                    .font(PixelFont.font(12))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
-                    .background(PixelBox(corner: 2).fill(palette.panelAlt))
-                    .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
-                Text(model.message)
-                    .font(PixelFont.font(10))
-                    .foregroundStyle(model.message.hasPrefix("已保存") ? palette.green : palette.inkSoft)
-                    .lineLimit(1)
-            }
-        }
-        .padding(12)
-        .frame(width: gridSide + 24)
-        .background(palette.panel)
-        .disabled(model.isSaving)
-    }
-
-    private var grid: some View {
+        let viewport = model.viewport
         Canvas { context, size in
-            if let image = PixelPresetStore.image(cells: model.cells) {
+            if let image = PixelPresetStore.image(cells: model.displayedCells)?.cropping(to: viewport.bounds) {
                 let sprite = Image(decorative: image, scale: 1).interpolation(.none)
                 context.draw(sprite, in: CGRect(origin: .zero, size: size))
             }
+            let cell = side / CGFloat(viewport.span)
+            guard cell >= 3 else { return }
+            var grid = Path()
+            for index in 1..<viewport.span {
+                let position = CGFloat(index) * cell
+                grid.move(to: CGPoint(x: position, y: 0))
+                grid.addLine(to: CGPoint(x: position, y: side))
+                grid.move(to: CGPoint(x: 0, y: position))
+                grid.addLine(to: CGPoint(x: side, y: position))
+            }
+            context.stroke(grid, with: .color(.black.opacity(0.32)), lineWidth: 0.65)
+            context.stroke(grid, with: .color(.white.opacity(0.32)), lineWidth: 0.35)
         }
-        .frame(width: gridSide, height: gridSide)
+        .frame(width: side, height: side)
         .background { PixelChecker(even: palette.panelAlt, odd: palette.panelDeep, cell: 10) }
         .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2).allowsHitTesting(false))
         .contentShape(Rectangle())
@@ -513,13 +614,122 @@ struct PixelEditorView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    let cell = gridSide / CGFloat(PixelEditorModel.side)
-                    let column = Int(floor(value.location.x / cell))
-                    let row = Int(floor(value.location.y / cell))
-                    model.paint(column: column, row: row)
+                    guard let pixel = viewport.pixel(at: value.location, displaySide: side) else {
+                        model.breakStrokePath()
+                        return
+                    }
+                    model.paint(column: pixel.column, row: pixel.row)
                 }
                 .onEnded { _ in model.endStroke() }
         )
+        .disabled(model.isSaving || model.showingOriginal)
+    }
+}
+
+private struct PixelEditorNavigator: View {
+    @ObservedObject var model: PixelEditorModel
+    let palette: PixelPalette
+    private let side: CGFloat = 80
+
+    var body: some View {
+        Canvas { context, size in
+            if let image = PixelPresetStore.image(cells: model.displayedCells) {
+                context.draw(Image(decorative: image, scale: 1).interpolation(.none),
+                             in: CGRect(origin: .zero, size: size))
+            }
+            let scale = side / CGFloat(PixelEditorModel.side)
+            let box = model.viewport.bounds.applying(CGAffineTransform(scaleX: scale, y: scale))
+            context.stroke(Path(box), with: .color(.black), lineWidth: 2.5)
+            context.stroke(Path(box), with: .color(palette.accent), lineWidth: 1.25)
+        }
+        .frame(width: side, height: side)
+        .background { PixelChecker(even: palette.panelAlt, odd: palette.panelDeep, cell: 8) }
+        .overlay(Rectangle().stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+            let scale = CGFloat(PixelEditorModel.side) / side
+            model.centerViewport(column: Int(value.location.x * scale), row: Int(value.location.y * scale))
+        })
+        .help("点选小地图，移动左侧放大区域")
+        .accessibilityLabel("像素画布小地图")
+        .accessibilityHint("点击或拖动以移动放大区域")
+    }
+}
+
+struct PixelEditorTools: View {
+    @ObservedObject var model: PixelEditorModel
+    let palette: PixelPalette
+
+    private var brushColor: Color { Color(nsColor: PixelEditorPalette.color(model.paintColor)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            viewportControls
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
+                    toolButton("\(Int(model.brushSize)) 像素画笔", .paint)
+                    toolButton("取色", .sample)
+                    if !model.isFurOnly { toolButton("恢复原像素", .restore) }
+                    toolButton(model.isFurOnly ? "恢复原毛色" : "橡皮擦", .erase)
+                }
+                colorControls
+                DisclosureGroup("画笔设置") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        brushControls
+                        Button(model.isFurOnly ? "恢复可见毛色" : "清空画布") { model.clear() }
+                            .buttonStyle(PixelButtonStyle(palette: palette))
+                            .help(model.isFurOnly ? "恢复此姿势下可见的原毛色，可撤销" : "擦除当前画面，可撤销")
+                    }.padding(.top, 7)
+                }
+                .font(PixelFont.font(11))
+                .foregroundStyle(palette.ink)
+                .tint(palette.ink)
+            }
+            .disabled(model.showingOriginal)
+            if !model.message.isEmpty {
+                Text(model.message)
+                    .font(PixelFont.font(10))
+                    .foregroundStyle(palette.inkSoft)
+            }
+        }
+        .disabled(model.isSaving)
+    }
+
+    private var viewportControls: some View {
+        HStack(alignment: .center, spacing: 10) {
+            PixelEditorNavigator(model: model, palette: palette)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Button("−") { model.zoom(by: -1) }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .accessibilityLabel("缩小画布")
+                        .disabled(model.viewport.zoom == PixelViewport.zoomLevels.first)
+                    Text("\(model.viewport.zoom)×")
+                        .font(PixelFont.font(12))
+                        .foregroundStyle(palette.ink)
+                        .monospacedDigit()
+                        .frame(minWidth: 28)
+                    Button("+") { model.zoom(by: 1) }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .accessibilityLabel("放大画布")
+                        .disabled(model.viewport.zoom == PixelViewport.zoomLevels.last)
+                }
+                HStack(spacing: 6) {
+                    Button(model.showingOriginal ? "返回微调稿" : "查看原稿") { model.toggleOriginal() }
+                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: model.showingOriginal))
+                    Button("撤销") { model.undo() }
+                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .keyboardShortcut("z", modifiers: .command)
+                        .disabled(!model.canUndo || model.showingOriginal)
+                }
+            }
+        }
+    }
+
+    private func toolButton(_ title: String, _ tool: PixelEditTool) -> some View {
+        Button(title) { model.tool = tool }
+            .buttonStyle(PixelButtonStyle(palette: palette, prominent: model.tool == tool))
+            .accessibilityAddTraits(model.tool == tool ? .isSelected : [])
     }
 
     private var brushControls: some View {
@@ -575,13 +785,10 @@ struct PixelEditorView: View {
                     swatch(entry)
                 }
             }
-            HStack {
-                Button("橡皮擦") { model.isErasing = true }
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: model.isErasing))
-                    .accessibilityAddTraits(model.isErasing ? .isSelected : [])
-                Spacer()
-                ColorPicker("自选颜色", selection: customColor, supportsOpacity: false)
+            ColorPicker(selection: customColor, supportsOpacity: false) {
+                Text("自选颜色")
                     .font(PixelFont.font(11))
+                    .foregroundStyle(palette.ink)
             }
         }
     }
@@ -596,7 +803,7 @@ struct PixelEditorView: View {
     }
 
     private func swatch(_ entry: PixelPaletteEntry) -> some View {
-        let selected = !model.isErasing && model.paintColor == entry.hex
+        let selected = model.tool == .paint && model.paintColor == entry.hex
         return Button {
             model.chooseColor(entry.hex)
         } label: {

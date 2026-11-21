@@ -1,0 +1,42 @@
+{
+  "id": "round-08",
+  "label": "第 8 轮 · 耳斑贴边",
+  "groups": [
+    {
+      "id": "ear-edge",
+      "title": "耳斑贴到轮廓",
+      "label": "耳斑",
+      "description": "沿用 C1 下颊小斑和 P2 圆口短袜，只换画面右耳。放大看耳尖和外缘，检查与深色描边之间是否还夹着一线底毛。",
+      "referenceLabel": "上一轮 E2 耳斑",
+      "reference": "output/aseprite-coat-parts-round8/old-sit.png",
+      "detailLabel": "放大对照耳缘",
+      "detail": "output/aseprite-coat-parts-round8/ear-edge-detail.png",
+      "options": [
+        {
+          "id": "S1",
+          "label": "短耳尖",
+          "description": "面积小，沿耳尖两侧贴边，色块在内耳上方收口。",
+          "image": "output/aseprite-coat-parts-round8/S1-sit.png",
+          "typing": "output/aseprite-coat-parts-round8/S1-typing.png",
+          "motion": "output/aseprite-coat-parts-round8/S1-motion.webp"
+        },
+        {
+          "id": "S2",
+          "label": "半耳弧边",
+          "description": "沿外耳铺到中段，往内耳方向用一条弧线收边。",
+          "image": "output/aseprite-coat-parts-round8/S2-sit.png",
+          "typing": "output/aseprite-coat-parts-round8/S2-typing.png",
+          "motion": "output/aseprite-coat-parts-round8/S2-motion.webp"
+        },
+        {
+          "id": "S3",
+          "label": "满耳到根",
+          "description": "沿整个外耳铺到耳根，内耳粉色保留。",
+          "image": "output/aseprite-coat-parts-round8/S3-sit.png",
+          "typing": "output/aseprite-coat-parts-round8/S3-typing.png",
+          "motion": "output/aseprite-coat-parts-round8/S3-motion.webp"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#181b24">
+  <title>猫咪花色评审</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/review.css">
+  <script type="module" src="/review.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="cat-icon" aria-hidden="true">🐈</span>
+        <div><p class="round" id="round-label">素材评审</p><h1>猫咪花色评审</h1></div>
+      </div>
+      <div class="progress">
+        <div class="progress-copy"><span>评审进度</span><span id="progress-text"></span></div>
+        <progress id="progress" max="1" value="0" aria-label="评审进度"></progress>
+      </div>
+      <nav id="groups" aria-label="评审分组"></nav>
+      <a class="review-library-link" href="/library">内部素材库 <span aria-hidden="true">↗</span></a>
+    </aside>
+    <main>
+      <section id="stage" aria-label="当前评审组"><p>正在读取候选素材…</p></section>
+      <details id="overall" class="overall" hidden>
+        <summary>补充整体意见 <span>选填</span></summary>
+        <label class="visually-hidden" for="overall-note">整体意见</label>
+        <textarea id="overall-note" rows="3" maxlength="1500" placeholder="例如，之后优先对照脸部的位置和面积。"></textarea>
+      </details>
+      <div class="actions" id="actions" hidden>
+        <p role="status" id="status"></p>
+        <div class="buttons">
+          <button type="button" class="secondary" id="next">下一组 <span aria-hidden="true">→</span></button>
+          <button type="button" class="primary" id="submit">提交评审</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  <dialog id="preview">
+    <div class="preview-head"><h2 id="preview-title"></h2><form method="dialog"><button type="submit" aria-label="关闭预览">×</button></form></div>
+    <img id="preview-image" alt="">
+  </dialog>
+  <dialog id="retouch" aria-labelledby="retouch-title">
+    <div class="preview-head">
+      <h2 id="retouch-title">像素微调</h2>
+      <form method="dialog"><button type="submit" aria-label="关闭像素微调">×</button></form>
+    </div>
+    <div class="retouch-tools" role="group" aria-label="微调工具">
+      <button type="button" data-tool="paint" aria-pressed="true">1 像素画笔</button>
+      <button type="button" data-tool="sample" aria-pressed="false">取色</button>
+      <input id="retouch-color" type="color" value="#b8683e" aria-label="当前画笔颜色">
+      <button type="button" data-tool="restore" aria-pressed="false">恢复原像素</button>
+      <button type="button" data-tool="boundary" aria-pressed="false">标分界线</button>
+      <button type="button" data-tool="tip" aria-pressed="false">标耳尖</button>
+      <button type="button" data-tool="clearMark" aria-pressed="false">擦除标注</button>
+      <button type="button" id="retouch-undo">撤销</button>
+    </div>
+    <p id="retouch-hint" class="retouch-hint"></p>
+    <div class="retouch-workspace">
+      <div id="retouch-viewport" class="retouch-viewport">
+        <canvas id="retouch-grid" tabindex="0" aria-label="像素画布，可用方向键移动，空格或回车落点"></canvas>
+      </div>
+      <div class="retouch-check">
+        <div class="retouch-controls">
+          <button type="button" id="retouch-zoom" aria-pressed="false">放大画布</button>
+          <button type="button" id="retouch-compare" aria-pressed="false">查看原稿</button>
+          <button type="button" id="retouch-motion" aria-pressed="false">播放特别快打字</button>
+        </div>
+        <div class="retouch-poses">
+          <figure>
+            <div class="retouch-pose"><img id="retouch-idle" alt=""><canvas id="retouch-idle-paint" width="320" height="320" aria-hidden="true"></canvas></div>
+            <figcaption>待机</figcaption>
+          </figure>
+          <figure>
+            <div class="retouch-pose"><img id="retouch-typing" alt=""><canvas id="retouch-typing-paint" width="320" height="320" aria-hidden="true"></canvas></div>
+            <figcaption id="retouch-typing-caption">特别快打字</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+    <div class="retouch-footer">
+      <p id="retouch-status" role="status"></p>
+      <form method="dialog"><button type="submit" class="primary">返回评审</button></form>
+    </div>
+  </dialog>
+</body>
+</html>

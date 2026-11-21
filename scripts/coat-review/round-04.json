@@ -1,0 +1,26 @@
+{
+  "id": "round-04",
+  "label": "第 4 轮 · 局部修订",
+  "groups": [
+    {
+      "id": "push-refinement",
+      "title": "Push · B3 右耳补黑",
+      "label": "Push 右耳",
+      "description": "固定 B3 的额顶构图，只补右耳左上方的白缺口。左图是第三轮评审稿。",
+      "reference": "output/aseprite-coat-parts-round3/push-3.png",
+      "options": [
+        { "id": "B3R", "label": "右耳修订稿", "description": "额顶深色接到右耳左半，保留粉色内耳", "image": "output/aseprite-coat-parts-refinements/push-3-修订.png" }
+      ]
+    },
+    {
+      "id": "calico-refinement",
+      "title": "三花 · H3 清理眼缘与色斑",
+      "label": "三花头部",
+      "description": "固定 H3 的整体布局和身体。左图是第三轮评审稿，可以放大对照眼缘与脸颊。",
+      "reference": "output/aseprite-coat-parts-round3/head-3.png",
+      "options": [
+        { "id": "H3R", "label": "头部清边修订稿", "description": "清理眼周杂线、额头碎线和脸颊碎边", "image": "output/aseprite-coat-parts-refinements/head-3-修订.png" }
+      ]
+    }
+  ]
+}

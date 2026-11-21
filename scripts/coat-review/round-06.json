@@ -1,0 +1,17 @@
+{
+  "id": "round-06",
+  "label": "第 6 轮 · 三花脸部",
+  "groups": [{
+    "id": "calico-center-cheek",
+    "title": "三花 · 脸中交界与右颊",
+    "label": "三花脸部",
+    "description": "保留 H3R2 的整体构图和左眼修订，理顺脸中央深色与橘色边界，补齐右颊橘斑里的小白点。",
+    "reference": "output/aseprite-coat-parts-eye-cleanup/H3R2-清理眼缘.png",
+    "options": [{
+      "id": "H3R3",
+      "label": "脸中与右颊修订",
+      "description": "右颊橘斑仍保留，局部色块连起来",
+      "image": "output/aseprite-coat-parts-final-face/H3R3-脸中与右颊.png"
+    }]
+  }]
+}

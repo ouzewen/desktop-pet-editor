@@ -18,8 +18,9 @@ function smooth(value: number) {
   return t * t * (3 - 2 * t);
 }
 
-function listeningMap(frame: number) {
-  const existing = frameMaps.get(frame);
+function listeningMap(frame: number, grid: number) {
+  const key = frame * 8 + grid;
+  const existing = frameMaps.get(key);
   if (existing) return existing;
   const map = new Int32Array(neckEnd * CAT_SIZE);
   // The authored poses shared a duplicate first and last frame.
@@ -29,13 +30,15 @@ function listeningMap(frame: number) {
   const earLeft = 3.6 * Math.sin(phase - 0.55) * Math.sin(phase / 2);
   const earRight = 3.6 * Math.sin(phase - 0.95) * Math.sin(phase / 2);
 
-  for (let y = 0; y < neckEnd; y++) {
+  const center = (grid - 1) / 2;
+  for (let row = 0; row < neckEnd; row += grid) {
+    const y = row + center;
     const headWeight = 1 - smooth((y - 142) / 33);
     const shoulderWeight = 1 - smooth((y - 145) / (neckEnd - 145));
     const blend = smooth((y - neckStart) / 16);
     const baseWeight = headWeight + (shoulderWeight - headWeight) * blend;
-    for (let x = 0; x < CAT_SIZE; x++) {
-      const index = y * CAT_SIZE + x;
+    for (let column = 0; column < CAT_SIZE; column += grid) {
+      const x = column + center;
       // Relax the turn across the upper chest, pinning the right edge before
       // the tail. The lower body, paws and tail pixels stay in place.
       const weight = y < neckStart ? baseWeight : baseWeight * (1 - smooth((y - 171) / 14) * smooth((x - 221) / 15));
@@ -50,18 +53,22 @@ function listeningMap(frame: number) {
       const wiggle = earLeft * (1 - smooth((sourceX - 97) / 32)) + earRight * smooth((sourceX - 173) / 32);
       const sx = Math.round(sourceX - ear * wiggle);
       const sy = Math.round(sourceY);
-      map[index] = sx >= 0 && sx < CAT_SIZE && sy >= 0 && sy < CAT_SIZE ? sy * CAT_SIZE + sx : -1;
+      const source = sx >= 0 && sx < CAT_SIZE && sy >= 0 && sy < CAT_SIZE ? sy * CAT_SIZE + sx : -1;
+      for (let offset = 0; offset < grid; offset++) {
+        const start = (row + offset) * CAT_SIZE + column;
+        map.fill(source, start, start + grid);
+      }
     }
   }
 
-  frameMaps.set(frame, map);
+  frameMaps.set(key, map);
   return map;
 }
 
-export function warpListeningPixels(base: Uint32Array, result: Uint32Array, frame: number) {
+export function warpListeningPixels(base: Uint32Array, result: Uint32Array, frame: number, pixel80 = false) {
   result.set(base);
-  if (frame === 0) return;
-  const map = listeningMap(frame);
+  if (frame === 0 && !pixel80) return;
+  const map = listeningMap(frame, pixel80 ? 4 : 1);
   for (let index = 0; index < map.length; index++) {
     result[index] = base[map[index]!] ?? 0;
   }

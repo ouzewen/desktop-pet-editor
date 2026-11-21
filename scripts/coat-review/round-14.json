@@ -1,0 +1,78 @@
+{
+  "id": "round-14",
+  "label": "第 14 轮 · 横环补边与白肩修订",
+  "groups": [
+    {
+      "id": "wide-bib",
+      "label": "宽胸试装 · 前肢横环补边",
+      "title": "宽胸试装 · 前肢横环补边",
+      "description": "两款胸斑已收录；这一组只评审前肢横环。特别快打字时，补过的区域在电脑后面。",
+      "reference": "output/aseprite-coat-parts-round13/B3A-sit.png",
+      "referenceLabel": "第 13 轮 B3A",
+      "detail": "output/aseprite-coat-parts-round14/round-14-overview.png",
+      "detailLabel": "看全部待机、打字改前改后及前肢放大",
+      "options": [
+        {
+          "id": "B3A",
+          "label": "圆弧宽胸",
+          "description": "保留原胸斑，补齐前肢横环贴近轮廓的漏色。",
+          "image": "output/aseprite-coat-parts-round14/B3A-sit.png",
+          "typing": "output/aseprite-coat-parts-round14/B3A-typing.png",
+          "motion": "output/aseprite-coat-parts-round14/B3A-motion.webp"
+        },
+        {
+          "id": "B3B",
+          "label": "短圆宽胸",
+          "description": "保留原胸斑，使用同一版补边横环。",
+          "image": "output/aseprite-coat-parts-round14/B3B-sit.png",
+          "typing": "output/aseprite-coat-parts-round14/B3B-typing.png",
+          "motion": "output/aseprite-coat-parts-round14/B3B-motion.webp"
+        }
+      ],
+      "retouch": {
+        "x": 92,
+        "y": 212,
+        "width": 65,
+        "height": 62,
+        "label": "前肢横环",
+        "idleOnly": true
+      }
+    },
+    {
+      "id": "shoulder-bib",
+      "label": "白毛包肩 · 连续胸侧",
+      "title": "白毛包肩 · 连续胸侧",
+      "description": "沿用同一底毛和额斑，比较两款包肩面积以及胸侧下缘的走势。",
+      "reference": "output/aseprite-coat-parts-round13/B4A-sit.png",
+      "referenceLabel": "第 13 轮 B4A",
+      "detail": "output/aseprite-coat-parts-round14/round-14-overview.png",
+      "detailLabel": "看全部待机、打字改前改后及前肢放大",
+      "options": [
+        {
+          "id": "B4C",
+          "label": "双肩连片 · 宽版",
+          "description": "保留原来双肩宽度，胸侧下缘改成连续圆弧。",
+          "image": "output/aseprite-coat-parts-round14/B4C-sit.png",
+          "typing": "output/aseprite-coat-parts-round14/B4C-typing.png",
+          "motion": "output/aseprite-coat-parts-round14/B4C-motion.webp"
+        },
+        {
+          "id": "B4D",
+          "label": "双肩连片 · 收肩版",
+          "description": "将偏右包肩改为左右均衡，肩部白毛略收，胸口保持连片。",
+          "image": "output/aseprite-coat-parts-round14/B4D-sit.png",
+          "typing": "output/aseprite-coat-parts-round14/B4D-typing.png",
+          "motion": "output/aseprite-coat-parts-round14/B4D-motion.webp"
+        }
+      ],
+      "retouch": {
+        "x": 84,
+        "y": 138,
+        "width": 153,
+        "height": 82,
+        "label": "胸肩白斑",
+        "idleOnly": true
+      }
+    }
+  ]
+}

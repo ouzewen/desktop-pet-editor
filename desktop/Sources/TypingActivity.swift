@@ -63,6 +63,11 @@ final class TypingActivity: ObservableObject {
         if today != current { today = current }
     }
 
+    func pauseRecording() {
+        lastKeyAt = nil
+        flush()
+    }
+
     func flush() {
         pendingFlush?.cancel()
         pendingFlush = nil

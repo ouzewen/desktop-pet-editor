@@ -8,4 +8,10 @@ M1 柴犬按 160 px 正面原画逐格拆成身体、头、耳朵、眼睛、嘴
 - 柴犬的眉斑、白颊与额线已并入头底座。
 - 工作台当前只展示猫；柴犬相关代码、自检和素材继续保留，恢复入口时可直接复用。
 
-验收对照图在 `fixtures/`。
+## 历史文件位置
+
+- `public/assets/frames/` 存放身体和头部图层。
+- `public/assets/masks/` 存放换色遮罩，`g`、`s`、`l` 分别对应主色、阴影、高光。
+- `public/assets/motion/` 存放动作图层，`public/assets/parts/` 存放耳朵、嘴、尾巴、眼睛和花纹零件。
+- 配色为 `public/assets/palettes/C01.json`，预设为 `public/assets/presets/preset_m1_12.json`。
+- 验收对照图在 `fixtures/`。

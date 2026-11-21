@@ -1,0 +1,108 @@
+{
+  "id": "round-07",
+  "label": "第 7 轮 · 脸颊、耳朵与前爪",
+  "groups": [
+    {
+      "id": "cheeks",
+      "title": "脸颊",
+      "label": "脸颊",
+      "description": "奶茶底 · 固定耳朵与前爪，只换画面左侧脸颊。看色块怎么贴着脸侧收口、绕开眼睛。",
+      "referenceLabel": "合成底稿",
+      "reference": "output/aseprite-coat-parts-round7/C0-sit.png",
+      "options": [
+        {
+          "id": "C1",
+          "label": "下颊小斑",
+          "description": "顺着嘴角落在下颊，保留较多底毛。",
+          "image": "output/aseprite-coat-parts-round7/C1-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/C1-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/C1-motion.webp"
+        },
+        {
+          "id": "C2",
+          "label": "贴脸圆弧",
+          "description": "从脸侧绕到嘴角下方，内缘较圆。",
+          "image": "output/aseprite-coat-parts-round7/C2-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/C2-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/C2-motion.webp"
+        },
+        {
+          "id": "C3",
+          "label": "耳根到下颊",
+          "description": "面积最大，从耳根沿脸侧往下接。",
+          "image": "output/aseprite-coat-parts-round7/C3-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/C3-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/C3-motion.webp"
+        }
+      ]
+    },
+    {
+      "id": "ears",
+      "title": "耳朵",
+      "label": "耳朵",
+      "description": "橘虎斑底 · 固定脸颊与前爪，只换画面右侧耳朵。看耳尖、外缘和耳根怎么接。",
+      "referenceLabel": "合成底稿",
+      "reference": "output/aseprite-coat-parts-round7/E0-sit.png",
+      "options": [
+        {
+          "id": "E1",
+          "label": "耳尖点色",
+          "description": "色块在耳尖收口，露出原来的外耳。",
+          "image": "output/aseprite-coat-parts-round7/E1-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/E1-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/E1-motion.webp"
+        },
+        {
+          "id": "E2",
+          "label": "沿外耳收边",
+          "description": "从耳尖沿外侧往下，贴着内耳转弯。",
+          "image": "output/aseprite-coat-parts-round7/E2-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/E2-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/E2-motion.webp"
+        },
+        {
+          "id": "E3",
+          "label": "包到耳根",
+          "description": "加宽外耳色块，延伸到耳根交界。",
+          "image": "output/aseprite-coat-parts-round7/E3-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/E3-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/E3-motion.webp"
+        }
+      ]
+    },
+    {
+      "id": "paws",
+      "title": "前爪",
+      "label": "前爪",
+      "description": "蓝灰底 · 固定脸颊、耳朵及画面右爪，只换画面左爪。可播放特别快打字，检查抬爪和落爪。",
+      "referenceLabel": "合成底稿",
+      "reference": "output/aseprite-coat-parts-round7/P0-sit.png",
+      "options": [
+        {
+          "id": "P1",
+          "label": "浅白趾尖",
+          "description": "只在脚尖留一条小弧。",
+          "image": "output/aseprite-coat-parts-round7/P1-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/P1-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/P1-motion.webp"
+        },
+        {
+          "id": "P2",
+          "label": "圆口短袜",
+          "description": "白色包住前爪下段，弧线从两侧收下。",
+          "image": "output/aseprite-coat-parts-round7/P2-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/P2-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/P2-motion.webp"
+        },
+        {
+          "id": "P3",
+          "label": "斜口高袜",
+          "description": "白色向上包住大半只爪，袜口略微倾斜。",
+          "image": "output/aseprite-coat-parts-round7/P3-sit.png",
+          "typing": "output/aseprite-coat-parts-round7/P3-typing.png",
+          "motion": "output/aseprite-coat-parts-round7/P3-motion.webp"
+        }
+      ]
+    }
+  ]
+}

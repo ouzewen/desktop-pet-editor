@@ -1,6 +1,14 @@
-# 素材目录与命名
+# 猫桌宠素材目录与命名
+
+照片自动生成与整猫花色的验收标准见[猫咪照片生成与花色验收](CAT-COAT-REVIEW.md)。
 
 运行时内置素材根目录是 `public/assets/`，由 Vite 复制到 `build/desktop/assets/` 与 `build/web/assets/`。两个构建均排除旧的用户存档路径 `public/assets/cat/custom/`，桌宠打包时也会检查暂存目录。
+
+macOS 正式构建优先加载 `desktop/assets-pixel80/` 中已验收的 80×80 素材。它们按原坐标放大到运行图层和图集。工作台使用的鼻口、脸部补片、眨眼帧和狂打发热层使用同一套像素网格。
+
+新的像素存档记录 `artVersion: "pixel80-v2"`。第一版 80×80 存档沿用原版素材清单和 `desktop/assets-pixel80-v1/` 中保留的发热层来提取笔迹和擦除。更早的存档使用 `public/assets/` 中的底稿。旧眼型、旧尾型和旧版打字图层用于兼容。
+
+修改这一批素材时，用 `node scripts/stage-cat-pixel80.mjs <组 ID>` 将 `art/cat-pixel80/` 的分层源稿导出到 `output/cat-pixel80/assets/`。先用 `./desktop/build.sh --pixel80-preview` 查看，再把验收过的 PNG 按原相对路径复制到 `desktop/assets-pixel80/`。普通构建直接读取已验收的 PNG。
 
 像素编辑的 PNG、底稿信息和预设清单保存在 `~/Library/Application Support/DesktopPet/custom/`。从项目内打开新版桌宠时，旧工作区存档会合并到此处，原目录备份到同级的 `legacy-custom-backups/`。
 
@@ -20,24 +28,18 @@ npm run assets:export -- cat.ear.folded --out /tmp/pet-review-assets
 ## 目录
 
 ```
-public/assets/
-├── cat/                  # 160×160 猫基础层（sit_ / walk_ / type_）
-│   ├── hd/               # 320×320 HD 猫素材（new_*），含 HD 眼睛遮罩
-│   │   ├── breeds/       # 各品种的正面及打字层，共用电脑
-│   │   ├── typing-v2/    # 当前32帧低抬爪、遮罩与表情
-│   │   └── typing-reference/ # 历史12帧图集与共用干净电脑
-│   ├── new_/             # 320×320 LibTV 橘猫分层，只用于橘猫待机和打字
-│   └── masks/            # 160×160 猫的换色遮罩与虹膜遮罩
-├── frames/               # 160×160 柴犬（M1）身体/头
-├── masks/                # 柴犬换色遮罩
-├── motion/               # 柴犬动作层
-├── parts/                # 柴犬零件（耳/嘴/尾/眼/花纹）
-├── palettes/C01.json     # 柴犬配色
-└── presets/preset_m1_12.json
+public/assets/cat/
+├── hd/                    # 320×320 猫素材
+│   ├── breeds/            # 各品种的正面及打字层
+│   ├── typing-front/      # 正视电脑、共用前爪与图层遮罩
+│   ├── typing-falling/    # 当前三档打字的字母、表情与特效
+│   ├── typing-v2/         # 历史 32 帧图集
+│   └── typing-reference/  # 历史 12 帧图集与共用干净电脑
+├── new_/                  # 320×320 橘猫待机与打字分层
+└── masks/                 # 160×160 猫的换色遮罩与虹膜遮罩
 ```
 
-- 猫是当前默认与主要维护对象；柴犬（根目录的 M1 素材）仍在仓库中保留，但工作台暂不展示。
-- `cat/hd/new_*.png` 是 320×320 的 HD 代素材，文件名保留 `new_` 前缀以区分代际。当前 `typing-v2/` 图集将 32 张 320×320 帧纵向排列为 320×10240；历史 `typing-reference/` 保留 12 帧、320×3840。其余单帧图层仍为 320×320，渲染器按版本校验尺寸。
+- `hd/new_*.png` 是 320×320 的 HD 代素材，文件名保留 `new_` 前缀以区分代际。多帧图集及各版本的尺寸见[共用低抬爪打字动画](#共用低抬爪打字动画)。
 - 160×160 猫素材仍用于基础坐姿/行走/打字骨架，HD 素材叠加在更高分辨率画布上。
 
 ## LibTV 橘猫素材
@@ -240,8 +242,17 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 
 脸侧纹由 `head-patterns/face_patterns.png` 使用相同的 RGB 通道约定。三花、暹罗和布偶直接用已有头、身体和尾巴的品种色块打底，再按局部底色叠加统一花纹遮罩。额头独立叠加，品种色块可跨额头与脸侧连续分布。其他品种先用干净底毛替换旧纹，再给新纹着色。待机与三档打字共用这套素材。
 
-自定义编辑源记录 `furPatternColors: clean-face`。均匀脸底的眼缘使用当前脸部毛色，原眼白和瞳色仍取眼部图层。使用 `breed-pigment` 重建修整眼缘之前的底图，使用 `calico-chest` 重建短白胸试稿。旧值 `matched` 和 `original` 也按当时的合成方式提取笔迹。
+纯色身体同时替换从白胸延伸到头部图层的白毛。坐姿源稿的头身接缝用于识别这一小段白毛，三花这类延伸进脸部的大面积白斑仍由脸部底纹控制。三花选择均匀脸底时，接缝沿用共享底稿的白胸边界。品种原底沿用源稿上的白胸。
 
+纯色身体搭配品种原纹时，花纹强度取自相应品种的身体底稿。橘猫、黑猫、美短和狸花保留各自的条纹位置和宽度。重点色和三花色块属于品种原底。
+
+碎纸、压缩和格式转换的前臂、爪子共用同一条前肢的自定义斑纹。渲染根据动作图层把斑纹投到对应部位，独立前爪斑仍叠在爪子上。
+
+自定义编辑源记录 `furPatternColors: independent-fur`。旧档的 `connected-chest` 和 `clean-face` 重建各自版本的颈部像素和原纹，`breed-pigment` 重建修整眼缘之前的底图，`calico-chest` 重建短白胸试稿。均匀脸底的眼缘使用当前脸部毛色，原眼白和瞳色仍取眼部图层。旧值 `matched` 和 `original` 也按当时的合成方式提取笔迹。
+
+### 照片生成花色验收
+
+见[猫咪照片生成与花色验收](CAT-COAT-REVIEW.md)。
 
 ### 新稿分层
 
@@ -271,7 +282,7 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 - `<view>_<part>[_<id>][_<slot>].png`
   - `view`: `sit`、`walk`、`type`
   - `part`: `body`、`head`、`ears`、`ear_CE02`、`eye_Y05`、`mouth_CN02` 等
-  - `slot`（柴犬遮罩）: `g`（主色）、`s`（阴影）、`l`（高光）、`w`/`d`（猫毛色）
+  - `slot` 用于基础猫毛色遮罩，取 `g`（主色）、`s`（阴影）、`l`（高光）、`w`（浅毛）、`d`（深毛）。
 - 虹膜遮罩统一为 `*_iris.png`，只保留 alpha，用于换瞳色。眼神跟随移动独立的小高光图层。
 - 所有分层 PNG 的单帧必须与所在代际的画布尺寸一致：基础层 160×160，`cat/hd/` 为 320×320。多帧图集按导出脚本约定排列，`typing-reference/` 的动作与汗水图集为 320×3840。
 
@@ -280,7 +291,3 @@ CC09: { name: '示例猫', colors: ['#A69182', '#755D55', '#F7E9DB'] },
 1. 在 `src/pet-assets.ts` 登记选项编号、源稿、导出方法和输出尺寸。只有改变接缝或遮挡时，才需要调整相应的合成规则。
 2. 通过 `assets:export` 导出到审核目录，确认后更新运行时 PNG。
 3. 运行 `assets:check`、构建与自检，核对组合、动作和旧存档。
-
-## 参考图
-
-`fixtures/` 里是柴犬 M1 的验收对照图，不属于运行时素材，可在 PR/评审时引用。柴犬的耳朵/嘴鼻代工说明见 `docs/SHIBA-NOTES.md`。

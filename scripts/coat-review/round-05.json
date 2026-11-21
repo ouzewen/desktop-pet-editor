@@ -1,0 +1,16 @@
+{
+  "id": "round-05",
+  "label": "第 5 轮 · 三花左眼",
+  "groups": [
+    {
+      "id": "calico-eye-cleanup",
+      "title": "三花 · 左眼橘斑与眼缘",
+      "label": "三花左眼",
+      "description": "左图为第四轮评审稿。修订稿补齐了横向黑线断开的橘斑，并清理白眼缘外侧的灰黑杂边。点放大可比较细节。",
+      "reference": "output/aseprite-coat-parts-refinements/head-3-修订.png",
+      "options": [
+        { "id": "H3R2", "label": "橘斑连片与眼缘修订", "description": "保留眼睛、原有橘斑范围和三花身体", "image": "output/aseprite-coat-parts-eye-cleanup/H3R2-清理眼缘.png" }
+      ]
+    }
+  ]
+}

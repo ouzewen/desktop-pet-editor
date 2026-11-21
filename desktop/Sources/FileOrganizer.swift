@@ -136,7 +136,7 @@ final class FileOrganizer {
     private let isOpen: OpenFileCheck
 
     static let journalURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("DesktopPet", isDirectory: true)
+        .appendingPathComponent(DesktopPetStorage.directoryName, isDirectory: true)
         .appendingPathComponent("FileOrganization", isDirectory: true)
         .appendingPathComponent("moves.json")
 

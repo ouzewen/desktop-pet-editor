@@ -1,0 +1,62 @@
+{
+  "id": "round-13",
+  "label": "第 13 轮 · 宽胸与白肩修订",
+  "groups": [
+    {
+      "id": "wide-bib",
+      "label": "下巴连宽胸斑",
+      "title": "下巴连宽胸斑",
+      "description": "固定额斑、前肢和底毛，对照白下巴到胸肩的轮廓与明暗。",
+      "reference": "output/aseprite-coat-parts-round12/C3-sit.png",
+      "referenceLabel": "第 12 轮 B3",
+      "detail": "output/aseprite-coat-parts-round13/round-13-overview.png",
+      "detailLabel": "看待机与打字改前改后",
+      "options": [
+        {
+          "id": "B3A",
+          "label": "圆弧宽胸",
+          "description": "先收窄下巴与胸口的连接，胸斑向下延伸，底端用圆弧收住。",
+          "image": "output/aseprite-coat-parts-round13/B3A-sit.png",
+          "typing": "output/aseprite-coat-parts-round13/B3A-typing.png",
+          "motion": "output/aseprite-coat-parts-round13/B3A-motion.webp"
+        },
+        {
+          "id": "B3B",
+          "label": "短圆宽胸",
+          "description": "白色集中在胸上半部，胸底收得更浅。",
+          "image": "output/aseprite-coat-parts-round13/B3B-sit.png",
+          "typing": "output/aseprite-coat-parts-round13/B3B-typing.png",
+          "motion": "output/aseprite-coat-parts-round13/B3B-motion.webp"
+        }
+      ]
+    },
+    {
+      "id": "shoulder-bib",
+      "label": "白毛包肩",
+      "title": "白毛包肩",
+      "description": "固定额斑、前肢和底毛，对照白下巴到胸肩的轮廓与明暗。",
+      "reference": "output/aseprite-coat-parts-round12/C4-sit.png",
+      "referenceLabel": "第 12 轮 B4",
+      "detail": "output/aseprite-coat-parts-round13/round-13-overview.png",
+      "detailLabel": "看待机与打字改前改后",
+      "options": [
+        {
+          "id": "B4A",
+          "label": "双肩连片",
+          "description": "两肩的白毛沿胸侧缓慢收窄，胸底保留宽圆弧。",
+          "image": "output/aseprite-coat-parts-round13/B4A-sit.png",
+          "typing": "output/aseprite-coat-parts-round13/B4A-typing.png",
+          "motion": "output/aseprite-coat-parts-round13/B4A-motion.webp"
+        },
+        {
+          "id": "B4B",
+          "label": "偏右包肩",
+          "description": "画面右侧白肩稍宽，另一侧自然收短。",
+          "image": "output/aseprite-coat-parts-round13/B4B-sit.png",
+          "typing": "output/aseprite-coat-parts-round13/B4B-typing.png",
+          "motion": "output/aseprite-coat-parts-round13/B4B-motion.webp"
+        }
+      ]
+    }
+  ]
+}

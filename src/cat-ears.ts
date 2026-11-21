@@ -1,4 +1,5 @@
 import type { CatArtPalette } from './cat-breeds';
+import { pixel80CalicoDarkInk, pixel80CatOutline } from './cat-outline';
 
 type RGB = readonly [number, number, number];
 type EarTones = { outline: RGB; shadow: RGB; fur: RGB; light: RGB };
@@ -42,6 +43,8 @@ export function paintBreedEars(
   blendMask: HTMLImageElement,
   crown: HTMLImageElement,
   coat: EarCoat,
+  pixel80 = false,
+  calicoDarkSides?: readonly [boolean, boolean],
 ) {
   const { width, height } = context.canvas;
   const read = (image: HTMLImageElement) => {
@@ -53,7 +56,9 @@ export function paintBreedEars(
   const blend = read(blendMask).data;
   const composed = read(crown);
   const result = composed.data;
-  const ramps = coats[coat].map(tones => tones && earRamp(tones));
+  const ramps = coat === 'CC03' && calicoDarkSides
+    ? calicoDarkSides.map(dark => dark ? earRamp(calicoDark) : undefined)
+    : coats[coat].map(tones => tones && earRamp(tones));
 
   for (let offset = 0; offset < result.length; offset += 4) {
     const left = blend[offset]!, right = blend[offset + 1]!;
@@ -65,9 +70,13 @@ export function paintBreedEars(
       continue;
     }
     const weight = result[offset + 3] ? Math.max(left, right) / 255 : 1;
-    const ramp = ramps[right ? 1 : 0];
+    const side = right ? 1 : 0;
+    const ramp = ramps[side];
+    const darkCalico = coat === 'CC03' && (calicoDarkSides?.[side] ?? !right);
     const red = shared[offset]!, green = shared[offset + 1]!, blue = shared[offset + 2]!;
-    const pigment = ramp?.[red];
+    const pigment = pixel80 && red <= 102 && green < 68 && blue < 64
+      ? darkCalico ? pixel80CalicoDarkInk : pixel80CatOutline({ palette: coat, coat: 'native' })
+      : ramp?.[red];
     // Keep the pink lining and mix its reddish rim into the surrounding fur.
     const lining = cap((blue - green + 17) / 28) * cap((red - green - 24) / 16) * cap((red - 129) / 32);
     for (let channel = offset; channel < offset + 3; channel++) {
@@ -78,6 +87,11 @@ export function paintBreedEars(
     result[offset + 3] = alpha;
   }
   context.putImageData(composed, 0, 0);
+}
+
+export function isEarLiningPixel(data: Uint8ClampedArray, offset: number) {
+  const [red, green, blue, alpha] = [data[offset]!, data[offset + 1]!, data[offset + 2]!, data[offset + 3]!];
+  return alpha > 0 && red >= 145 && red - green >= 31 && blue >= green - 5;
 }
 
 export function paintInnerEarColor(
@@ -92,10 +106,9 @@ export function paintInnerEarColor(
     for (let y = 0; y < Math.min(104, height); y++) {
       for (let x = start; x < end; x++) {
         const offset = (y * width + x) * 4;
-        const red = data[offset]!, green = data[offset + 1]!, blue = data[offset + 2]!;
-        if (!data[offset + 3] || red < 145 || red - green < 31 || blue < green - 5) continue;
+        if (!isEarLiningPixel(data, offset)) continue;
         lining.push(offset);
-        greenTotal += green;
+        greenTotal += data[offset + 1]!;
       }
     }
     if (!lining.length) continue;

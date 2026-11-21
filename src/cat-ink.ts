@@ -10,7 +10,11 @@ export type CatInkGeometry = Partial<Record<CatInkPart, CatInkSurface>>;
 // Native brush colors are straight AARRGGBB. A zero change is an explicit erasure.
 export type CatInkChange = [position: number, argb: number];
 export type CatInkLayer = { bounds: CatInkBounds; paint: CatInkChange[]; erase: number[] };
-export type CatInkDocument = { version: 1; parts: Partial<Record<CatInkPart, CatInkLayer>> };
+export type CatInkDocument = {
+  version: 1;
+  scope?: 'photo-fur';
+  parts: Partial<Record<CatInkPart, CatInkLayer>>;
+};
 
 const size = CAT_SIZE;
 const fullBounds = { x: 0, y: 0, width: size, height: size };
@@ -29,13 +33,17 @@ function validBounds(bounds: CatInkBounds | undefined): bounds is CatInkBounds {
 
 export function readCatInk(value: unknown): CatInkDocument {
   const doc = value as Partial<CatInkDocument> | null;
-  if (!doc || doc.version !== 1 || !doc.parts || typeof doc.parts !== 'object' || Array.isArray(doc.parts)) {
+  if (!doc || doc.version !== 1 || (doc.scope !== undefined && doc.scope !== 'photo-fur') || !doc.parts || typeof doc.parts !== 'object' || Array.isArray(doc.parts)) {
     throw Error('像素笔迹存档版本无效');
   }
   for (const [part, layer] of Object.entries(doc.parts)) {
     if (!catInkParts.includes(part as CatInkPart) || !validBounds(layer?.bounds)
       || !Array.isArray(layer.paint) || !Array.isArray(layer.erase)) {
       throw Error('像素笔迹图层无效');
+    }
+    if (doc.scope === 'photo-fur' && (part === 'canvas' || part === 'laptop' || layer.erase.length
+      || layer.bounds.width !== size || layer.bounds.height !== size)) {
+      throw Error('照片毛色笔迹只能覆盖毛发颜色');
     }
     const limit = layer.bounds.width * layer.bounds.height;
     if (layer.paint.length + layer.erase.length > limit) throw Error('像素笔迹超出图层');
@@ -48,7 +56,9 @@ export function readCatInk(value: unknown): CatInkDocument {
       if (!Array.isArray(change) || change.length !== 2) throw Error('笔迹数据无效');
       const [position, value] = change;
       if (!integer(position, limit) || occupied.has(position)
-        || !integer(value, 0x100000000) || value < 0x01000000) throw Error('笔迹数据无效');
+        || !integer(value, 0x100000000) || value < (doc.scope === 'photo-fur' ? 0xff000000 : 0x01000000)) {
+        throw Error('笔迹数据无效');
+      }
       occupied.add(position);
     }
   }
@@ -151,14 +161,67 @@ export function captureCatInk(
   return { version: 1, parts };
 }
 
+function photoFurTarget(position: number, from: CatInkBounds, to: CatInkBounds) {
+  const x = to.x + Math.floor((position % from.width + 0.5) * to.width / from.width);
+  const y = to.y + Math.floor((Math.floor(position / from.width) + 0.5) * to.height / from.height);
+  return y * size + x;
+}
+
+// Photo ink uses full-resolution, normalized part coordinates. Editing at
+// one pose is exact, while a moving part can be narrower in another pose.
+export function capturePhotoFurInk(
+  geometry: CatInkGeometry, changes: readonly CatInkChange[], previous: CatInkDocument, offsetY: number,
+): CatInkDocument {
+  if (changes.length > area) throw Error('像素改动超出画布');
+  const parts = { ...previous.parts };
+  const updates = new Map<CatInkPart, Map<number, number>>();
+  for (const [index, value] of changes) {
+    if (!integer(index, area) || !integer(value, 0x100000000) || (value !== 0 && value < 0xff000000)) {
+      throw Error('照片毛色画笔只接受不透明颜色或恢复指令');
+    }
+    const x = index % size, y = Math.floor(index / size) - offsetY;
+    const part = catInkParts.find(key => key !== 'canvas' && key !== 'laptop' &&
+      geometry[key]?.mask && contains(geometry[key]!, x, y));
+    if (!part) continue;
+    let touches = updates.get(part);
+    if (!touches) updates.set(part, touches = new Map());
+    touches.set(y * size + x, value);
+  }
+  for (const [part, touches] of updates) {
+    const surface = geometry[part]!;
+    const prior = parts[part];
+    const paint = prior ? prior.paint.filter(([position]) =>
+      !touches.has(photoFurTarget(position, prior.bounds, surface.bounds))) : [];
+    const { bounds } = surface;
+    for (const [pixel, value] of touches) {
+      if (!value) continue;
+      const column = Math.floor((pixel % size + 0.5 - bounds.x) * size / bounds.width);
+      const row = Math.floor((Math.floor(pixel / size) + 0.5 - bounds.y) * size / bounds.height);
+      paint.push([row * size + column, value]);
+    }
+    if (paint.length) parts[part] = { bounds: fullBounds, paint, erase: [] };
+    else delete parts[part];
+  }
+  return { version: 1, scope: 'photo-fur', parts };
+}
+
+function projectPhotoFurInk(layer: CatInkLayer, surface: CatInkSurface) {
+  const cells = new Map<number, number>();
+  for (const [position, value] of layer.paint) {
+    const index = photoFurTarget(position, layer.bounds, surface.bounds);
+    if (surface.mask?.[index] && value >>> 24 === 255) cells.set(index, value);
+  }
+  return cells;
+}
+
 type InkRaster = { x: number; y: number; paint?: HTMLCanvasElement; erase?: HTMLCanvasElement };
 const rasters = new WeakMap<CatInkLayer, WeakMap<CatInkSurface, InkRaster | undefined>>();
 
-function rasterize(layer: CatInkLayer, surface: CatInkSurface, part: CatInkPart) {
+function rasterize(layer: CatInkLayer, surface: CatInkSurface, part: CatInkPart, furOnly: boolean) {
   let cache = rasters.get(layer);
   if (!cache) rasters.set(layer, cache = new WeakMap());
   if (cache.has(surface)) return cache.get(surface);
-  const cells = projectCatInk(layer, surface);
+  const cells = furOnly ? projectPhotoFurInk(layer, surface) : projectCatInk(layer, surface);
   let left = size, top = size, right = 0, bottom = 0;
   let hasPaint = false, hasErase = false;
   for (const [index, value] of cells) {
@@ -202,10 +265,12 @@ export function applyCatInk(
   ctx: CanvasRenderingContext2D, ink: CatInkDocument, geometry: CatInkGeometry, parts: readonly CatInkPart[],
 ) {
   for (const part of parts) {
+    const furOnly = ink.scope === 'photo-fur';
+    if (furOnly && (part === 'canvas' || part === 'laptop' || !geometry[part]?.mask)) continue;
     const layer = ink.parts[part];
     const surface = part === 'canvas' ? geometry.canvas ?? freeCanvas : geometry[part];
     if (!layer || !surface) continue;
-    const raster = rasterize(layer, surface, part);
+    const raster = rasterize(layer, surface, part, furOnly);
     if (!raster) continue;
     ctx.save();
     if (raster.erase) {

@@ -2,8 +2,10 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { copyPublicAssets } from '../scripts/copy-public-assets.ts';
 
-export default defineConfig({
-  plugins: [copyPublicAssets()],
+import { pixel80DesktopAssets } from '../scripts/pixel80-desktop-assets.ts';
+
+export default defineConfig(({ mode }) => ({
+  plugins: [copyPublicAssets(), pixel80DesktopAssets(mode === 'cat-pixel80')],
   base: './',
   build: {
     outDir: 'build/desktop',
@@ -14,4 +16,4 @@ export default defineConfig({
       fileName: () => 'pet.js',
     },
   },
-});
+}));
