@@ -6,6 +6,15 @@
     <description>桌宠 macOS 公开内测频道</description>
     <language>zh-CN</language>
     <item>
+      <title>桌宠 0.3.8 内测版</title>
+      <sparkle:version>35</sparkle:version>
+      <sparkle:shortVersionString>0.3.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0.0</sparkle:minimumSystemVersion>
+      <description>工作台新增会议录音入口，右上角可以立即检查更新并在发现新版后安装及重启。</description>
+      <enclosure url="https://github.com/ouzewen/desktop-pet-editor/releases/download/v0.3.8/DesktopPet-v0.3.8-macos-arm64.zip"
+        sparkle:edSignature="d6YGgLpr7s2DuracDn0ZNYakZJuxFwoEvOofLXwqLrDogkASwicPMnEZ6skbUizQaVs0GKYdfsmQ6by9pniwBA==" length="10564459" type="application/octet-stream" />
+    </item>
+    <item>
       <title>桌宠 0.3.7 内测版</title>
       <sparkle:version>34</sparkle:version>
       <sparkle:shortVersionString>0.3.7</sparkle:shortVersionString>
