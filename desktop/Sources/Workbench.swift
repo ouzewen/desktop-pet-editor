@@ -1586,10 +1586,7 @@ struct WorkbenchView: View {
 
     private func photoEarControls(_ shapes: [AppearanceOption], catalog: AppearanceCatalog) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                photoEarShape("画面左耳", side: "left", options: shapes)
-                photoEarShape("画面右耳", side: "right", options: shapes)
-            }
+            earShapeRow(shapes, identifierPrefix: "photo-ear-shape")
             DisclosureGroup("耳斑") {
                 HStack(alignment: .top, spacing: 10) {
                     photoEarMark("画面左耳斑", side: "left", catalog: catalog)
@@ -1602,17 +1599,26 @@ struct WorkbenchView: View {
         }
     }
 
-    private func photoEarShape(_ title: String, side: String, options: [AppearanceOption]) -> some View {
+    private func earShapeRow(_ options: [AppearanceOption], identifierPrefix: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            earShape("画面左耳", side: "left", options: options, identifierPrefix: identifierPrefix)
+            earShape("画面右耳", side: "right", options: options, identifierPrefix: identifierPrefix)
+        }
+    }
+
+    private func earShape(_ title: String, side: String, options: [AppearanceOption],
+                          identifierPrefix: String) -> some View {
         let key = "\(side)Ear"
+        let selection = Binding(
+            get: { state.appearance[key] ?? state.appearance["ear"] ?? "CE01" },
+            set: { appearanceBinding(key).wrappedValue = $0 }
+        )
         return VStack(alignment: .leading, spacing: 4) {
             profileLabel(title)
-            PixelSelect(options: options.map { ($0.id, $0.name) },
-                        selection: Binding(get: { state.appearance[key] ?? state.appearance["ear"] ?? "CE01" },
-                                           set: { appearanceBinding(key).wrappedValue = $0 }),
-                        palette: palette)
+            PixelSelect(options: options.map { ($0.id, $0.name) }, selection: selection, palette: palette)
                 .accessibilityLabel(title)
-                .accessibilityValue(options.first { $0.id == (state.appearance[key] ?? state.appearance["ear"]) }?.name ?? "")
-                .accessibilityIdentifier("photo-ear-shape-\(side)")
+                .accessibilityValue(options.first { $0.id == selection.wrappedValue }?.name ?? "")
+                .accessibilityIdentifier("\(identifierPrefix)-\(side)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1852,16 +1858,16 @@ struct WorkbenchView: View {
         case .face:
             switch facePart {
             case .ears:
-                if state.hasPhotoResult, let catalog = state.catalog {
-                    VStack(alignment: .leading, spacing: 11) {
+                VStack(alignment: .leading, spacing: 11) {
+                    if state.hasPhotoResult, let catalog = state.catalog {
                         photoEarControls(fields["ear"] ?? [], catalog: catalog)
-                        if let colors = fields["earColor"] {
-                            fieldPicker(title: "内耳色", key: "earColor", options: colors,
-                                        defaultSwatch: WBTheme.swatchColors(naturalSwatches["earColor"].map { [$0] }))
-                        }
+                    } else if let shapes = fields["ear"] {
+                        earShapeRow(shapes, identifierPrefix: "ear-shape")
                     }
-                } else {
-                    partColorRow("ear", shapeTitle: "耳形", colorTitle: "内耳色", fields: fields)
+                    if let colors = fields["earColor"] {
+                        fieldPicker(title: "内耳色", key: "earColor", options: colors,
+                                    defaultSwatch: WBTheme.swatchColors(naturalSwatches["earColor"].map { [$0] }))
+                    }
                 }
             case .eyes:
                 pupilControls(colors: fields["eyeColor"] ?? [])

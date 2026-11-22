@@ -8,24 +8,38 @@ enum TrashService {
         let trashed: [URL]
         let failed: [URL]
         var summary: String {
-            if trashed.isEmpty, !failed.isEmpty {
-                return failed.count == 1
-                    ? "删不掉：\(failed[0].lastPathComponent)"
-                    : "删不掉 \(failed.count) 个文件"
-            }
-            if failed.isEmpty {
-                if trashed.count == 1 { return "已移到废纸篓：\(trashed[0].lastPathComponent)" }
-                return "已把 \(trashed.count) 个文件移到废纸篓"
-            }
-            return "移走了 \(trashed.count) 个，\(failed.count) 个没删掉"
+            "已移到废纸篓 \(trashed.count) 项 · 失败 \(failed.count) 项"
         }
+    }
+
+    /// Keeps one entry per path and lets a selected folder carry any of its selected descendants.
+    static func selectedItems(_ urls: [URL]) -> [URL] {
+        var paths = Set<String>()
+        let unique = urls.filter { $0.isFileURL && paths.insert($0.standardizedFileURL.path).inserted }
+        let folders = Set(unique.compactMap { url -> String? in
+            guard isDirectory(url) else { return nil }
+            return url.standardizedFileURL.path
+        })
+        return unique.filter { url in
+            var parent = url.standardizedFileURL.deletingLastPathComponent()
+            while parent.path != "/" && !parent.path.isEmpty {
+                if folders.contains(parent.path) { return false }
+                parent.deleteLastPathComponent()
+            }
+            return true
+        }
+    }
+
+    static func isDirectory(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        return values?.isDirectory == true && values?.isSymbolicLink != true
     }
 
     /// Moves the items to the macOS Trash — recoverable, unlike an unlink.
     static func trash(_ urls: [URL]) -> Outcome {
         var trashed: [URL] = []
         var failed: [URL] = []
-        for url in urls {
+        for url in selectedItems(urls) {
             var resulting: NSURL?
             do {
                 try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)

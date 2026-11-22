@@ -1,10 +1,10 @@
 import { catPresets, currentFurPatternColors, type CatConfig } from './cat';
-import { photoFurEditorData, prepareStructuredCatCustomization, saveCatInk, type CatInkSource } from './cat-custom';
+import { catEditorSide, photoFurEditorData, prepareStructuredCatCustomization, saveCatInk, type CatInkSource } from './cat-custom';
 import { catInkParts, readCatInk, type CatInkChange } from './cat-ink';
 import { appearanceFromCatPhoto } from './cat-photo';
 import { currentTypingAnimation } from './cat-typing';
 import { CAT_SIZE } from './pet-assets';
-import { catMarkingLayout, catTypingLaptop, currentTypingInkVersion, makeLayer, prepareCatAssets, render, type TypingMode } from './render';
+import { catMarkingLayout, catTypingLaptop, currentCatArtVersion, currentTypingInkVersion, makeLayer, prepareCatAssets, render, type TypingMode } from './render';
 
 export async function checkPhotoFurEditing() {
   await prepareCatAssets();
@@ -49,6 +49,25 @@ export async function checkPhotoFurEditing() {
     return { after, mask };
   }
 
+  for (const config of Object.values(catPresets)) {
+    const source: CatInkSource = {
+      config, action: 'sit', frame: 0, gaze, artVersion: currentCatArtVersion,
+      typingMode: 'gentle', typingAnimation: currentTypingAnimation, laptopVersion: 'clean',
+      outlineVersion: 'adaptive', typingLayout: 'aligned', earLayout: 'shared', tailArtVersion: 'clean',
+      furPatternColors: currentFurPatternColors, typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
+      markingLayout: catMarkingLayout(config.pattern), legacyNoseOutline: false,
+      pixelEdits: { version: 1, scope: 'photo-fur', parts: {} },
+    };
+    const oldVersions = (['pixel80-v16', 'pixel80-v17'] as const)
+      .map(artVersion => atob(photoFurEditorData({ ...source, artVersion }, 80).furMask));
+    const active = atob(photoFurEditorData(source, 80).furMask);
+    const smile = [34 * 80 + 37, ...[32, 36, 37, 38, 42].map(x => 35 * 80 + x),
+      ...[33, 34, 35, 39, 40, 41].map(x => 36 * 80 + x)];
+    check(smile.every(index => !active.charCodeAt(index))
+      && oldVersions.every(old => Array.from(old).every((pixel, index) => pixel === active[index] || !active.charCodeAt(index))),
+      '默认笑线或旧保护格进入照片画笔蒙版 · ' + config.name);
+  }
+
   for (const config of examples) {
     const initial: CatInkSource = {
       config, action: 'sit', frame: 0, gaze, artVersion: 'pixel80-v2',
@@ -59,6 +78,21 @@ export async function checkPhotoFurEditing() {
       pixelEdits: { version: 1, scope: 'photo-fur', parts: {} },
     };
     const untouched = pixels(initial);
+    const editorSide = catEditorSide(initial);
+    const editorMask = atob(photoFurEditorData(initial, editorSide).furMask);
+    check(editorSide === 80 && editorMask.length === 80 * 80, '照片毛色画布与蒙版应为 80×80');
+    const cell = editorMask.indexOf(String.fromCharCode(1));
+    check(cell >= 0, '80×80 照片毛色蒙版没有可画格子');
+    const savedCell = saveCatInk(initial, [[cell, colors.second]], editorSide);
+    const { after: cellPixels } = verifyFrame(savedCell);
+    const scale = size / editorSide;
+    check(cellPixels.every((value, index) => value === untouched[index] ||
+      Math.floor(index % size / scale) + Math.floor(index / size / scale) * editorSide === cell),
+    '80×80 画笔影响了相邻的素材格子');
+    const clearedCell = saveCatInk(savedCell, [[cell, 0]], editorSide);
+    check(pixels(clearedCell, true).every((value, index) => value === untouched[index]),
+      '恢复 80×80 毛色格子后仍有残留');
+
     const input: CatInkChange[] = Array.from({ length: size * size }, (_, i) => [i, colors.first]);
     const saved = saveCatInk(initial, input);
     const coveredParts = Object.keys(saved.pixelEdits.parts);

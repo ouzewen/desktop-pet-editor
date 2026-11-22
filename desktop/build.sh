@@ -2,12 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-with_model=0
-with_runtime=0
 pixel80=0
 for arg in "$@"; do
-  if [ "$arg" = "--with-model" ]; then with_model=1; with_runtime=1; fi
-  if [ "$arg" = "--with-runtime" ]; then with_runtime=1; fi
   if [ "$arg" = "--pixel80-preview" ]; then pixel80=1; fi
 done
 
@@ -95,7 +91,9 @@ if [ -e "$assets/cat/custom" ] || [ -L "$assets/cat/custom" ]; then
   exit 1
 fi
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
-rm -rf "$app/Contents/Resources/assets/cat/custom"
+# Reused output directories can contain resources packaged by older builds.
+rm -rf "$app/Contents/Resources/assets/cat/custom" \
+       "$app/Contents/Resources/ollama" "$app/Contents/Resources/model"
 cp -R "$assets" "$app/Contents/Resources/"
 cp -R "$build_dir/assets-pixel80" "$app/Contents/Resources/"
 cp -R "$build_dir/assets-pixel80-v1" "$app/Contents/Resources/"
@@ -120,9 +118,9 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>NSMicrophoneUsageDescription</key><string>用于在你开始会议录音后记录麦克风声音。</string>
 <key>NSAudioCaptureUsageDescription</key><string>用于在你开始会议录音后记录电脑播放的声音。</string>
 <key>NSLocationUsageDescription</key><string>用于获取所在城市，给出穿衣与天气提醒。</string>
-<key>NSDesktopFolderUsageDescription</key><string>用于预览并整理桌面上由你确认的文件。</string>
-<key>NSDownloadsFolderUsageDescription</key><string>用于预览并整理你选定的下载文件夹。</string>
-<key>NSDocumentsFolderUsageDescription</key><string>用于预览并整理你选定的文稿文件夹。</string>
+<key>NSDesktopFolderUsageDescription</key><string>用于处理你拖到桌宠上的单个桌面文件。</string>
+<key>NSDownloadsFolderUsageDescription</key><string>用于处理你从下载文件夹拖到桌宠上的单个文件。</string>
+<key>NSDocumentsFolderUsageDescription</key><string>用于处理你从文稿文件夹拖到桌宠上的单个文件。</string>
 </dict></plist>
 PLIST
 plist="$app/Contents/Info.plist"
@@ -143,23 +141,6 @@ if [[ -n "$public_key" ]]; then
   plutil -insert SUVerifyUpdateBeforeExtraction -bool YES "$plist"
 fi
 
-if [ "$with_runtime" = "1" ]; then
-  runtime_dir="${OLLAMA_RUNTIME_DIR:-$HOME/ollama-cli}"
-  rm -rf "$app/Contents/Resources/ollama"
-  mkdir -p "$app/Contents/Resources/ollama"
-  cp -R "$runtime_dir"/. "$app/Contents/Resources/ollama/"
-  printf 'Bundled Ollama runtime\n'
-else
-  printf 'Note: 可用 --with-runtime 内置本地运行时，或连接本机 Ollama。\n'
-fi
-if [ "$with_model" = "1" ]; then
-  model_file="${PET_MODEL_GGUF:-/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
-  rm -rf "$app/Contents/Resources/model"
-  mkdir -p "$app/Contents/Resources/model"
-  cp "$model_file" "$app/Contents/Resources/model/"
-  printf 'Bundled local model: %s\n' "$(basename "$model_file")"
-fi
-
 swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/main.swift \
   desktop/Sources/PetEdge.swift \
@@ -174,16 +155,12 @@ swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/Music.swift \
   desktop/Sources/Clipboard.swift \
   desktop/Sources/Translation.swift \
-  desktop/Sources/Chat.swift \
   desktop/Sources/MeetingCapture.swift \
   desktop/Sources/MeetingNotes.swift \
   desktop/Sources/MeetingRecorder.swift \
-  desktop/Sources/LocalRuntime.swift \
   desktop/Sources/Trash.swift \
   desktop/Sources/QuickBar.swift \
   desktop/Sources/FileActions.swift \
-  desktop/Sources/FileOrganizer.swift \
-  desktop/Sources/FileOrganizerWindow.swift \
   desktop/Sources/PixelEditor.swift \
   desktop/Sources/CatPhotoClient.swift \
   desktop/Sources/CatPhotoFurEvidence.swift \
@@ -192,7 +169,6 @@ swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/PrivateUpdateAccess.swift \
   -F "$sparkle_dir" -framework Sparkle \
   -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
-  -lsqlite3 \
   -o "$app/Contents/MacOS/DesktopPet"
 
 sign_identity="${DESKTOP_PET_SIGN_IDENTITY:-}"

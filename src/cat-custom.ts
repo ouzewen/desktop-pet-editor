@@ -4,15 +4,16 @@ import { canChooseCatFaceBase, catKeepsBreedPigment, catRenderConfig, currentFur
   type CatConfig, type FurPatternColors, type PetConfig } from './cat';
 import { catTypingFrameCountFor, currentTypingAnimation, frenzySteamLoopStart, isFrontTyping, usesFallingTyping, type TypingAnimation } from './cat-typing';
 import { captureCatInk, capturePhotoFurInk, readCatInk, type CatInkChange, type CatInkDocument } from './cat-ink';
-import { atlasNoseTips, faceTiles, frontTypingEffects, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
-import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catOpenEyeCoverage, catTypingLaptop, currentTypingInkVersion, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, visiblePhotoFur, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
+import { atlasNoseTips, CAT_SIZE, faceTiles, frontTypingEffects, legacyMouthIds, retiredTailStyles, sharedMouthStyles, sharedTailStyles } from './pet-assets';
+import { alignTypingLayer, catGlintAperture, catHeadPlacement, catInkGeometry, catMarkingLayout, catOpenEyeCoverage, catTypingLaptop, catArtVersions, currentTypingInkVersion, hasB3FaceEdges, drawCatHead, frameCount, hasLegacyNoseOutline, horizontalGazeRange, makeLayer, pointerGazeLimit, render, tailArtPaths, visiblePhotoFur, type CatArtVersion, type Gaze, type LaptopVersion, type MarkingLayout, type OutlineVersion, type TailArtVersion, type TypingInkVersion, type TypingLayout, type TypingMode, type TypingMouthVersion } from './render';
 
-const size = 320;
+const size = CAT_SIZE;
+const coarseSide = 80;
 const straight: Gaze = { x: 0, y: 0 };
 
 export type CatEditSource = {
   config: CatConfig;
-  artVersion?: 'pixel80' | 'pixel80-v2';
+  artVersion?: CatArtVersion;
   action: 'sit' | 'typing';
   frame: number;
   typingMode: TypingMode;
@@ -98,7 +99,7 @@ export function readCatEditSource(value: unknown): CatEditSource | undefined {
       || Math.abs(gaze.y) > 2) return;
     // Saves from before the nose cleanup have no flag and used the outlined art.
     const legacyNoseOutline = hasLegacyNoseOutline(config) && record.legacyNoseOutline !== false;
-    const artVersion = record.artVersion === 'pixel80' || record.artVersion === 'pixel80-v2' ? record.artVersion : undefined;
+    const artVersion = catArtVersions.find(version => version === record.artVersion);
     return { config, artVersion, action, frame, typingMode, typingAnimation, frenzyHeatFrame, typingInkVersion, typingMouthVersion, tailArtVersion, laptopVersion, outlineVersion, typingLayout,
       earLayout, markingLayout, furPatternColors, legacyNoseOutline, gaze };
   } catch {
@@ -127,22 +128,72 @@ export function prepareStructuredCatCustomization(reference: unknown): CatCustom
   return { source, ink, scratch: makeLayer(size), fixedGlints: [false, false], paint: {} };
 }
 
-export function saveCatInk(reference: unknown, changes: CatInkChange[]): CatInkSource {
+export function catEditorSide(source?: CatEditSource): number {
+  return source?.artVersion ? coarseSide : size;
+}
+
+function editorSampleIndex(index: number) {
+  const scale = size / coarseSide;
+  const center = Math.floor(scale / 2);
+  const x = (index % coarseSide) * scale + center;
+  const y = Math.floor(index / coarseSide) * scale + center;
+  return y * size + x;
+}
+
+export function catEditorImage(canvas: HTMLCanvasElement, side: number): HTMLCanvasElement {
+  if (canvas.width === side && canvas.height === side) return canvas;
+  const result = makeLayer(side);
+  if (side === coarseSide && canvas.width === size && canvas.height === size) {
+    // The editor PNG and the photo-fur mask sample the same point in each block.
+    const original = pixels(canvas.getContext('2d')!);
+    const image = result.ctx.createImageData(side, side);
+    const target = new Uint32Array(image.data.buffer);
+    for (let i = 0; i < target.length; i++) target[i] = original[editorSampleIndex(i)]!;
+    result.ctx.putImageData(image, 0, 0);
+  } else {
+    result.ctx.imageSmoothingEnabled = false;
+    result.ctx.drawImage(canvas, 0, 0, side, side);
+  }
+  return result.canvas;
+}
+
+function expandEditorChanges(changes: CatInkChange[]): CatInkChange[] {
+  if (changes.length > coarseSide * coarseSide) throw Error('像素改动超出画布');
+  const scale = size / coarseSide;
+  const expanded: CatInkChange[] = [];
+  for (const [index, value] of changes) {
+    if (!Number.isInteger(index) || index < 0 || index >= coarseSide * coarseSide) throw Error('像素改动无效');
+    const x = (index % coarseSide) * scale;
+    const y = Math.floor(index / coarseSide) * scale;
+    for (let row = 0; row < scale; row++) {
+      for (let column = 0; column < scale; column++) {
+        expanded.push([(y + row) * size + x + column, value]);
+      }
+    }
+  }
+  return expanded;
+}
+
+export function saveCatInk(reference: unknown, changes: CatInkChange[], editorSide = size): CatInkSource {
   const source = readCatEditSource(reference);
-  if (!source || !Array.isArray(changes)) throw Error('像素编辑预览无效，请重新打开编辑器');
+  if (!source || !Array.isArray(changes) || (editorSide !== size && editorSide !== catEditorSide(source))) {
+    throw Error('像素编辑预览无效，请重新打开编辑器');
+  }
+  // Keep the stored part coordinates compatible with existing artwork and saves.
+  const touches = editorSide === coarseSide ? expandEditorChanges(changes) : changes;
   const saved = (reference as Partial<CatInkSource>).pixelEdits;
   const previous = saved === undefined ? undefined : readCatInk(saved);
   const typing = source.action === 'typing';
   const offsetY = typing ? 0 : catHeadPlacement(false, source.frame).y;
   if (previous?.scope === 'photo-fur') {
     const geometry = visiblePhotoFur(source.config, typing, source.frame, source.gaze, source);
-    return { ...source, pixelEdits: capturePhotoFurInk(geometry, changes, previous, offsetY) };
+    return { ...source, pixelEdits: capturePhotoFurInk(geometry, touches, previous, offsetY) };
   }
   const geometry = catInkGeometry(source.config, typing, source.frame, source);
-  return { ...source, pixelEdits: captureCatInk(geometry, changes, previous, offsetY) };
+  return { ...source, pixelEdits: captureCatInk(geometry, touches, previous, offsetY) };
 }
 
-export function photoFurEditorData(source: CatEditSource) {
+export function photoFurEditorData(source: CatEditSource, editorSide = size) {
   const typing = source.action === 'typing';
   const geometry = visiblePhotoFur(source.config, typing, source.frame, source.gaze, source);
   const offsetY = typing ? 0 : catHeadPlacement(false, source.frame).y;
@@ -153,10 +204,13 @@ export function photoFurEditorData(source: CatEditSource) {
   }
   const original = makeLayer(size);
   drawSource(original, source);
+  const editorMask = editorSide === coarseSide
+    ? Uint8Array.from({ length: coarseSide * coarseSide }, (_, i) => mask[editorSampleIndex(i)]!)
+    : mask;
   // Chunk the native bridge payload to stay below the argument limit.
   let bytes = '';
-  for (let i = 0; i < mask.length; i += 8192) bytes += String.fromCharCode(...mask.subarray(i, i + 8192));
-  return { furMask: btoa(bytes), original: original.canvas.toDataURL('image/png') };
+  for (let i = 0; i < editorMask.length; i += 8192) bytes += String.fromCharCode(...editorMask.subarray(i, i + 8192));
+  return { furMask: btoa(bytes), original: catEditorImage(original.canvas, editorSide).toDataURL('image/png') };
 }
 
 function isPale(pixel: number) {
@@ -181,7 +235,7 @@ function savedGlints(edited: Uint32Array, original: Uint32Array, aperture: Uint3
 
 function sourceRenderer(source: CatEditSource) {
   if (source.artVersion === 'pixel80') return firstPixel80Renderer;
-  return source.artVersion === 'pixel80-v2'
+  return source.artVersion
     ? { render, drawCatHead, catGlintAperture, catOpenEyeCoverage, catTypingLaptop }
     : legacyRenderer;
 }
@@ -192,7 +246,7 @@ function drawSource(layer: ReturnType<typeof makeLayer>, source: CatEditSource, 
     typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion, tailArtVersion: source.tailArtVersion,
     laptopVersion: source.laptopVersion, outlineVersion: source.outlineVersion,
     earLayout: source.earLayout, markingLayout: source.markingLayout, furPatternColors: source.furPatternColors,
-    legacyNoseOutline: source.legacyNoseOutline, custom,
+    legacyNoseOutline: source.legacyNoseOutline, artVersion: source.artVersion, custom,
   });
   return pixels(layer.ctx);
 }
@@ -491,6 +545,7 @@ export function prepareCatCustomization(image: CanvasImageSource, reference: unk
   }
   const headOptions = {
     scale: placement.scale, earLayout: source.earLayout, markingLayout: source.markingLayout,
+    faceEdges: hasB3FaceEdges(source.artVersion), artVersion: source.artVersion,
     outlineVersion: source.outlineVersion, legacyNoseOutline: source.legacyNoseOutline,
     typingMode: source.typingMode, typingAnimation: source.typingAnimation,
     typingInkVersion: source.typingInkVersion, typingMouthVersion: source.typingMouthVersion,

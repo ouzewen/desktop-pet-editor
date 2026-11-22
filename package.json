@@ -1,6 +1,6 @@
 {
   "name": "desktop-pet-editor",
-  "version": "0.3.4",
+  "version": "0.11.22",
   "private": true,
   "type": "module",
   "scripts": {

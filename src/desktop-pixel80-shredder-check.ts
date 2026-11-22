@@ -1,5 +1,6 @@
 import { catPresets, catRenderConfig, type CatConfig } from './cat';
 import { catFileActionDuration, catFileActionFrameAt } from './cat-file-action';
+import { liHuaReferenceFur } from './cat-li-hua';
 import { pixel80CatOutline } from './cat-outline';
 import { Motion } from './motion';
 import { catShredder } from './pet-assets';
@@ -18,7 +19,7 @@ export function checkPixel80Shredder(ids: readonly string[]) {
     const frames: string[] = [];
     const motion = new Motion(live, config);
     if (motion.playFileAction('shredder', 1000) !== duration) throw Error('碎纸机播放时长错误');
-    const ink = pixel80CatOutline(catRenderConfig(config));
+    const ink = id === 'li_hua' ? liHuaReferenceFur.ink : pixel80CatOutline(catRenderConfig(config));
     let elapsed = 0;
     for (const [frame, interval] of catShredder.durations.entries()) {
       if (catFileActionFrameAt('shredder', elapsed) !== frame

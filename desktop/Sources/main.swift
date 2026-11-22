@@ -327,18 +327,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var translationRequest: UUID?
     private var translationDismissMonitor: Any?
     private var translationTrustRequested = false
-    private lazy var chatMemory = PetMemory()
-    private lazy var chatBrain = ChatBrain(memory: chatMemory)
-    private var chatModel: ChatModel?
-    private var chatWindow: ReminderPanel?
-    private var chatDismissMonitor: Any?
     private var dropView: DropView?
     private var dropChoiceWindow: ReminderPanel?
-    private var dropChoiceURL: URL?
-    private var dropChoiceKind: FileKind = .unsupported
+    private var dropChoiceURLs: [URL] = []
+    private var singleDropURL: URL? { dropChoiceURLs.count == 1 ? dropChoiceURLs.first : nil }
     private var dropChoiceMonitor: Any?
     private var dropChoiceLocalMonitor: Any?
-    private lazy var fileOrganizer = FileOrganizerWindow(activate: { [weak self] in self?.activateForPetUI() })
     @available(macOS 26, *)
     private var meetingRecorder: MeetingRecorder {
         if let live = meetingRecorderStorage as? MeetingRecorder { return live }
@@ -475,10 +469,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         status.menu = makeMenu()
         if CommandLine.arguments.contains("--self-test") {
             guard verifyMenuStructure() else {
-                fputs("Desktop pet menu structure or hidden chat entry failed\n", stderr)
+                fputs("Desktop pet menu structure or a removed feature is still present\n", stderr)
                 exit(1)
             }
-            print("PASS: pet context and menu bar groups, conditional reminders, meeting actions and statuses, hidden chat entry")
+            print("PASS: pet context and menu bar groups, conditional reminders, meeting actions and statuses, retired features absent")
         }
         guard let resources = Bundle.main.resourceURL else { NSApp.terminate(nil); return }
         web.loadFileURL(resources.appendingPathComponent("pet.html"), allowingReadAccessTo: resources)
@@ -492,9 +486,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         } else if launchReason != keyAELaunchedAsLogInItem {
             openWorkbench()
         }
-        #if DEBUG
-        runChatSmokeIfRequested()
-        #endif
         startWeatherTimer()
         music.start()
         clipboard.start()
@@ -578,6 +569,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.saveCustomAppearance = { [weak self] name, done in
             guard let self else { done(false); return }
             self.saveCustomAppearance(name, completion: done)
+        }
+        workbenchState.exportAppearance = { [weak self] in
+            guard let self, self.previewReady else { return }
+            let mode = self.workbenchState.customMode
+            self.stageBrush(nextMode: mode == .brush ? nil : mode) { [weak self] staged in
+                if staged { self?.exportAppearancePNG() }
+            }
         }
         workbenchState.chooseCustom = { [weak self] preset in self?.previewCustomPreset(preset) }
         workbenchState.clearCustom = { [weak self] in self?.clearCustomPreview() }
@@ -812,7 +810,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     checkAction('zip', 2040, 28, 13);
                     checkAction('convert', 2490, 28, 15);
                     const saved = window.pet.checkPixel80PreviewFrame(2500);
-                    if (saved.source?.artVersion !== 'pixel80-v2' || saved.source?.action !== 'sit') {
+                    if (saved.source?.artVersion !== 'pixel80-v21' || saved.source?.action !== 'sit') {
                         throw Error('80×80 自定义存档缺少原稿版本');
                     }
                     return JSON.stringify(await window.pet.checkPixel80Review());
@@ -1023,9 +1021,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                         fputs("Translation helpers or panels failed\n", stderr)
                         exit(1)
                     }
-                    guard self.verifyChatBrain() else {
-                        fputs("Chat routing or memory failed\n", stderr)
-                        exit(1)
+                    if #available(macOS 26, *) {
+                        guard self.verifyMeetingNotes() else {
+                            fputs("Meeting excerpts or action items failed\n", stderr)
+                            exit(1)
+                        }
+                        print("PASS: meeting notes from local transcript excerpts and action items")
                     }
                     guard self.verifyTrash() else {
                         fputs("Trash move failed\n", stderr)
@@ -1041,7 +1042,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     }
                     self.refreshPreview()
                     self.capturePixelPreview { snapshot in
-                        guard let snapshot, self.verifyPixelEditor(png: snapshot.png) else {
+                        guard let snapshot, self.verifyPixelEditor(snapshot: snapshot) else {
                             fputs("Pixel editor failed to load or edit the workbench preview\n", stderr)
                             exit(1)
                         }
@@ -1050,7 +1051,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                                 fputs("Pixel editor failed to save and read part-based pixel edits\n", stderr)
                                 exit(1)
                             }
-                            print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, three-edge dragging, typing and motion transitions, focus and break session, weather advice and card, music detection, clipboard history, translation panels, chat routing, trash, quick bar, file actions, pixel editor preview and part-based preset storage")
+                            print("PASS: native workbench close and reopen, dog and cat configuration, cat recolor, face and eyes, walk mirror, three-edge dragging, typing and motion transitions, focus and break session, weather advice and card, music detection, clipboard history, translation panels, trash, quick bar, file actions, pixel editor preview and part-based preset storage")
                             NSApp.terminate(nil)
                         }
                     }
@@ -1060,23 +1061,24 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func verifyMenuStructure() -> Bool {
-        func containsChat(in menu: NSMenu) -> Bool {
+        let removedActions = ["openChat", "organizeDesktopFiles", "chooseFileOrganizationFolder"]
+        let removedTitles = ["问问桌宠", "整理文件", "帮我整理桌面", "帮我整理文件夹…"]
+        func containsRemovedEntry(in menu: NSMenu) -> Bool {
             menu.items.contains { item in
-                item.title.contains("问问桌宠")
-                    || item.action == NSSelectorFromString("openChat")
-                    || item.submenu.map { containsChat(in: $0) } == true
+                removedTitles.contains(item.title)
+                    || item.action.map { removedActions.contains(NSStringFromSelector($0)) } == true
+                    || item.submenu.map { containsRemovedEntry(in: $0) } == true
             }
         }
-        guard let statusMenu = status.menu, let appMenu = NSApp.mainMenu, !containsChat(in: appMenu),
-              !responds(to: NSSelectorFromString("openChat")) else { return false }
+        guard let statusMenu = status.menu, let appMenu = NSApp.mainMenu, !containsRemovedEntry(in: appMenu),
+              !removedActions.contains(where: { responds(to: NSSelectorFromString($0)) }) else { return false }
         let petMenu = web.menuForPet()
         guard petMenu.items.first?.action == #selector(openWorkbench),
               statusMenu.items.first?.action == (workbenchState.petIsVisible
                 ? #selector(openWorkbench) : #selector(toggleTemporaryPetVisibility)) else { return false }
         for menu in [petMenu, statusMenu] {
-            guard !containsChat(in: menu),
+            guard !containsRemovedEntry(in: menu),
                   menu.item(withTitle: "天气")?.submenu != nil,
-                  menu.item(withTitle: "整理文件")?.submenu != nil,
                   let settings = menu.item(withTitle: "桌宠设置")?.submenu,
                   settings.items.map(\.action) == [
                     #selector(toggleLoginLaunch), #selector(openLoginItemSettings),
@@ -1195,7 +1197,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         defer { try? files.removeItem(at: temp) }
         let legacy = temp.appendingPathComponent("legacy")
         let library = temp.appendingPathComponent("custom")
-        var cells = [UInt32](repeating: 0, count: PixelEditorModel.side * PixelEditorModel.side)
+        let side = PixelEditorModel.legacySide
+        var cells = [UInt32](repeating: 0, count: side * side)
         cells[0] = 0xFFEFB373
         let source = Data("{\"frame\":0}".utf8)
         guard let old = PixelPresetStore.save(name: "猫猫", cells: cells, source: nil, in: legacy),
@@ -1229,23 +1232,25 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
-    private func verifyPixelEditor(png: Data) -> Bool {
-        guard let model = PixelEditorModel(previewPNG: png),
+    private func verifyPixelEditor(snapshot: PixelEditSnapshot) -> Bool {
+        let reference = snapshot.source.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21"].contains($0) } ?? false
+        let side = modernArt ? PixelEditorModel.artSide : PixelEditorModel.legacySide
+        guard let model = PixelEditorModel(previewPNG: snapshot.png), model.side == side,
               let firstPainted = model.cells.firstIndex(where: { $0 != 0 }),
               model.cells.prefix(8).allSatisfy({ $0 == 0 }) else { return false }
         let original = model.cells
-        let side = PixelEditorModel.side
 
         guard model.brushSize == 1, model.brushShape == .square, model.pixelChanges.isEmpty,
               model.viewport.zoom == 8,
               let corner = model.viewport.pixel(at: CGPoint(x: 299, y: 299), displaySide: 300),
-              corner.column == 179, corner.row == 139,
+              corner.column == side / 2 + side / 16 - 1, corner.row == side * 3 / 8 + side / 16 - 1,
               model.viewport.pixel(at: CGPoint(x: 300, y: 299), displaySide: 300) == nil else { return false }
         model.zoom(by: -1)
         model.centerViewport(column: side - 1, row: 0)
-        guard model.viewport.zoom == 4, model.viewport.column == side - 80 else { return false }
+        guard model.viewport.zoom == 4, model.viewport.column == side - side / 4 else { return false }
         model.zoom(by: 1)
-        guard model.viewport.zoom == 8, model.viewport.column == side - 40, model.viewport.row == 0 else { return false }
+        guard model.viewport.zoom == 8, model.viewport.column == side - side / 8, model.viewport.row == 0 else { return false }
         if original[firstPainted] >> 24 == 0xFF {
             model.tool = .sample
             model.paint(column: firstPainted % side, row: firstPainted / side)
@@ -1288,7 +1293,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         expected.replaceSubrange(0..<8, with: repeatElement(0xFFEFB373, count: 8))
         guard model.cells == expected,
               model.pixelChanges == (0..<8).map({ [UInt32($0), 0xFFEFB373] }),
-              let exported = PixelPresetStore.renderPNG(cells: model.cells),
+              let exported = PixelPresetStore.renderPNG(cells: model.cells, side: side),
               let bitmap = NSBitmapImageRep(data: exported),
               bitmap.pixelsWide == side, bitmap.pixelsHigh == side,
               let loaded = PixelEditorModel(previewPNG: exported),
@@ -1320,7 +1325,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
 
         model.clear()
-        let erased = original.indices.compactMap { original[$0] != 0 ? [UInt32($0), 0] : nil }
+        let erased = original.indices.compactMap { modernArt || original[$0] != 0 ? [UInt32($0), 0] : nil }
         guard model.cells.allSatisfy({ $0 == 0 }), model.pixelChanges == erased else { return false }
         model.undo()
         return model.cells == original && model.pixelChanges.isEmpty
@@ -1364,9 +1369,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func verifyFileActions() -> Bool {
-        guard let organization = makeMenu().item(withTitle: "整理文件")?.submenu,
-              organization.items.map(\.action) == [#selector(organizeDesktopFiles), #selector(chooseFileOrganizationFolder)]
-        else { return false }
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pet-file-test")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
@@ -1405,10 +1407,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard jpgData[0] == 0xFF, jpgData[1] == 0xD8 else { return false }
 
         // panel
-        dropChoiceURL = text
-        dropChoiceKind = .document
-        showDropChoices()
-        guard let bar = dropChoiceWindow, bar.isVisible,
+        handleFileDrop([text])
+        guard singleDropURL == text,
+              let bar = dropChoiceWindow, bar.isVisible,
               !bar.frame.intersects(panel.frame.insetBy(dx: -1, dy: -1)) else { return false }
         hideDropChoice()
         guard !(dropChoiceWindow?.isVisible ?? false) else { return false }
@@ -1472,25 +1473,20 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return true
     }
 
-    private func verifyChatBrain() -> Bool {
-        guard ChatBrain.keywordDecision("今天北京天气怎么样") == .search,
-              ChatBrain.keywordDecision("今天有什么新闻") == .search,
-              ChatBrain.keywordDecision("股票怎么样") == .search,
-              ChatBrain.keywordDecision("你叫什么") == nil,
-              ChatBrain.keywordDecision("我喜欢喝什么") == nil else { return false }
-
-        let path = NSTemporaryDirectory() + "pet-memory-test-\(UUID().uuidString).sqlite"
-        try? FileManager.default.removeItem(atPath: path)
-        let memory = PetMemory(path: path)
-        memory.remember(from: "我叫小林，我喜欢喝美式")
-        memory.remember(from: "我每天七点起床")
-        guard memory.value(for: .name) == "小林",
-              memory.value(for: .likes)?.contains("美式") == true,
-              memory.value(for: .routine)?.contains("起床") == true else { return false }
-        let summary = memory.summary()
-        guard summary.contains("名字"), summary.contains("美式"), summary.contains("起床") else { return false }
-        try? FileManager.default.removeItem(atPath: path)
-        return true
+    @available(macOS 26, *)
+    private func verifyMeetingNotes() -> Bool {
+        let lines = [
+            MeetingLine(time: 2, source: .microphone, text: "先核对现有记录。"),
+            MeetingLine(time: 12, source: .system, text: "确认现有设置。"),
+            MeetingLine(time: 32, source: .microphone, text: "下一步提交整理后的记录。"),
+        ]
+        let notes = MeetingNotes.summarize(lines)
+        let sections = notes.components(separatedBy: "# 总结")
+        return sections.count == 2 && sections[0].hasPrefix("# 摘要")
+            && lines.allSatisfy { sections[0].contains($0.formatted) }
+            && sections[1].contains(lines[1].formatted) && sections[1].contains(lines[2].formatted)
+            && !sections[1].contains(lines[0].formatted)
+            && MeetingNotes.summarize(Array(lines.prefix(1))).contains("未提取到明确的决定或待办")
     }
 
     private func verifyTranslation() -> Bool {
@@ -2048,31 +2044,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         card.setFrameOrigin(origin)
     }
 
-    #if DEBUG
-    /// QA hook: `PET_CHAT_SMOKE=1` answers one question through the real local
-    /// runtime and exits, so the bundled model can be checked headlessly.
-    private func runChatSmokeIfRequested() {
-        guard ProcessInfo.processInfo.environment["PET_CHAT_SMOKE"] == "1" else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            LocalRuntime.shared.prepare(progress: { print("SMOKE:", $0) }) { ok in
-                print("SMOKE runtime ok:", ok, "url:", LocalRuntime.shared.baseURL.absoluteString,
-                      "embedded:", LocalRuntime.shared.isEmbedded)
-                OllamaClient.shared.check { running, model in
-                    print("SMOKE running:", running, "model:", model ?? "nil")
-                    OllamaClient.shared.chat(
-                        messages: [["role": "user", "content": "你叫什么"]]
-                    ) { answer in
-                        print("SMOKE answer:", answer ?? "nil")
-                        LocalRuntime.shared.shutdown()
-                        NSApp.terminate(nil)
-                    }
-                }
-            }
-        }
-    }
-
-    #endif
-
     /// A paw for the menu bar, drawn as a template image so macOS tints it for
     /// light and dark menu bars.
     private func makeStatusIcon() -> NSImage {
@@ -2187,22 +2158,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.editingCustom = false
     }
 
-    /// Saves the current workbench preview as a 320×320 PNG (nearest-neighbour).
+    /// Saves the current workbench preview at its artwork resolution.
     private func exportAppearancePNG() {
-        let js = """
-        (() => {
-          const canvas = document.querySelector('canvas');
-          if (!canvas) return null;
-          const side = 320;
-          const out = document.createElement('canvas');
-          out.width = side;
-          out.height = side;
-          const ctx = out.getContext('2d');
-          ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(canvas, 0, 0, side, side);
-          return out.toDataURL('image/png');
-        })()
-        """
+        let js = "return await window.pet.exportPreviewPNG();"
         preview.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { [weak self] result in
             guard let self, case .success(let value) = result, let dataURL = value as? String,
                   let comma = dataURL.firstIndex(of: ","),
@@ -2265,13 +2223,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func makePixelEditor(snapshot: PixelEditSnapshot, fur: PhotoFurEditorSurface? = nil) -> PixelEditorModel? {
         guard !snapshot.isPhotoFur || fur != nil else { return nil }
-        return PixelEditorModel(previewPNG: snapshot.png, source: snapshot.source, fur: fur) { [weak self] source, changes, completion in
+        return PixelEditorModel(previewPNG: snapshot.png, source: snapshot.source, fur: fur) { [weak self] source, changes, side, completion in
             guard let self else { completion(nil); return }
-            self.resolvePixelEdits(source: source, changes: changes, completion: completion)
+            self.resolvePixelEdits(source: source, changes: changes, side: side, completion: completion)
         }
     }
 
-    private func resolvePixelEdits(source: Data, changes: [[UInt32]], completion: @escaping (Data?) -> Void) {
+    private func resolvePixelEdits(source: Data, changes: [[UInt32]], side: Int = PixelEditorModel.legacySide,
+                                   completion: @escaping (Data?) -> Void) {
         guard let json = String(data: source, encoding: .utf8),
               let encoded = try? JSONEncoder().encode(changes),
               let touches = String(data: encoded, encoding: .utf8) else {
@@ -2280,10 +2239,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
         preview.callAsyncJavaScript(
             """
-            const result = await window.pet.savePixelEdits(JSON.parse(source), JSON.parse(changes));
+            const result = await window.pet.savePixelEdits(JSON.parse(source), JSON.parse(changes), side);
             return result?.pixelEdits ? JSON.stringify(result) : null;
             """,
-            arguments: ["source": json, "changes": touches], in: nil, in: .page
+            arguments: ["source": json, "changes": touches, "side": side], in: nil, in: .page
         ) { result in
             guard case .success(let value) = result, let json = value as? String else {
                 completion(nil)
@@ -2685,30 +2644,28 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     // MARK: Trash
 
     private func handleFileDrop(_ urls: [URL]) {
-        guard urls.count == 1 else {
-            showTrashToast("一次只处理一个文件", tone: .hint, autoHide: 2.2)
-            return
-        }
-        let url = urls[0]
-        dropChoiceURL = url
-        dropChoiceKind = FileKind.of(url)
+        let selection = TrashService.selectedItems(urls)
+        guard !selection.isEmpty else { return }
+        dropChoiceURLs = selection
         showDropChoices()
     }
 
     private func showDropChoices() {
-        guard let url = dropChoiceURL else { return }
+        let single = singleDropURL
+        let canConvert = single.map { !TrashService.isDirectory($0) } ?? false
         let host = ReminderHostingView(rootView: DropActionBar(
-            fileName: url.lastPathComponent,
+            selectionTitle: single?.lastPathComponent ?? "已选 \(dropChoiceURLs.count) 项",
             onTrash: { [weak self] in self?.performTrash() },
-            onZip: { [weak self] in self?.performZip() },
-            onConvert: { [weak self] in self?.showFormatChoices() }
+            onZip: single == nil ? nil : { [weak self] in self?.performZip() },
+            onConvert: canConvert ? { [weak self] in self?.showFormatChoices() } : nil,
+            onCancel: single != nil ? nil : { [weak self] in self?.hideDropChoice() }
         ))
-        presentDropPanel(host: host, fallback: NSSize(width: 236, height: 92))
+        presentDropPanel(host: host, fallback: NSSize(width: single == nil ? 190 : 236, height: 92))
     }
 
     private func showFormatChoices() {
-        guard let url = dropChoiceURL else { return }
-        let formats = FileTools.formats(for: dropChoiceKind)
+        guard let url = singleDropURL else { return }
+        let formats = FileTools.formats(for: FileKind.of(url))
         guard !formats.isEmpty else {
             hideDropChoice()
             showTrashToast("不支持这种文件", tone: .failure, autoHide: 2.2)
@@ -2723,15 +2680,18 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func performTrash() {
-        guard let url = dropChoiceURL else { return }
+        let selection = dropChoiceURLs
+        guard !selection.isEmpty else { return }
         hideDropChoice()
-        let ok = FileTools.trash(url)
-        if ok { playFileAction("shredder") }
-        showTrashToast(ok ? "已移到垃圾桶" : "操作失败", tone: ok ? .normal : .failure, autoHide: 2.4)
+        let outcome = TrashService.trash(selection)
+        let moved = !outcome.trashed.isEmpty
+        if moved { playFileAction("shredder") }
+        let message = selection.count == 1 ? (moved ? "已移到垃圾桶" : "操作失败") : outcome.summary
+        showTrashToast(message, tone: outcome.failed.isEmpty ? .normal : .failure, autoHide: 2.4)
     }
 
     private func playPetLove(first: [Double], second: [Double]) {
-        guard ready, panel.isVisible, appliedConfig?["frame"] as? String == "CAT", dropChoiceURL == nil else { return }
+        guard ready, panel.isVisible, appliedConfig?["frame"] as? String == "CAT", dropChoiceURLs.isEmpty else { return }
         let clicks = ["first": first, "second": second]
         if edgePlacement == nil {
             web.callAsyncJavaScript("window.pet.playPetLoveAt(first, second)",
@@ -2745,7 +2705,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                                 arguments: clicks, in: nil, in: .page) { [weak self] result in
             guard let self, case .success(let hit) = result, hit as? Bool == true,
                   self.web.clickRevision == clickRevision, self.panel.isVisible, self.edgePlacement != nil,
-                  self.appliedConfig?["frame"] as? String == "CAT", self.dropChoiceURL == nil else { return }
+                  self.appliedConfig?["frame"] as? String == "CAT", self.dropChoiceURLs.isEmpty else { return }
             self.playDesktopAction("return window.pet.playPetLove()")
         }
     }
@@ -2786,7 +2746,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func performZip() {
-        guard let url = dropChoiceURL else { return }
+        guard let url = singleDropURL else { return }
         hideDropChoice()
         let ok = FileTools.zip(url) != nil
         if ok { playFileAction("zip") }
@@ -2794,7 +2754,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func performConvert(_ format: ConvertFormat) {
-        guard let url = dropChoiceURL else { return }
+        guard let url = singleDropURL else { return }
         hideDropChoice()
         let ok = FileTools.convert(url, to: format) != nil
         if ok { playFileAction("convert") }
@@ -2832,8 +2792,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func hideDropChoice() {
         dropChoiceWindow?.orderOut(nil)
-        dropChoiceURL = nil
-        dropChoiceKind = .unsupported
+        dropChoiceURLs = []
         if let dropChoiceMonitor {
             NSEvent.removeMonitor(dropChoiceMonitor)
             self.dropChoiceMonitor = nil
@@ -2897,84 +2856,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
         origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
         card.setFrameOrigin(origin)
-    }
-
-    // MARK: Chat
-
-    private func showChat() {
-        hideQuickBar()
-        if chatModel == nil {
-            let model = ChatModel(brain: chatBrain)
-            model.prepare()
-            chatModel = model
-        }
-        guard let model = chatModel else { return }
-        let host = ReminderHostingView(rootView: ChatCard(
-            model: model,
-            onClose: { [weak self] in self?.hideChat() },
-            onHeightChange: { [weak self] height in self?.resizeChat(height: height) }
-        ))
-        fitCardHost(host, fallback: NSSize(width: 306, height: 300))
-        let panel = chatWindow ?? makeReminderPanel()
-        panel.setContentSize(host.frame.size)
-        panel.contentView = host
-        chatWindow = panel
-        activateForPetUI()
-        panel.makeKeyAndOrderFront(nil)
-        layoutChat()
-        layoutTrashToast()
-        layoutQuickBar()
-        layoutDropChoice()
-        installChatDismissMonitor()
-    }
-
-    private func hideChat() {
-        chatWindow?.orderOut(nil)
-        if let chatDismissMonitor {
-            NSEvent.removeMonitor(chatDismissMonitor)
-            self.chatDismissMonitor = nil
-        }
-    }
-
-    private func resizeChat(height: CGFloat) {
-        guard let panel = chatWindow, height > 1 else { return }
-        guard abs(panel.frame.height - height) > 0.5 else { return }
-        panel.setContentSize(NSSize(width: 306, height: height))
-        layoutChat()
-        layoutTrashToast()
-        layoutQuickBar()
-        layoutDropChoice()
-    }
-
-    private func layoutChat() {
-        guard let card = chatWindow,
-              let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
-        let size = card.frame.size
-        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: panel.frame.maxY + 8)
-        if let reminder = reminderWindow, reminder.isVisible {
-            origin.y = max(reminder.frame.maxY + 8, origin.y)
-        }
-        if let focusCard = focusWindow, focusCard.isVisible {
-            origin.y = max(focusCard.frame.maxY + 8, origin.y)
-        }
-        if origin.y + size.height > screen.maxY {
-            origin.y = panel.frame.minY - size.height - 8
-        }
-        origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
-        origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
-        card.setFrameOrigin(origin)
-    }
-
-    private func installChatDismissMonitor() {
-        guard chatDismissMonitor == nil else { return }
-        chatDismissMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            guard let self, let card = self.chatWindow, card.isVisible else { return }
-            if !card.frame.contains(NSEvent.mouseLocation) {
-                self.hideChat()
-            }
-        }
     }
 
     // MARK: Selection translation
@@ -3119,7 +3000,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         translationWindow = panel
         panel.orderFrontRegardless()
         layoutTranslationBubble()
-        layoutChat()
         layoutTrashToast()
         layoutQuickBar()
         layoutDropChoice()
@@ -3131,7 +3011,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard abs(panel.frame.height - height) > 0.5 else { return }
         panel.setContentSize(NSSize(width: 286, height: height))
         layoutTranslationBubble()
-        layoutChat()
         layoutTrashToast()
         layoutQuickBar()
         layoutDropChoice()
@@ -3651,7 +3530,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         layoutFocusCard()
         layoutFocusMinutes()
         layoutTranslationBubble()
-        layoutChat()
         layoutTrashToast()
         layoutQuickBar()
         layoutDropChoice()
@@ -4228,8 +4106,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if let reminderClickMonitor { NSEvent.removeMonitor(reminderClickMonitor) }
         if let clipboardClickMonitor { NSEvent.removeMonitor(clipboardClickMonitor) }
         stopSelectionWatcher()
-        if let chatDismissMonitor { NSEvent.removeMonitor(chatDismissMonitor) }
-        LocalRuntime.shared.shutdown()
         trashToastHide?.cancel()
         quickBarTimer?.invalidate()
         if let dropChoiceMonitor { NSEvent.removeMonitor(dropChoiceMonitor) }
@@ -4395,10 +4271,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         menu.addItem(listening)
         menu.addItem(menuItem("剪贴板（\(clipboard.items.count)）", #selector(openClipboard)))
 
-        let organization = addSubmenu("整理文件", to: menu)
-        organization.addItem(menuItem("帮我整理桌面", #selector(organizeDesktopFiles)))
-        organization.addItem(menuItem("帮我整理文件夹…", #selector(chooseFileOrganizationFolder)))
-
         menu.addItem(.separator())
         let settings = addSubmenu("桌宠设置", to: menu)
         settings.delegate = self
@@ -4485,9 +4357,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         menu.addItem(item)
     }
 
-    @objc private func organizeDesktopFiles() { fileOrganizer.organizeDesktop() }
 
-    @objc private func chooseFileOrganizationFolder() { fileOrganizer.chooseFolder() }
 
     private func addFocusItems(to menu: NSMenu) {
         if focus.pinned {

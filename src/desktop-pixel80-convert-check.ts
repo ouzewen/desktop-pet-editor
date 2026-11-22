@@ -1,5 +1,6 @@
 import { catPresets, catRenderConfig, type CatConfig } from './cat';
 import { catFileActionDuration, catFileActionFrameAt } from './cat-file-action';
+import { liHuaReferenceFur } from './cat-li-hua';
 import { pixel80CatOutline } from './cat-outline';
 import { Motion } from './motion';
 import { catFileActions } from './pet-assets';
@@ -20,7 +21,7 @@ export function checkPixel80Convert(ids: readonly string[]) {
     if (!config) throw Error('缺少格式转换预设 · ' + id);
     const frames: string[] = [];
     const motion = new Motion(live, config);
-    const ink = pixel80CatOutline(catRenderConfig(config));
+    const ink = id === 'li_hua' ? liHuaReferenceFur.ink : pixel80CatOutline(catRenderConfig(config));
     if (motion.playFileAction('convert', 1000) !== duration) throw Error('格式转换播放时长错误');
     let elapsed = 0;
     for (const [frame, interval] of durations.entries()) {

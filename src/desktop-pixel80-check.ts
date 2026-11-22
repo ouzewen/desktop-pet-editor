@@ -4,6 +4,7 @@ import { checkPixel80Listening } from './desktop-pixel80-listening-check';
 import { checkPixel80Shredder } from './desktop-pixel80-shredder-check';
 import { checkPixel80Zip } from './desktop-pixel80-zip-check';
 import { checkPixel80Convert } from './desktop-pixel80-convert-check';
+import { liHuaReferenceFur } from './cat-li-hua';
 import { pixel80CatOutline, pixel80WarmOutline } from './cat-outline';
 import { catPresets, catRenderConfig, currentFurPatternColors, legacyCatPresets, type CatConfig } from './cat';
 import { prepareCatCustomization } from './cat-custom';
@@ -79,7 +80,7 @@ export async function checkPixel80Review() {
     render(canvas, current, 'sit', 0);
     const after = capture();
     const coat = catRenderConfig(current);
-    const ink = pixel80CatOutline(coat);
+    const ink = id === 'li_hua' ? liHuaReferenceFur.ink : pixel80CatOutline(coat);
     const warmInk = pixel80WarmOutline(coat.coat);
     if (warmInk && !matchingInk(warmInk, 40, 20, 242, 266)) {
       throw Error(current.name + ' 暖色分区没有使用对应描边');

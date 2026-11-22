@@ -53,11 +53,7 @@ enum FileTools {
         }
     }
 
-    static func trash(_ url: URL) -> Bool {
-        TrashService.trash([url]).failed.isEmpty
-    }
-
-    /// Zips one file into the same folder; returns the archive URL.
+    /// Zips one file or folder into the same folder; returns the archive URL.
     static func zip(_ url: URL) -> URL? {
         let folder = url.deletingLastPathComponent()
         let base = url.deletingPathExtension().lastPathComponent
@@ -198,11 +194,12 @@ enum FileTools {
 // MARK: - Action bar
 
 struct DropActionBar: View {
-    let fileName: String
+    let selectionTitle: String
 
     var onTrash: () -> Void = {}
-    var onZip: () -> Void = {}
-    var onConvert: () -> Void = {}
+    var onZip: (() -> Void)?
+    var onConvert: (() -> Void)?
+    var onCancel: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -210,7 +207,7 @@ struct DropActionBar: View {
 
     var body: some View {
         VStack(spacing: 7) {
-            Text(fileName)
+            Text(selectionTitle)
                 .font(PixelFont.font(10))
                 .foregroundStyle(palette.inkSoft)
                 .lineLimit(1)
@@ -219,12 +216,13 @@ struct DropActionBar: View {
 
             HStack(spacing: 6) {
                 button("删除", .close, onTrash)
-                button("压缩", .chevron, onZip)
-                button("转格式", .arrowRight, onConvert)
+                if let onZip { button("压缩", .chevron, onZip) }
+                if let onConvert { button("转格式", .arrowRight, onConvert) }
+                if let onCancel { button("取消", .chevron, onCancel) }
             }
         }
         .padding(9)
-        .frame(width: 236)
+        .frame(width: onCancel == nil ? 236 : 190)
         .background(PixelBox(corner: 3).fill(palette.panel))
         .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
         .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))

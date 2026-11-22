@@ -13,10 +13,10 @@ import { Motion } from './motion';
 import { options, presets } from './model';
 import { canChooseCatFaceBase, catCoatCards, catCoatColors, catCoatSchemes, catFeatureColors, catHeadphoneColors, catIrisColors, catMarkingOptions, catOptions, catPaletteColors, catPresets, currentFurPatternColors,
   orangeCatOptions, readPetConfig, type CatConfig, type CatIrisColor, type PetConfig } from './cat';
-import { photoFurEditorData, prepareCatCustomization, prepareStructuredCatCustomization, readCatEditSource, saveCatInk, seedCatInkForEditor,
+import { catEditorImage, catEditorSide, photoFurEditorData, prepareCatCustomization, prepareStructuredCatCustomization, readCatEditSource, saveCatInk, seedCatInkForEditor,
   type CatCustomization, type CatEditSource, type CatInkSource } from './cat-custom';
 import { catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
-import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
+import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, catArtVersionForCustomization, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
 let preview: { freeze: boolean; config: PetConfig; action: Action; listening: boolean; fileAction?: CatFileAction;
@@ -280,8 +280,16 @@ Object.assign(window, {
         source = { ...visibleSource, pixelEdits: { version: 1, scope: 'photo-fur', parts: {} } };
       }
       const restricted = source && 'pixelEdits' in source && source.pixelEdits.scope === 'photo-fur' ? source : undefined;
-      return { png: snapshot.toDataURL('image/png'), source: source ?? null,
-        ...(forEditor && restricted ? photoFurEditorData(restricted) : {}) };
+      const side = catEditorSide(source);
+      const image = source ? catEditorImage(snapshot, side) : snapshot;
+      return { png: image.toDataURL('image/png'), source: source ?? null,
+        ...(forEditor && restricted ? photoFurEditorData(restricted, side) : {}) };
+    },
+    exportPreviewPNG: async () => {
+      await desktopReady;
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      if (canvas.title) throw Error(canvas.title);
+      return catEditorImage(canvas, catEditorSide(visibleSource)).toDataURL('image/png');
     },
     savePixelEdits: saveCatInk,
     setCustom: async (png: string | null, reference: unknown = null) => {
@@ -299,7 +307,7 @@ Object.assign(window, {
       }
       const artVersion = readCatEditSource(reference)?.artVersion;
       const prepareSource = artVersion === 'pixel80' ? prepareFirstPixel80Assets
-        : artVersion === 'pixel80-v2' ? prepareCatAssets : prepareLegacyCatAssets;
+        : artVersion ? prepareCatAssets : prepareLegacyCatAssets;
       await Promise.all([desktopReady, prepareSource()]);
       const image = new Image();
       image.src = png;
@@ -353,14 +361,16 @@ void desktopReady.then(() => {
         const stretch = isCatWalk ? Math.sin(frame * Math.PI / 2) * (preview.action === 'left' ? -1 : 1) : 0;
         const action = isCatWalk ? 'sit' : preview.action;
         const renderedFrame = isCatWalk || preview.listening || preview.fileAction ? 0 : frame;
+        const artVersion = pixel80Art ? catArtVersionForCustomization(custom) : undefined;
         render(canvas, config, action, renderedFrame, gaze, {
+          artVersion,
           typingMode: preview.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
           listeningFrame: preview.listening ? frame : undefined,
           fileAction: preview.fileAction && fileActionFrame !== undefined ? {kind: preview.fileAction, frame: fileActionFrame} : undefined,
         });
         visibleSource = config.frame === 'CAT' && (action === 'sit' || action === 'typing')
           ? { config, action, frame: renderedFrame, gaze,
-            artVersion: pixel80Art ? 'pixel80-v2' : undefined, typingMode: preview.typingMode, frenzyHeatFrame,
+            artVersion, typingMode: preview.typingMode, frenzyHeatFrame,
             typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive', typingInkVersion: currentTypingInkVersion, typingMouthVersion: 'shared',
             typingLayout: 'aligned', tailArtVersion: 'clean', earLayout: 'shared', markingLayout: catMarkingLayout(config.pattern),
             furPatternColors: currentFurPatternColors, legacyNoseOutline: false }

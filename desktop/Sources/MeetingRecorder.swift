@@ -187,7 +187,7 @@ final class MeetingRecorder: ObservableObject {
             if selected?.id == record.id { transcript = text }
 
             phase = .summarizing
-            let notes = await MeetingNotes.summarize(lines)
+            let notes = MeetingNotes.summarize(lines)
             let result = messages.isEmpty ? notes : messages.joined(separator: "\n") + "\n\n" + notes
             try result.write(to: record.summaryURL, atomically: true, encoding: .utf8)
             if selected?.id == record.id { summary = result }

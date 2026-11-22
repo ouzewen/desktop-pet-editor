@@ -237,9 +237,10 @@ enum PixelPresetStore {
     private static let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
         .union(.byteOrder32Little)
 
-    static func pixels(from png: Data) -> [UInt32]? {
+    static func pixels(from png: Data, side requestedSide: Int? = nil) -> [UInt32]? {
         guard let source = NSBitmapImageRep(data: png)?.cgImage else { return nil }
-        let side = PixelEditorModel.side
+        let artSide = PixelEditorModel.artSide
+        let side = requestedSide ?? (source.width == artSide && source.height == artSide ? artSide : PixelEditorModel.legacySide)
         var cells = [UInt32](repeating: 0, count: side * side)
         let drawn = cells.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(
@@ -255,8 +256,7 @@ enum PixelPresetStore {
         return drawn ? cells : nil
     }
 
-    static func image(cells: [UInt32]) -> CGImage? {
-        let side = PixelEditorModel.side
+    static func image(cells: [UInt32], side: Int) -> CGImage? {
         guard cells.count == side * side,
               let provider = CGDataProvider(data: cells.withUnsafeBytes { Data($0) } as CFData) else { return nil }
         return CGImage(
@@ -267,8 +267,8 @@ enum PixelPresetStore {
         )
     }
 
-    static func renderPNG(cells: [UInt32]) -> Data? {
-        guard let image = image(cells: cells) else { return nil }
+    static func renderPNG(cells: [UInt32], side: Int = PixelEditorModel.legacySide) -> Data? {
+        guard let image = image(cells: cells, side: side) else { return nil }
         return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
     }
 
@@ -307,20 +307,22 @@ enum PixelBrushShape: String, CaseIterable {
 
 struct PixelViewport {
     static let zoomLevels = [1, 2, 4, 8, 16]
+    let canvasSide: Int
     let zoom: Int
     let column: Int
     let row: Int
     let center: (column: Int, row: Int)
 
-    var span: Int { PixelEditorModel.side / zoom }
+    var span: Int { canvasSide / zoom }
     var bounds: CGRect { CGRect(x: column, y: row, width: span, height: span) }
-    init(zoom: Int = 8, column: Int = 160, row: Int = 120) {
+    init(side: Int, zoom: Int = 8, column: Int? = nil, row: Int? = nil) {
+        self.canvasSide = side
         self.zoom = zoom
-        let edge = PixelEditorModel.side - 1
-        let center = (column: min(edge, max(0, column)), row: min(edge, max(0, row)))
+        let edge = side - 1
+        let center = (column: min(edge, max(0, column ?? side / 2)), row: min(edge, max(0, row ?? side * 3 / 8)))
         self.center = center
-        let span = PixelEditorModel.side / zoom
-        let limit = PixelEditorModel.side - span
+        let span = side / zoom
+        let limit = side - span
         self.column = min(limit, max(0, center.column - span / 2))
         self.row = min(limit, max(0, center.row - span / 2))
     }
@@ -337,16 +339,18 @@ enum PixelEditTool: Equatable {
 }
 
 final class PixelEditorModel: ObservableObject {
-    typealias SourceResolver = (Data, [[UInt32]], @escaping (Data?) -> Void) -> Void
-    static let side = 320
-    static let brushSizes = 1.0...32.0
+    typealias SourceResolver = (Data, [[UInt32]], Int, @escaping (Data?) -> Void) -> Void
+    static let artSide = 80
+    static let legacySide = 320
+    let side: Int
+    var brushSizes: ClosedRange<Double> { 1...Double(32 * side / Self.legacySide) }
 
     @Published private(set) var cells: [UInt32]
     @Published var brushSize = 1.0
     @Published var brushShape: PixelBrushShape = .square
     @Published var paintColor = PixelEditorPalette.entries[0].hex
     @Published var tool: PixelEditTool = .paint
-    @Published private(set) var viewport = PixelViewport()
+    @Published private(set) var viewport: PixelViewport
     @Published private(set) var showingOriginal = false
     @Published var name: String = ""
     @Published var message: String = ""
@@ -377,13 +381,16 @@ final class PixelEditorModel: ObservableObject {
     init?(previewPNG: Data, source: Data? = nil, fur: PhotoFurEditorSurface? = nil,
           resolveSource: SourceResolver? = nil) {
         guard let cells = PixelPresetStore.pixels(from: previewPNG) else { return nil }
+        let side = cells.count == Self.artSide * Self.artSide ? Self.artSide : Self.legacySide
+        self.side = side
+        self.viewport = PixelViewport(side: side)
         self.cells = cells
         if let fur {
             guard fur.mask.count == cells.count,
-                  let original = PixelPresetStore.pixels(from: fur.originalPNG) else { return nil }
+                  let original = PixelPresetStore.pixels(from: fur.originalPNG, side: side) else { return nil }
             self.original = original
             self.furMask = fur.mask
-            self.brushSize = 4
+            self.brushSize = Double(side / Self.artSide)
         } else {
             self.original = cells
             self.furMask = nil
@@ -402,12 +409,12 @@ final class PixelEditorModel: ObservableObject {
               PixelViewport.zoomLevels.indices.contains(index + step) else { return }
         let center = viewport.center
         endStroke()
-        viewport = PixelViewport(zoom: PixelViewport.zoomLevels[index + step], column: center.column, row: center.row)
+        viewport = PixelViewport(side: side, zoom: PixelViewport.zoomLevels[index + step], column: center.column, row: center.row)
     }
 
     func centerViewport(column: Int, row: Int) {
         endStroke()
-        viewport = PixelViewport(zoom: viewport.zoom, column: column, row: row)
+        viewport = PixelViewport(side: side, zoom: viewport.zoom, column: column, row: row)
     }
 
     func toggleOriginal() {
@@ -421,12 +428,12 @@ final class PixelEditorModel: ObservableObject {
 
     func paint(column: Int, row: Int) {
         guard !isSaving, !showingOriginal, !samplingStroke else { return }
-        guard (0..<Self.side).contains(column), (0..<Self.side).contains(row) else {
+        guard (0..<side).contains(column), (0..<side).contains(row) else {
             breakStrokePath()
             return
         }
         if tool == .sample {
-            let pixel = cells[row * Self.side + column]
+            let pixel = cells[row * side + column]
             let alpha = pixel >> 24
             guard alpha != 0 else { return }
             let channel = { (shift: UInt32) in min(255, (((pixel >> shift) & 0xFF) * 255 + alpha / 2) / alpha) }
@@ -452,12 +459,12 @@ final class PixelEditorModel: ObservableObject {
             let y = start.row + dy * step / steps
             for (row, span) in rows.enumerated() {
                 let targetY = y + origin + row
-                guard (0..<Self.side).contains(targetY) else { continue }
+                guard (0..<side).contains(targetY) else { continue }
                 let left = max(0, x + origin + span.left)
-                let right = min(Self.side - 1, x + origin + span.right)
+                let right = min(side - 1, x + origin + span.right)
                 guard left <= right else { continue }
                 for targetX in left...right {
-                    let index = targetY * Self.side + targetX
+                    let index = targetY * side + targetX
                     if let furMask, furMask[index] != 1 || (original[index] >> 24) != 255 { continue }
                     if restoringFur {
                         guard updated[index] != original[index] || (ink[index] ?? 0) != 0 else { continue }
@@ -524,8 +531,9 @@ final class PixelEditorModel: ObservableObject {
         }
         guard cells.contains(where: { $0 != 0 }) else { return }
         recordUndo()
-        for (index, value) in cells.enumerated() where value != 0 { ink[index] = 0 }
-        cells = Array(repeating: 0, count: Self.side * Self.side)
+        // A transparent coarse sample can still cover fine pixels in the underlying pose.
+        for (index, value) in cells.enumerated() where side == Self.artSide || value != 0 { ink[index] = 0 }
+        cells = Array(repeating: 0, count: side * side)
         endStroke()
         message = ""
     }
@@ -560,7 +568,7 @@ final class PixelEditorModel: ObservableObject {
     }
 
     func resolveSnapshot(completion: @escaping (PixelEditSnapshot?) -> Void) {
-        guard !isSaving, let png = PixelPresetStore.renderPNG(cells: cells) else { completion(nil); return }
+        guard !isSaving, let png = PixelPresetStore.renderPNG(cells: cells, side: side) else { completion(nil); return }
         let changes = pixelChanges
         endStroke()
         isSaving = true
@@ -574,7 +582,7 @@ final class PixelEditorModel: ObservableObject {
             }
             completion(PixelEditSnapshot(png: png, source: resolved))
         }
-        if let source, let resolveSource { resolveSource(source, changes, finish) }
+        if let source, let resolveSource { resolveSource(source, changes, side, finish) }
         else { finish(nil) }
     }
 }
@@ -589,7 +597,7 @@ struct PixelDrawingCanvas: View {
     var body: some View {
         let viewport = model.viewport
         Canvas { context, size in
-            if let image = PixelPresetStore.image(cells: model.displayedCells)?.cropping(to: viewport.bounds) {
+            if let image = PixelPresetStore.image(cells: model.displayedCells, side: model.side)?.cropping(to: viewport.bounds) {
                 let sprite = Image(decorative: image, scale: 1).interpolation(.none)
                 context.draw(sprite, in: CGRect(origin: .zero, size: size))
             }
@@ -611,6 +619,7 @@ struct PixelDrawingCanvas: View {
         .overlay(PixelBox(corner: 1).stroke(palette.border, lineWidth: 2).allowsHitTesting(false))
         .contentShape(Rectangle())
         .accessibilityLabel("像素画布")
+        .accessibilityValue("\(model.side) × \(model.side)")
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
@@ -633,11 +642,11 @@ private struct PixelEditorNavigator: View {
 
     var body: some View {
         Canvas { context, size in
-            if let image = PixelPresetStore.image(cells: model.displayedCells) {
+            if let image = PixelPresetStore.image(cells: model.displayedCells, side: model.side) {
                 context.draw(Image(decorative: image, scale: 1).interpolation(.none),
                              in: CGRect(origin: .zero, size: size))
             }
-            let scale = side / CGFloat(PixelEditorModel.side)
+            let scale = side / CGFloat(model.side)
             let box = model.viewport.bounds.applying(CGAffineTransform(scaleX: scale, y: scale))
             context.stroke(Path(box), with: .color(.black), lineWidth: 2.5)
             context.stroke(Path(box), with: .color(palette.accent), lineWidth: 1.25)
@@ -647,7 +656,7 @@ private struct PixelEditorNavigator: View {
         .overlay(Rectangle().stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-            let scale = CGFloat(PixelEditorModel.side) / side
+            let scale = CGFloat(model.side) / side
             model.centerViewport(column: Int(value.location.x * scale), row: Int(value.location.y * scale))
         })
         .help("点选小地图，移动左侧放大区域")
@@ -713,6 +722,10 @@ struct PixelEditorTools: View {
                         .buttonStyle(PixelButtonStyle(palette: palette))
                         .accessibilityLabel("放大画布")
                         .disabled(model.viewport.zoom == PixelViewport.zoomLevels.last)
+                    Text("\(model.side)×\(model.side)")
+                        .font(PixelFont.font(10))
+                        .foregroundStyle(palette.inkSoft)
+                        .monospacedDigit()
                 }
                 HStack(spacing: 6) {
                     Button(model.showingOriginal ? "返回微调稿" : "查看原稿") { model.toggleOriginal() }
@@ -739,7 +752,7 @@ struct PixelEditorTools: View {
                 Text(sizeLabel)
                     .font(PixelFont.font(11))
                     .foregroundStyle(palette.ink)
-                PixelSlider(value: $model.brushSize, range: PixelEditorModel.brushSizes, step: 1, palette: palette)
+                PixelSlider(value: $model.brushSize, range: model.brushSizes, step: 1, palette: palette)
                     .accessibilityLabel(sizeLabel)
                 Text("\(Int(model.brushSize)) px")
                     .font(PixelFont.font(11))
@@ -764,7 +777,7 @@ struct PixelEditorTools: View {
     }
 
     private var brushPreview: some View {
-        let size = PixelEditorModel.brushSizes.upperBound
+        let size = model.brushSizes.upperBound
         return Canvas { context, _ in
             let origin = Int((size - model.brushSize) / 2)
             let rows = model.brushShape.rows(diameter: Int(model.brushSize))

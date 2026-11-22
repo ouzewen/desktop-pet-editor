@@ -218,6 +218,7 @@ export const sharedBreedParts: Record<FrontBreed, LegacyFrontBreed> = {
   CC05: 'CC03', CC06: 'CC03', CC07: 'CC03', CC08: 'CC04',
 };
 export const breedLaptop = 'cat/hd/breeds/typing_laptop';
+export const orangeSquareGlints = 'cat/eye-glints/orange-square-v8';
 export const breedEyeGlints = 'cat/hd/breeds/eye_glints';
 export const facePartsPath = 'cat/hd/face-parts/';
 export const catNosePath = facePartsPath + 'noses/';
@@ -475,6 +476,37 @@ const oldHdLayers = [
   'siamese_ear_base', 'slow', 'slow_paw', 'typing_icon', 'whiskers',
 ];
 
+export const catEarRetouchPath = 'cat/ear-retouch/';
+export const orangePawsBodyPath = 'cat/body-retouch/orange-paws-v5';
+export const orangeBodyOutlinePath = 'cat/body-retouch/orange-body-outline-v11';
+export const liHuaCoatPath = 'cat/li-hua-v13/';
+export const liHuaLibTVCoatPath = 'cat/li-hua-v14/';
+export const liHuaSampledPath = 'cat/li-hua-v16/';
+export const liHuaFrenzyFurAsset = 'cat/li-hua-v19/frenzy-mouth-fur';
+export const liHuaReferenceCheekAsset = 'cat/li-hua-v15/head';
+export const breedBodyOutlinePath = 'cat/body-retouch/breeds-v12/';
+export const orangeForelegBodyPath = 'cat/body-retouch/orange-foreleg-v4';
+export const catFaceEdgesPath = 'cat/face-edges/';
+export const restingSmilePath = catFaceEdgesPath + 'shared/resting-smile';
+export const reviewedRestingSmilePath = restingSmilePath + '-reviewed';
+export const catBreedDetailsPath = catFaceEdgesPath + 'breed-details/';
+export const catHeadCleanupPath = catFaceEdgesPath + 'head-cleanup/';
+export const catBreedDetailPresets = {
+  black: 'preset_cat_black',
+  'british-blue': 'preset_cat_british_blue',
+  'american-shorthair': 'preset_cat_american_shorthair',
+  'li-hua': 'preset_cat_li_hua',
+  calico: 'preset_cat_calico',
+  siamese: 'preset_cat_siamese',
+  ragdoll: 'preset_cat_ragdoll',
+  white: 'preset_cat_CC09',
+  tortoiseshell: 'preset_cat_CC10',
+  golden: 'preset_cat_CC11',
+  'dilute-calico': 'preset_cat_CC12',
+} as const;
+
+const faceEdgeParts = ['ear-left', 'ear-left-erase', 'ear-right', 'ear-right-erase', 'whiskers', 'whiskers-erase', 'mouth'];
+
 export const assetGroups: readonly AssetGroup[] = [
   group('dog.m1', 'compatibility', pngs(dogLayers, PET_SIZE), [], {
     consumer: 'dog', sources: [], note: 'Retained PNGs for the standalone Web editor and native fallback.',
@@ -482,6 +514,15 @@ export const assetGroups: readonly AssetGroup[] = [
   group('cat.orange.base', 'current', pngs(withPrefix(orangePath, ['body', 'head_base', 'iris'])), [], {
     consumer: 'cat', sources: ['orange_cat.aseprite'], note: 'Original reference source; the refined head and iris PNGs are retained.',
   }),
+  scriptGroup('cat.orange.foreleg', 'current', 'art/cat-pixel80/body-retouch/orange-left-foreleg.aseprite',
+    'export-cat-orange-foreleg', 'cat/body-retouch', pngs([orangeForelegBodyPath])),
+  scriptGroup('cat.orange.paws', 'current', 'art/cat-pixel80/body-retouch/orange-four-paws.aseprite',
+    'export-cat-orange-paws', 'cat/body-retouch', pngs([orangePawsBodyPath])),
+  scriptGroup('cat.orange.body-outline', 'current', 'art/cat-pixel80/body-retouch/orange-body-outline.aseprite',
+    'export-cat-orange-body-outline', 'cat/body-retouch', pngs([orangeBodyOutlinePath])),
+  ...(['curled', 'droopy'] as const).map(shape => scriptGroup('cat.ear-retouch.' + shape, 'current',
+    `art/cat-pixel80/ear-retouch/${shape}.aseprite`, 'export-cat-ear-retouch', catEarRetouchPath,
+    pngs([catEarRetouchPath + shape]), { shape })),
   ...earShapes.map(shape => layerGroup('cat.ear.' + shape, 'current',
     'art/orange-cat/ears/' + shape + '.aseprite', 'ears', orangePath + 'ear_' + shape)),
   ...Object.keys(orangeAccessoryOptions).filter(id => id !== 'A00').map(id =>
@@ -491,6 +532,8 @@ export const assetGroups: readonly AssetGroup[] = [
   ...oldModes.map(mode => scriptGroup('cat.orange.typing.' + mode, 'compatibility',
     'art/orange-cat/typing/' + mode + '.aseprite', 'export-orange-typing', 'cat/new_',
     pngs(withPrefix(orangePath, [...olderTyping(mode), ...(mode === 'gentle' ? ['typing_laptop'] : [])])), { mode })),
+  scriptGroup('cat.orange-square-glints', 'current', 'art/cat-pixel80/orange-glints/orange-square-glints.aseprite',
+    'export-cat-orange-glints', 'cat/eye-glints', pngs([orangeSquareGlints])),
   group('cat.eye-glints', 'current', pngs([orangePath + 'eye_glints', breedEyeGlints]), [
     { source: 'art/cat-breeds/eye-glints.aseprite', layer: 'CAT_eye_glints', output: orangePath + 'eye_glints' },
     { source: 'art/cat-breeds/eye-glints.aseprite', layer: 'breed_eye_glints', output: breedEyeGlints },
@@ -606,6 +649,56 @@ export const assetGroups: readonly AssetGroup[] = [
       duration: catListening.frameDuration,
       ...Object.fromEntries(Object.entries(catListening.regions).map(([part, region]) => [part, Object.values(region).join(',')])),
     }),
+  ...(['orange', 'calico'] as const).map(breed => {
+    const path = catFaceEdgesPath + breed + '/';
+    return scriptGroup('cat.face-edges.' + breed, 'current', `art/cat-pixel80/face-edges/${breed}-b3.aseprite`,
+      'export-cat-face-edges', path, pngs(withPrefix(path, faceEdgeParts), 80));
+  }),
+  ...(['orange', 'calico'] as const).map(breed => {
+    const path = catFaceEdgesPath + breed + '/';
+    return scriptGroup('cat.face-edges.centered-mouth.' + breed, 'current',
+      `art/cat-pixel80/mouth-retouch/${breed}-centered-mouth.aseprite`, 'export-cat-centered-mouth',
+      path, pngs([path + 'mouth-b'], 80));
+  }),
+  ...(['orange', 'calico'] as const).map(breed => {
+    const path = catFaceEdgesPath + breed + '/';
+    return scriptGroup('cat.face-edges.narrow-nose.' + breed, 'current',
+      `art/cat-pixel80/nose-retouch/${breed}-narrow-nose.aseprite`, 'export-cat-narrow-nose',
+      path, pngs([path + 'nose-mouth-x37'], 80));
+  }),
+  scriptGroup('cat.face-edges.resting-smile', 'current', 'art/cat-pixel80/mouth-retouch/shared-resting-smile.aseprite',
+    'export-cat-resting-smile', catFaceEdgesPath + 'shared/', pngs([restingSmilePath, restingSmilePath + '-restore'], 80)),
+  scriptGroup('cat.face-edges.resting-smile.reviewed', 'current', 'art/cat-pixel80/mouth-retouch/shared-resting-smile-reviewed.aseprite',
+    'export-cat-resting-smile', catFaceEdgesPath + 'shared/', pngs([reviewedRestingSmilePath, reviewedRestingSmilePath + '-fur'], 80),
+    { reviewed: 'yes' }),
+  scriptGroup('cat.li-hua-coat', 'current', 'art/cat-pixel80/li-hua-redesign/native-coat.aseprite',
+    'export-cat-li-hua-coat', liHuaCoatPath, pngs(withPrefix(liHuaCoatPath, ['head', 'body']))),
+  scriptGroup('cat.li-hua-coat.libtv', 'current', 'art/cat-pixel80/li-hua-redesign/libtv-coat.aseprite',
+    'export-cat-li-hua-coat', liHuaLibTVCoatPath, pngs(withPrefix(liHuaLibTVCoatPath, ['head', 'body'])), { pattern: 'libtv' }),
+  scriptGroup('cat.li-hua-coat.cheeks', 'current', 'art/cat-pixel80/li-hua-redesign/reference-cheeks.aseprite',
+    'export-cat-li-hua-coat', 'cat/li-hua-v15/', pngs([liHuaReferenceCheekAsset]), { pattern: 'reference-cheeks' }),
+  scriptGroup('cat.li-hua-coat.sampled', 'current', 'art/cat-pixel80/li-hua-redesign/sampled-reference.aseprite',
+    'export-cat-li-hua-coat', liHuaSampledPath, pngs(withPrefix(liHuaSampledPath, ['head', 'ears', 'body', 'tail'])), { pattern: 'sampled-reference' }),
+  ...Object.keys(catBreedDetailPresets).map(breed => scriptGroup('cat.body-outline.' + breed, 'current',
+    `art/cat-pixel80/breed-body-outline/${breed}.aseprite`, 'export-cat-breed-body-outline', breedBodyOutlinePath,
+    pngs([breedBodyOutlinePath + breed, breedBodyOutlinePath + breed + '-erase']), { breed })),
+  layerGroup('cat.li-hua-coat.frenzy-mouth-fur', 'current', 'art/cat-pixel80/mouth-retouch/li-hua-frenzy-fur.aseprite',
+    'Restore sampled muzzle fur', liHuaFrenzyFurAsset, cat, 80),
+  ...Object.keys(catBreedDetailPresets).map(breed => {
+    const path = catBreedDetailsPath + breed + '/';
+    const parts = ['paws', 'paws-erase'];
+    if (breed !== 'dilute-calico') parts.push('nose', 'whiskers', 'whiskers-erase', 'standing-ears');
+    return scriptGroup('cat.face-edges.breed-details.' + breed, 'current', `art/cat-pixel80/breed-details/${breed}.aseprite`,
+      'export-cat-breed-details', path, pngs(withPrefix(path, parts), 80));
+  }),
+  ...['orange', ...Object.keys(catBreedDetailPresets)].map(breed => {
+    const path = catHeadCleanupPath + breed + '/';
+    const parts = ['head'];
+    if (['british-blue', 'american-shorthair', 'siamese', 'ragdoll'].includes(breed)) parts.push('left-standing-ear');
+    if (breed === 'dilute-calico') parts.push('rear-paw', 'tail-seam');
+    return scriptGroup('cat.face-edges.head-cleanup.' + breed, 'current', `art/cat-pixel80/head-cleanup/${breed}.aseprite`,
+      'export-cat-speck-cleanup', path, pngs(withPrefix(path, parts)));
+  }),
   scriptGroup('cat.pet-love', 'current', 'art/cat-pixel80/pet-love.aseprite',
     'export-cat-pet-love', catPetLove.path, [
       ...pngs([catPetLove.path + 'eyes']),

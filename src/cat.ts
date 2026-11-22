@@ -18,6 +18,19 @@ export const catIrisColors = {
   iceBlue: '#91C4E2',
   sapphire: '#3F59A4',
   lavender: '#B299D3',
+  paleGold: '#E7CE86',
+  gold: '#D6A93F',
+  hazel: '#9E7B3F',
+  bronze: '#8E5B33',
+  orange: '#D9822B',
+  emerald: '#3F8B5C',
+  forest: '#4C6B3F',
+  paleGreen: '#A9C98A',
+  aqua: '#57B2B0',
+  skyBlue: '#7EB8E0',
+  steelBlue: '#5C7E9C',
+  paleBlue: '#A9CBE8',
+  pearl: '#DCD4C6',
 } as const;
 
 export type CatIrisColor = keyof typeof catIrisColors;
@@ -27,16 +40,33 @@ const catPupilColors = {
   cocoa: '可可棕', olive: '橄榄绿', green: '绿色', mint: '薄荷绿',
   teal: '湖水青', iceBlue: '冰蓝色', blue: '蓝色', sapphire: '宝石蓝',
   gray: '灰色', lavender: '雾紫', violet: '紫色', rose: '玫瑰色',
+  paleGold: '淡金色', gold: '金色', hazel: '榛色', bronze: '古铜色',
+  orange: '橙色', emerald: '祖母绿', forest: '森林绿', paleGreen: '浅绿色',
+  aqua: '水青色', skyBlue: '天蓝色', steelBlue: '钢蓝色', paleBlue: '淡蓝色',
+  pearl: '珍珠色',
 } as const satisfies Record<CatIrisColor | 'natural', string>;
 
 export const catFeatureColors = {
   natural: { name: '品种原色' },
   lightPink: { name: '浅粉', color: '#EAA9B2' },
+  palePink: { name: '淡粉', color: '#F4C9CE' },
   rose: { name: '玫瑰粉', color: '#D77792' },
   coral: { name: '珊瑚粉', color: '#E98E7B' },
+  salmon: { name: '鲑鱼粉', color: '#E08E80' },
+  peach: { name: '蜜桃', color: '#EFB28D' },
+  brick: { name: '砖红', color: '#B45F4E' },
+  cream: { name: '奶油', color: '#EFE0C9' },
+  beige: { name: '米杏', color: '#D9BD9F' },
   cocoa: { name: '可可棕', color: '#96685E' },
+  brown: { name: '棕褐', color: '#8A5C43' },
+  chocolate: { name: '巧克力', color: '#644235' },
   charcoal: { name: '炭灰', color: '#55505B' },
+  gray: { name: '灰色', color: '#9B9C9F' },
+  blueGray: { name: '蓝灰', color: '#7C8C9C' },
+  lilac: { name: '丁香紫', color: '#B7A6C6' },
   plum: { name: '梅子紫', color: '#A779A7' },
+  white: { name: '雪白', color: '#F7F2E9' },
+  black: { name: '墨黑', color: '#3A3338' },
 } as const;
 type CatFeatureColor = keyof typeof catFeatureColors;
 const featureColorOptions = Object.fromEntries(Object.entries(catFeatureColors)

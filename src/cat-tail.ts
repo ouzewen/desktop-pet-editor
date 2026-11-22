@@ -1,5 +1,6 @@
 import { catKeepsBreedPigment, catPatternFurColors, nativeCatFur, type CatRenderConfig } from './cat';
 import { bodyPatternChannel, breedPatternShade, shadeBreedPattern } from './cat-body-pattern';
+import { liHuaPigments, type LiHuaStyle } from './cat-li-hua';
 import { pixel80CalicoDarkInk, pixel80WarmOutline } from './cat-outline';
 
 type RGB = readonly [number, number, number];
@@ -20,7 +21,8 @@ function mix(from: RGB, to: RGB, amount: number): RGB {
 
 // The shared Aseprite cels use the orange shadow, fur and highlight tones.
 // Keep their silhouette and shading while assigning the chosen coat pigments.
-export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig, ink?: RGB) {
+export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, config: CatRenderConfig, ink?: RGB, liHua: LiHuaStyle = false) {
+  const fur = liHuaPigments(liHua);
   const selected = config.tailPattern ?? config.bodyPattern;
   const originalPattern = selected === 'native';
   const keepPigment = config.tailPattern !== 'plain' && catKeepsBreedPigment(config);
@@ -50,7 +52,12 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
     ? (['CC01', 'CC06', 'CC07'].includes(config.palette) ? 'mackerel' : 'plain')
     : selected;
   const channel = pattern === 'plain' ? undefined : bodyPatternChannel[pattern];
-  const pigmentShade = keepPigment && channel !== undefined ? breedPatternShade(config) : undefined;
+  const pigmentShade = !liHua && keepPigment && channel !== undefined ? breedPatternShade(config) : undefined;
+  if (liHua) {
+    base = fur.base;
+    shadow = fur.shadow;
+    light = fur.warm;
+  }
   const { data, width, height } = image;
   let top = height, bottom = 0;
   for (let offset = 3; offset < data.length; offset += 4) {
@@ -81,7 +88,12 @@ export function paintCatTail(image: ImageData, patterns: Uint8ClampedArray, conf
           color = mix(dark, light, 0.08 * clamp((green - 138) / 58));
         }
       }
-      if (channel !== undefined && !pigmentShade) color = mix(color, marking, patterns[offset + channel]! / 255);
+      if (channel !== undefined && !pigmentShade) {
+        color = mix(color, liHua ? fur.stripe : marking, patterns[offset + channel]! / 255);
+      }
+      if (liHua && config.tail === 'CT05' && (originalPattern || selected === 'mackerel') && position < 0.2) {
+        color = mix(fur.tip, color, position / 0.4);
+      }
     }
     data.set(color, offset);
     if (pigmentShade && channel !== undefined && green >= 65) {
