@@ -65,11 +65,63 @@ function listeningMap(frame: number, grid: number) {
   return map;
 }
 
-export function warpListeningPixels(base: Uint32Array, result: Uint32Array, frame: number, pixel80 = false) {
+const listeningGrid = 4;
+const coarseSize = CAT_SIZE / listeningGrid;
+
+export function listeningCell(index: number) {
+  return Math.floor(index / CAT_SIZE / listeningGrid) * coarseSize
+    + Math.floor(index % CAT_SIZE / listeningGrid);
+}
+
+function keepListeningEdits(base: Uint32Array, result: Uint32Array, map: Int32Array, edits: ReadonlySet<number>) {
+  const visible = new Set<number>();
+  const reserved = new Set<number>();
+  for (let y = 0; y < neckEnd; y += listeningGrid) {
+    for (let x = 0; x < CAT_SIZE; x += listeningGrid) {
+      const i = y * CAT_SIZE + x;
+      const source = map[i]!;
+      if (source >= 0 && edits.has(listeningCell(source))) {
+        visible.add(listeningCell(source));
+        reserved.add(i);
+      }
+    }
+  }
+  // The inverse map can skip an isolated pixel when the head turns. Keep
+  // deliberate ink on the closest occupied cell of the same moving head.
+  for (const edit of edits) {
+    if (visible.has(edit)) continue;
+    const x = edit % coarseSize * listeningGrid, y = Math.floor(edit / coarseSize) * listeningGrid;
+    let best = -1, distance = 2 * listeningGrid ** 2;
+    for (let yy = Math.max(0, y - 36); yy <= Math.min(neckEnd - listeningGrid, y + 36); yy += listeningGrid) {
+      for (let xx = Math.max(0, x - 36); xx <= Math.min(CAT_SIZE - listeningGrid, x + 36); xx += listeningGrid) {
+        const at = yy * CAT_SIZE + xx;
+        const source = map[at]!;
+        if (source < 0 || !base[source] || reserved.has(at)) continue;
+        const error = (source % CAT_SIZE - x - 1.5) ** 2 + (Math.floor(source / CAT_SIZE) - y - 1.5) ** 2;
+        if (error < distance) {
+          distance = error;
+          best = at;
+        }
+      }
+    }
+    if (best < 0) continue;
+    const color = base[(y + 2) * CAT_SIZE + x + 2]!;
+    for (let row = 0; row < listeningGrid; row++) {
+      const start = best + row * CAT_SIZE;
+      result.fill(color, start, start + listeningGrid);
+    }
+    reserved.add(best);
+  }
+}
+
+export function warpListeningPixels(base: Uint32Array, result: Uint32Array, frame: number, pixel80 = false,
+  edits?: ReadonlySet<number>,
+) {
   result.set(base);
   if (frame === 0 && !pixel80) return;
-  const map = listeningMap(frame, pixel80 ? 4 : 1);
+  const map = listeningMap(frame, pixel80 ? listeningGrid : 1);
   for (let index = 0; index < map.length; index++) {
     result[index] = base[map[index]!] ?? 0;
   }
+  if (pixel80 && edits?.size) keepListeningEdits(base, result, map, edits);
 }

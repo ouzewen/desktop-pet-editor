@@ -48,7 +48,7 @@ struct PetCornerPlacement: Codable {
 
 struct PetEdgePlacement: Codable {
     // Decode placements written before build40 and keep the save format readable
-    // by older builds. Both legacy surfaces map to the display's usable edge.
+    // by older builds. A legacy Dock peek now uses the physical bottom edge.
     enum Surface: String, Codable { case screen, dock }
 
     let edge: PetEdge
@@ -64,9 +64,9 @@ struct PetEdgePlacement: Codable {
         let size = NSSize(width: dimensions.width.rounded(), height: dimensions.height.rounded())
         let left = visible.minX.rounded(.up)
         let right = visible.maxX.rounded(.down)
-        let bottom = visible.minY.rounded(.up)
+        let visibleBottom = visible.minY.rounded(.up)
         let top = visible.maxY.rounded(.down)
-        guard right - left >= size.width, top - bottom >= size.height else { return nil }
+        guard right - left >= size.width else { return nil }
 
         let x = visible.minX + visible.width * anchor
         let y = visible.minY + visible.height * anchor
@@ -74,13 +74,16 @@ struct PetEdgePlacement: Codable {
         let edgePoint: NSPoint
         switch edge {
         case .bottom:
+            let bottom = display.frame.minY
+            guard display.frame.height >= size.height else { return nil }
             origin = NSPoint(x: min(max((x - size.width / 2).rounded(), left), right - size.width), y: bottom)
             edgePoint = NSPoint(x: origin.x + size.width / 2, y: bottom)
         case .left, .right:
+            guard top - visibleBottom >= size.height else { return nil }
             // The upper margin fits the tilted ears. Anchor the original
             // paw area, rather than centering the taller cropped panel.
             let pawAreaHeight = (petSize * 264 / 320).rounded()
-            let panelY = min(max((y - pawAreaHeight / 2).rounded(), bottom), top - size.height)
+            let panelY = min(max((y - pawAreaHeight / 2).rounded(), visibleBottom), top - size.height)
             origin = NSPoint(x: edge == .left ? left : right - size.width, y: panelY)
             edgePoint = NSPoint(x: origin.x, y: panelY + pawAreaHeight / 2)
         }

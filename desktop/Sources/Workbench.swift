@@ -570,6 +570,17 @@ private enum FacePart: String, CaseIterable {
     case mouth = "嘴巴"
 }
 
+private enum EarEditScope: String, CaseIterable {
+    case both, separate
+
+    var title: String {
+        switch self {
+        case .both: "左右同时编辑"
+        case .separate: "左右分别编辑"
+        }
+    }
+}
+
 private enum EyeEditScope: String, CaseIterable {
     case both, left, right
 
@@ -721,8 +732,12 @@ struct WorkbenchView: View {
     let typingActivity: TypingActivity
     let meetingPage: ((PixelPalette) -> AnyView)?
     @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
+    @AppStorage(PetUserAddress.defaultsKey) private var savedUserAddress = ""
+    @State private var userAddressDraft = ""
+    @FocusState private var editingUserAddress: Bool
     @State private var appearancePage = AppearancePage.breeds
     @State private var facePart = FacePart.ears
+    @State private var earScope: EarEditScope?
     @State private var eyeScope: EyeEditScope?
     @State private var coatThumbnails: (key: CoatThumbnailKey, images: [String: NSImage])?
     @State private var showingGuide = false
@@ -782,6 +797,9 @@ struct WorkbenchView: View {
     var body: some View {
         ZStack {
             palette.background.ignoresSafeArea()
+            WorkbenchPixelSurface(palette: palette, fill: palette.background, corner: 9)
+                .padding(8)
+                .ignoresSafeArea()
             VStack(spacing: 14) {
                 header
                 pageNavigation
@@ -826,16 +844,38 @@ struct WorkbenchView: View {
     private var pageNavigation: some View {
         HStack(spacing: 8) {
             if meetingPage != nil {
-                Button("外观设置") { state.showsMeetingRecordings = false }
-                    .workbenchButton(palette: palette, selected: !state.showsMeetingRecordings)
-                    .accessibilityIdentifier("workbench-page-appearance")
-                Button("会议录音") { state.showsMeetingRecordings = true }
-                    .workbenchButton(palette: palette, selected: state.showsMeetingRecordings)
-                    .accessibilityIdentifier("workbench-page-recording")
+                Button {
+                    state.showsMeetingRecordings = false
+                } label: {
+                    entryLabel("外观设置", glyph: .workbenchCat, selected: !state.showsMeetingRecordings)
+                }
+                .workbenchButton(palette: palette, selected: !state.showsMeetingRecordings)
+                .keyboardShortcut("1", modifiers: .command)
+                .help("外观设置（⌘1）")
+                .accessibilityAddTraits(state.showsMeetingRecordings ? [] : .isSelected)
+                .accessibilityIdentifier("workbench-page-appearance")
+                Button {
+                    state.showsMeetingRecordings = true
+                } label: {
+                    entryLabel("会议录音", glyph: .workbenchRecord, selected: state.showsMeetingRecordings)
+                }
+                .workbenchButton(palette: palette, selected: state.showsMeetingRecordings)
+                .keyboardShortcut("2", modifiers: .command)
+                .help("会议录音（⌘2）")
+                .accessibilityAddTraits(state.showsMeetingRecordings ? .isSelected : [])
+                .accessibilityIdentifier("workbench-page-recording")
             }
             Spacer()
             workbenchThemeMenu
         }
+    }
+
+    private func entryLabel(_ title: String, glyph: PixelIconKind, selected: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            PixelGlyph(kind: glyph, color: selected ? palette.accentDeep : palette.inkSoft, size: 12)
+            Text(title).font(PixelFont.font(13))
+        }
+        .fixedSize()
     }
 
     private var workbenchThemeMenu: some View {
@@ -942,7 +982,7 @@ struct WorkbenchView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("桌宠工作台")
-                    .font(.system(size: 23, weight: .semibold))
+                    .font(PixelFont.font(24))
                     .foregroundStyle(palette.ink)
                 Text(state.showsMeetingRecordings ? "录音历史、逐字稿与摘要" : "挑选品种与外观，实时预览后应用到桌面")
                     .font(PixelFont.font(12))
@@ -958,7 +998,7 @@ struct WorkbenchView: View {
         return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("预览").font(.system(size: 13, weight: .semibold))
+                    Text("预览").font(PixelFont.font(14))
                     Spacer()
                     previewBackdropControls
                 }
@@ -995,8 +1035,8 @@ struct WorkbenchView: View {
                     previewBackdrop.color
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.black.opacity(0.09), lineWidth: 1))
+            .clipShape(PixelBox(corner: 6))
+            .overlay(PixelBox(corner: 6, inset: 0.5).stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
             if state.showTypingStats {
                 TypingActivitySummary(activity: typingActivity, palette: palette)
             }
@@ -1113,7 +1153,7 @@ struct WorkbenchView: View {
             }
         }
         .padding(5)
-        .background(palette.panel, in: RoundedRectangle(cornerRadius: 11))
+        .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 3))
     }
 
     private func previewActionMenu(_ title: String, id: String, selected: Bool,
@@ -1174,13 +1214,13 @@ struct WorkbenchView: View {
         if state.catalog != nil {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 12) {
-                    if let editor = state.pixelEditor, editor.isFurOnly {
-                        PixelPanel(palette: palette, padding: 12) {
-                            pixelEditorControls
+                    if state.pixelEditor != nil {
+                        PixelPanel(palette: palette) {
+                            pixelEditorControls.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
                         appearancePanel
-                            .disabled(state.pixelEditor != nil || state.editingCustom || state.loadingCustom)
+                            .disabled(state.editingCustom || state.loadingCustom)
                         customPanel
                     }
                 }
@@ -1599,6 +1639,50 @@ struct WorkbenchView: View {
         }
     }
 
+    private func earShapeControls(_ options: [AppearanceOption]) -> some View {
+        let scope = earScope ?? (earShapeValue("left") == earShapeValue("right") ? .both : .separate)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                ForEach(EarEditScope.allCases, id: \.self) { option in
+                    sectionTab(option.title, selected: scope == option) { earScope = option }
+                        .accessibilityIdentifier("ear-scope-\(option.rawValue)")
+                }
+                Spacer(minLength: 0)
+            }
+            if scope == .both {
+                let mixed = "左右不同，选定后统一"
+                let selection = Binding(
+                    get: {
+                        let left = earShapeValue("left")
+                        return left == earShapeValue("right") ? left : ""
+                    },
+                    set: { value in
+                        var appearance = state.appearance
+                        appearance["ear"] = value
+                        appearance["leftEar"] = value
+                        appearance["rightEar"] = value
+                        state.appearance = appearance
+                        state.refresh()
+                    }
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    profileLabel("双耳耳型")
+                    PixelSelect(options: options.map { ($0.id, $0.name) }, selection: selection,
+                                palette: palette, placeholder: mixed)
+                        .accessibilityLabel("双耳耳型")
+                        .accessibilityValue(options.first { $0.id == selection.wrappedValue }?.name ?? mixed)
+                        .accessibilityIdentifier("ear-shape-both")
+                }
+            } else {
+                earShapeRow(options, identifierPrefix: "ear-shape")
+            }
+        }
+    }
+
+    private func earShapeValue(_ side: String) -> String {
+        state.appearance["\(side)Ear"] ?? state.appearance["ear"] ?? "CE01"
+    }
+
     private func earShapeRow(_ options: [AppearanceOption], identifierPrefix: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             earShape("画面左耳", side: "left", options: options, identifierPrefix: identifierPrefix)
@@ -1610,7 +1694,7 @@ struct WorkbenchView: View {
                           identifierPrefix: String) -> some View {
         let key = "\(side)Ear"
         let selection = Binding(
-            get: { state.appearance[key] ?? state.appearance["ear"] ?? "CE01" },
+            get: { earShapeValue(side) },
             set: { appearanceBinding(key).wrappedValue = $0 }
         )
         return VStack(alignment: .leading, spacing: 4) {
@@ -1667,7 +1751,10 @@ struct WorkbenchView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let editor = state.pixelEditor {
                 HStack {
-                    if editor.isFurOnly {
+                    if !editor.isFurOnly {
+                        entryLabel("像素编辑器", glyph: .workbenchBrush, selected: true)
+                        Spacer(minLength: 8)
+                    } else {
                         Text("毛色画笔")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(palette.ink)
@@ -1684,9 +1771,13 @@ struct WorkbenchView: View {
                     .font(PixelFont.font(10))
                     .foregroundStyle(palette.inkSoft)
             } else {
-                Button("像素编辑器") { state.changeCustomMode(.brush) }
-                    .workbenchButton(palette: palette)
-                    .accessibilityIdentifier("custom-appearance-brush")
+                Button {
+                    state.changeCustomMode(.brush)
+                } label: {
+                    entryLabel("像素编辑器", glyph: .workbenchBrush)
+                }
+                .workbenchButton(palette: palette)
+                .accessibilityIdentifier("custom-appearance-brush")
             }
         }
     }
@@ -1762,7 +1853,9 @@ struct WorkbenchView: View {
             PixelPanel(palette: palette, padding: 12) {
                 if frame == "CAT" {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("外观").font(.system(size: 23, weight: .semibold)).foregroundStyle(palette.ink)
+                        Text("外观")
+                            .font(PixelFont.font(22))
+                            .foregroundStyle(palette.ink)
                         appearanceNavigation
                         Divider()
                         if appearancePage == .face { faceNavigation }
@@ -1770,7 +1863,11 @@ struct WorkbenchView: View {
                             .disabled(state.choosingBreed && appearancePage != .breeds)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .onChange(of: state.preset) { _ in eyeScope = nil }
+                    .onChange(of: state.preset) { _ in
+                        earScope = nil
+                        eyeScope = nil
+                    }
+                    .onChange(of: state.customSelected) { _ in earScope = nil }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
@@ -1795,7 +1892,10 @@ struct WorkbenchView: View {
                         .padding(.horizontal, 2)
                 }
                 sectionTab(page.rawValue, selected: appearancePage == page) {
-                    if appearancePage != page { eyeScope = nil }
+                    if appearancePage != page {
+                        earScope = nil
+                        eyeScope = nil
+                    }
                     appearancePage = page
                 }
                 .accessibilityIdentifier("appearance-\(page)")
@@ -1808,7 +1908,10 @@ struct WorkbenchView: View {
         HStack(spacing: 4) {
             ForEach(FacePart.allCases, id: \.self) { part in
                 sectionTab(part.rawValue, selected: facePart == part) {
-                    if facePart != part { eyeScope = nil }
+                    if facePart != part {
+                        earScope = nil
+                        eyeScope = nil
+                    }
                     facePart = part
                 }
                 .accessibilityIdentifier("appearance-\(part)")
@@ -1862,7 +1965,7 @@ struct WorkbenchView: View {
                     if state.hasPhotoResult, let catalog = state.catalog {
                         photoEarControls(fields["ear"] ?? [], catalog: catalog)
                     } else if let shapes = fields["ear"] {
-                        earShapeRow(shapes, identifierPrefix: "ear-shape")
+                        earShapeControls(shapes)
                     }
                     if let colors = fields["earColor"] {
                         fieldPicker(title: "内耳色", key: "earColor", options: colors,
@@ -2311,12 +2414,19 @@ struct WorkbenchView: View {
     private var footer: some View {
         PixelPanel(palette: palette, padding: 10) {
             HStack(spacing: 12) {
-                Button("桌宠设置") { showingDesktopSettings.toggle() }
+                Button {
+                    if !showingDesktopSettings { userAddressDraft = savedUserAddress }
+                    showingDesktopSettings.toggle()
+                } label: {
+                    entryLabel("桌宠设置", glyph: .workbenchSettings)
+                }
                     .workbenchButton(palette: palette)
                     .accessibilityIdentifier("workbench-desktop-settings")
                     .popover(isPresented: $showingDesktopSettings, arrowEdge: .top) {
                         desktopSettings.padding(15).frame(width: 260)
+                            .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, framed: true))
                     }
+                    .onChange(of: showingDesktopSettings) { if !$0 { saveUserAddress() } }
                 Text("桌宠大小").font(.system(size: 12)).foregroundStyle(palette.inkSoft)
                 Slider(value: $state.petSize, in: 120...320)
                     .frame(width: 115)
@@ -2336,6 +2446,8 @@ struct WorkbenchView: View {
 
     private var desktopSettings: some View {
         VStack(alignment: .leading, spacing: 13) {
+            userAddressField
+            Divider()
             Toggle("显示桌宠", isOn: Binding(get: { state.petIsVisible }, set: state.setVisibility))
             Toggle("眼神跟随", isOn: $state.eyeFollow)
                 .accessibilityIdentifier("eye-follow-toggle")
@@ -2371,7 +2483,45 @@ struct WorkbenchView: View {
                 .help("将桌宠移回屏幕")
         }
         .toggleStyle(.checkbox)
+        .tint(palette.accent)
         .font(.system(size: 12))
+    }
+
+    private var userAddressField: some View {
+        let address = PetUserAddress.normalized(userAddressDraft)
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("小猫怎么称呼你")
+                .foregroundStyle(palette.ink)
+            HStack(spacing: 8) {
+                PixelTextField(text: $userAddressDraft, placeholder: "例如：阿澄", palette: palette)
+                    .focused($editingUserAddress)
+                    .accessibilityLabel("小猫怎么称呼你")
+                    .accessibilityIdentifier("pet-user-address")
+                    .onSubmit(commitUserAddress)
+                Button("保存", action: commitUserAddress)
+                    .workbenchButton(palette: palette)
+                    .disabled(address == savedUserAddress)
+                    .accessibilityIdentifier("pet-user-address-save")
+            }
+            Text(verbatim: "专注完成时 · " + PetUserAddress.focusFinishedMessage(address: address))
+                .font(.system(size: 11))
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("pet-user-address-example")
+        }
+        .onChange(of: editingUserAddress) { if !$0 { saveUserAddress() } }
+    }
+
+    private func commitUserAddress() {
+        saveUserAddress()
+        editingUserAddress = false
+    }
+
+    private func saveUserAddress() {
+        let address = PetUserAddress.normalized(userAddressDraft)
+        if savedUserAddress != address { savedUserAddress = address }
+        if userAddressDraft != address { userAddressDraft = address }
     }
 
     private var applyStatus: some View {
@@ -2410,15 +2560,15 @@ struct WorkbenchView: View {
                 if state.applying {
                     ProgressView().controlSize(.mini).accessibilityHidden(true)
                 } else {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .semibold))
+                    PixelGlyph(kind: .workbenchApply, color: disabled ? palette.inkSoft : Color(pixelHex: 0xFFF9EC), size: 12)
                 }
                 Text(state.applying ? "正在应用…" : "应用到桌宠")
+                    .font(PixelFont.font(13))
             }
             .fixedSize()
         }
         .workbenchButton(palette: palette, prominent: true)
         .disabled(disabled)
-        .opacity(disabled ? 0.55 : 1)
         .keyboardShortcut(.defaultAction)
         .accessibilityIdentifier("workbench-apply")
     }

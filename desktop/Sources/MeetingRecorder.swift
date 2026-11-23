@@ -227,6 +227,7 @@ struct MeetingWorkbenchView: View {
         var copyTitle: String { self == .minutes ? "复制纪要" : "复制逐字稿" }
     }
 
+    @FocusState private var searchingHistory: Bool
     @ObservedObject var model: MeetingRecorder
     let palette: PixelPalette
     @State private var document = Document.minutes
@@ -302,7 +303,8 @@ struct MeetingWorkbenchView: View {
         let recording = model.phase.isRecording
         let enabled = recording || model.canStart
         return HStack(spacing: 14) {
-            PixelGlyph(kind: .microphone, color: recording ? palette.red : palette.ink, size: 22)
+            PixelGlyph(kind: .workbenchRecord,
+                       color: recording ? palette.red : palette.ink, size: 24)
                 .frame(width: 46, height: 46)
                 .background(PixelBox(corner: 3).fill(palette.panelDeep))
 
@@ -325,6 +327,7 @@ struct MeetingWorkbenchView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(palette.ink)
+                .tint(palette.accent)
                 .disabled(model.phase != .idle)
             }
 
@@ -336,9 +339,9 @@ struct MeetingWorkbenchView: View {
                     .frame(minWidth: 94)
                     .padding(.vertical, 3)
             }
-            .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+            .workbenchButton(palette: palette, prominent: true,
+                             tint: recording ? palette.red : nil)
             .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.55)
             .accessibilityIdentifier("meeting-record-toggle")
         }
         .padding(12)
@@ -363,6 +366,7 @@ struct MeetingWorkbenchView: View {
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 Text("录音中")
+                    .foregroundStyle(palette.red)
                 Text(started, style: .timer)
                     .monospacedDigit()
                     .fixedSize()
@@ -377,7 +381,7 @@ struct MeetingWorkbenchView: View {
                 }
             }
         }
-        .font(.headline)
+        .font(PixelFont.font(15))
         .foregroundStyle(palette.ink)
         .accessibilityIdentifier("meeting-record-status")
     }
@@ -455,6 +459,7 @@ struct MeetingWorkbenchView: View {
                     .accessibilityHidden(true)
                 TextField("搜索标题或日期", text: $historySearch)
                     .textFieldStyle(.plain)
+                    .focused($searchingHistory)
                     .foregroundStyle(palette.ink)
                     .accessibilityIdentifier("meeting-history-search")
                 if !historySearch.isEmpty {
@@ -472,7 +477,12 @@ struct MeetingWorkbenchView: View {
             .font(.callout)
             .padding(7)
             .background(PixelBox(corner: 3).fill(palette.panel))
-            .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1).allowsHitTesting(false))
+            .overlay {
+                let focused = searchingHistory
+                PixelBox(corner: 3, inset: 0.5)
+                    .stroke(focused ? palette.accentDeep : palette.borderSoft, lineWidth: focused ? 2 : 1)
+                    .allowsHitTesting(false)
+            }
 
             Text("例如 2026年11月21日")
                 .font(.caption)
@@ -544,6 +554,7 @@ struct MeetingWorkbenchView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
+                .tint(palette.accent)
                 .frame(width: 174)
                 .accessibilityIdentifier("meeting-document-tabs")
                 Spacer(minLength: 6)
@@ -587,7 +598,7 @@ struct MeetingWorkbenchView: View {
                   systemImage: copyFeedback == nil ? "doc.on.doc" : "checkmark")
                 .frame(minWidth: 76)
         }
-        .buttonStyle(PixelButtonStyle(palette: palette))
+        .workbenchButton(palette: palette)
         .disabled(documentContents.isEmpty)
         .opacity(documentContents.isEmpty ? 0.55 : 1)
         .accessibilityIdentifier("meeting-copy-document")
@@ -639,12 +650,12 @@ struct MeetingWorkbenchView: View {
                 if document == .minutes && !model.transcript.isEmpty {
                     emptyState("暂无会议纪要", detail: "可先查看逐字稿。", icon: "text.alignleft")
                     Button("查看逐字稿") { document = .transcript }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                 } else {
                     emptyState("暂无\(document.rawValue)", detail: "录音文件可从上方的「更多」打开。", icon: "text.alignleft")
                     if model.phase == .idle && model.summary.isEmpty && model.transcript.isEmpty {
                         Button("重新转写", action: model.retry)
-                            .buttonStyle(PixelButtonStyle(palette: palette))
+                            .workbenchButton(palette: palette)
                     }
                 }
             }

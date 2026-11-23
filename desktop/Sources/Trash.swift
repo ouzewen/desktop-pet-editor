@@ -80,7 +80,7 @@ enum DropLog {
 
 // MARK: - Toast
 
-struct TrashToast: View {
+struct PetStatusToast: View {
     let text: String
     var tone: Tone = .normal
 
@@ -90,29 +90,30 @@ struct TrashToast: View {
         case failure
     }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
-    private var accent: Color {
+    private var badge: (glyph: PixelIconKind, color: Color) {
         switch tone {
-        case .normal: return palette.accent
-        case .hint: return palette.inkSoft
-        case .failure: return Color(pixelHex: 0xE06060)
+        case .normal: return (.check, palette.accent)
+        case .hint: return (.clip, palette.inkSoft)
+        case .failure: return (.close, palette.red)
         }
     }
 
     var body: some View {
         HStack(spacing: 5) {
-            PixelGlyph(kind: .clip, color: accent, size: 11)
+            PixelGlyph(kind: badge.glyph, color: badge.color, size: 10)
             Text(text)
-                .font(PixelFont.font(11))
-                .foregroundStyle(palette.ink)
+                .font(.system(size: 12))
+                .foregroundStyle(tone == .failure ? palette.red : palette.ink)
                 .lineLimit(2)
+                .frame(maxWidth: 264, alignment: .leading)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(PixelBox(corner: 2).fill(palette.panel.opacity(0.96)))
-        .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .workbenchCardSurface(theme)
     }
 }

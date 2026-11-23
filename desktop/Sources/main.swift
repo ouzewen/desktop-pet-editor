@@ -304,6 +304,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var focusHost: ReminderHostingView<FocusCard>?
     private var focusWindow: ReminderPanel?
     private let focusMinutesInput = FocusMinutesModel()
+    private var focusRemainingEdit: (session: UUID, initial: Int)?
     private var focusMinutesWindow: ReminderPanel?
     private let weather = WeatherModel()
     private var weatherWindow: ReminderPanel?
@@ -810,7 +811,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     checkAction('zip', 2040, 28, 13);
                     checkAction('convert', 2490, 28, 15);
                     const saved = window.pet.checkPixel80PreviewFrame(2500);
-                    if (saved.source?.artVersion !== 'pixel80-v21' || saved.source?.action !== 'sit') {
+                    if (saved.source?.artVersion !== 'pixel80-v46' || saved.source?.action !== 'sit') {
                         throw Error('80×80 自定义存档缺少原稿版本');
                     }
                     return JSON.stringify(await window.pet.checkPixel80Review());
@@ -1234,7 +1235,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func verifyPixelEditor(snapshot: PixelEditSnapshot) -> Bool {
         let reference = snapshot.source.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21"].contains($0) } ?? false
+        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21", "pixel80-v22", "pixel80-v23", "pixel80-v24", "pixel80-v25", "pixel80-v26", "pixel80-v27", "pixel80-v29", "pixel80-v30", "pixel80-v31", "pixel80-v32", "pixel80-v33", "pixel80-v34", "pixel80-v35", "pixel80-v36", "pixel80-v37", "pixel80-v38", "pixel80-v39", "pixel80-v40", "pixel80-v41", "pixel80-v42", "pixel80-v43", "pixel80-v44", "pixel80-v45", "pixel80-v46"].contains($0) } ?? false
         let side = modernArt ? PixelEditorModel.artSide : PixelEditorModel.legacySide
         guard let model = PixelEditorModel(previewPNG: snapshot.png), model.side == side,
               let firstPainted = model.cells.firstIndex(where: { $0 != 0 }),
@@ -1978,6 +1979,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     // MARK: Focus session
 
     private func focusSessionChanged() {
+        if let edit = focusRemainingEdit,
+           focus.phase != .focusing || !focus.showsCard || edit.session != focus.sessionID {
+            hideFocusMinutesInput()
+        }
         status.menu = makeMenu()
         if focus.showsCard && !workbenchState.temporarilyHidden {
             showFocusCard()
@@ -1993,6 +1998,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         } else {
             let created = ReminderHostingView(rootView: FocusCard(
                 model: focus,
+                onEditRemaining: { [weak self] in self?.showFocusMinutesInput(editingRemaining: true) },
                 onTogglePause: { [weak self] in self?.focus.togglePause() },
                 onStop: { [weak self] in self?.focus.stop() },
                 onStartBreak: { [weak self] in self?.focus.startBreak() },
@@ -2001,9 +2007,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 onDismiss: { [weak self] in self?.focus.dismiss() },
                 onHideCard: { [weak self] in self?.focus.hideCard() },
                 onTogglePin: { [weak self] in self?.focus.togglePin() },
-                onHeightChange: { [weak self] height in self?.resizeFocusCard(height: height) }
+                onSizeChange: { [weak self] size in self?.resizeFocusCard(to: size) }
             ))
-            fitCardHost(created, fallback: NSSize(width: 252, height: 96))
+            let fallback = focus.isActive ? FocusCard.timerSize : NSSize(width: FocusCard.resultWidth, height: 96)
+            fitCardHost(created, fallback: fallback)
             focusHost = created
             host = created
         }
@@ -2021,10 +2028,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         focusWindow?.orderOut(nil)
     }
 
-    private func resizeFocusCard(height: CGFloat) {
-        guard let card = focusWindow, height > 1 else { return }
-        guard abs(card.frame.height - height) > 0.5 else { return }
-        card.setContentSize(NSSize(width: FocusCard.width, height: height))
+    private func resizeFocusCard(to size: CGSize) {
+        guard let card = focusWindow, size.width > 1, size.height > 1 else { return }
+        let current = card.contentRect(forFrameRect: card.frame).size
+        guard abs(current.width - size.width) > 0.5 || abs(current.height - size.height) > 0.5 else { return }
+        card.setContentSize(size)
         layoutFocusCard()
     }
 
@@ -2820,8 +2828,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
-    private func showTrashToast(_ text: String, tone: TrashToast.Tone, autoHide: TimeInterval?) {
-        let host = ReminderHostingView(rootView: TrashToast(text: text, tone: tone))
+    private func showTrashToast(_ text: String, tone: PetStatusToast.Tone, autoHide: TimeInterval?) {
+        let host = ReminderHostingView(rootView: PetStatusToast(text: text, tone: tone))
         fitCardHost(host, fallback: NSSize(width: 220, height: 30))
         let panel = trashToastWindow ?? makeReminderPanel()
         panel.ignoresMouseEvents = true
@@ -3245,12 +3253,24 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         showFocusMinutesInput()
     }
 
-    private func showFocusMinutesInput() {
+    private func showFocusMinutesInput(editingRemaining: Bool = false) {
+        if editingRemaining {
+            guard focus.phase == .focusing else { return }
+            guard focusRemainingEdit == nil else {
+                focusMinutesWindow?.makeKeyAndOrderFront(nil)
+                return
+            }
+            focusRemainingEdit = (focus.sessionID, focus.remaining)
+            focusMinutesInput.text = focus.clockText
+        } else {
+            focusRemainingEdit = nil
+            focusMinutesInput.text = String(focus.focusMinutes)
+        }
         hideQuickBar()
-        focusMinutesInput.text = String(focus.focusMinutes)
         let host = ReminderHostingView(rootView: FocusMinutesCard(
             model: focusMinutesInput,
-            onStart: { [weak self] in self?.submitFocusMinutes() },
+            maximumRemaining: focusRemainingEdit.map { max(FocusModel.minuteRange.upperBound * 60, $0.initial) },
+            onStart: { [weak self] in self?.submitFocusMinutes(editingRemaining: editingRemaining) },
             onCancel: { [weak self] in self?.hideFocusMinutesInput() }
         ))
         fitCardHost(host, fallback: NSSize(width: 252, height: 84))
@@ -3264,10 +3284,19 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func hideFocusMinutesInput() {
+        focusRemainingEdit = nil
         focusMinutesWindow?.orderOut(nil)
     }
 
-    private func submitFocusMinutes() {
+    private func submitFocusMinutes(editingRemaining: Bool) {
+        if editingRemaining {
+            guard let edit = focusRemainingEdit else { return }
+            let maximum = max(FocusModel.minuteRange.upperBound * 60, edit.initial)
+            guard let seconds = focusMinutesInput.remainingSeconds(upTo: maximum) else { return }
+            focus.editRemaining(seconds: seconds, initial: edit.initial, session: edit.session)
+            hideFocusMinutesInput()
+            return
+        }
         guard let minutes = focusMinutesInput.value else { return }
         hideFocusMinutesInput()
         focus.startFocus(minutes: minutes)
@@ -3710,51 +3739,74 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let display = PetDisplay(id: "second", frame: frame, visible: visible)
         let size: CGFloat = 120
         func target(_ x: CGFloat, _ y: CGFloat, pet: NSRect? = nil, on screen: PetDisplay = display,
-                    neighbors: [NSRect] = []) -> PetEdge? {
-            let resting = pet ?? NSRect(x: x - size / 2, y: y - size / 2, width: size, height: size)
+                    petSize: CGFloat = 120, neighbors: [NSRect] = []) -> PetEdge? {
+            let resting = pet ?? NSRect(x: x - petSize / 2, y: y - petSize / 2, width: petSize, height: petSize)
             return PetSurface.edge(at: NSPoint(x: x, y: y), pet: resting, on: screen, neighbors: neighbors)
         }
 
-        let left = NSPoint(x: frame.minX + 10, y: visible.midY)
-        let right = NSPoint(x: frame.maxX - 10, y: visible.midY)
+        let left = NSPoint(x: frame.minX + 24, y: visible.midY)
+        let right = NSPoint(x: frame.maxX - 24, y: visible.midY)
         let desktopBottom = NSPoint(x: visible.midX, y: visible.minY + 10)
-        let physicalBottom = NSPoint(x: visible.midX, y: frame.minY + 10)
+        let physicalBottom = NSPoint(x: visible.midX, y: frame.minY + 16)
         let nextToLeft = NSRect(x: frame.minX - 800, y: frame.minY, width: 800, height: frame.height)
         let nextToRight = NSRect(x: frame.maxX, y: frame.minY, width: 800, height: frame.height)
         let below = NSRect(x: frame.minX, y: frame.minY - 600, width: frame.width, height: 600)
         let nearLeft = NSRect(x: frame.minX - 14, y: visible.midY - 55, width: size, height: size)
         let nearBottom = NSRect(x: visible.midX - 60, y: visible.minY - 12, width: size, height: size)
         guard target(left.x, left.y) == .left, target(right.x, right.y) == .right,
-              target(desktopBottom.x, desktopBottom.y) == .bottom, target(physicalBottom.x, physicalBottom.y) == .bottom,
+              target(frame.minX + 25, left.y) == nil, target(frame.maxX - 25, right.y) == nil,
+              target(frame.minX + 31, left.y, petSize: 240) == .left,
+              target(frame.maxX - 31, right.y, petSize: 240) == .right,
+              target(frame.minX + 34, left.y, petSize: 320) == .left,
+              target(frame.maxX - 35, right.y, petSize: 320) == nil,
+              target(physicalBottom.x, physicalBottom.y) == .bottom,
+              target(physicalBottom.x, physicalBottom.y, petSize: 240) == .bottom,
+              target(frame.midX, frame.minY + 17, petSize: 320) == nil,
+              target(desktopBottom.x, desktopBottom.y) == nil,
+              target(visible.midX, visible.minY) == nil,
               target(frame.minX + 70, left.y, pet: nearLeft) == .left,
-              target(visible.midX, visible.minY + 64, pet: nearBottom) == .bottom,
+              target(frame.maxX - 70, right.y, pet: NSRect(x: frame.maxX - 106, y: nearLeft.minY, width: size, height: size)) == .right,
+              target(visible.midX, visible.minY + 64, pet: nearBottom) == nil,
               target(frame.midX, frame.minY + 44) == nil,
               target(frame.midX, visible.maxY - 4) == nil,
               target(frame.midX, visible.midY) == nil,
               target(left.x, left.y, neighbors: [nextToLeft]) == nil,
               target(right.x, right.y, neighbors: [nextToRight]) == nil,
-              target(desktopBottom.x, desktopBottom.y, neighbors: [below]) == nil,
-              target(physicalBottom.x, physicalBottom.y, neighbors: [below]) == nil
+              target(physicalBottom.x, physicalBottom.y, neighbors: [below]) == nil,
+              target(frame.minX + 10, frame.minY + 14, neighbors: [nextToLeft]) == .bottom,
+              target(frame.minX + 10, frame.minY + 6, neighbors: [below]) == .left
         else { return false }
 
         let sideDock = PetDisplay(id: display.id, frame: frame,
                                   visible: NSRect(x: frame.minX + 88, y: frame.minY, width: 1352, height: 868))
         let autoHide = PetDisplay(id: display.id, frame: frame,
                                   visible: NSRect(x: frame.minX, y: frame.minY + 4, width: 1440, height: 864))
-        guard target(frame.minX + 44, visible.midY, on: sideDock) == nil,
-              target(left.x, left.y, on: sideDock) == .left,
-              target(physicalBottom.x, physicalBottom.y, on: autoHide) == .bottom else { return false }
+        let rightDock = PetDisplay(id: display.id, frame: frame,
+                                   visible: NSRect(x: frame.minX, y: frame.minY, width: 1352, height: 868))
+        guard target(frame.minX + 44, visible.midY, on: sideDock, petSize: 240) == nil,
+              target(frame.maxX - 44, visible.midY, on: rightDock, petSize: 240) == nil,
+              target(frame.minX + 70, left.y, pet: nearLeft, on: sideDock) == nil,
+              target(left.x, left.y, on: sideDock) == nil,
+              target(right.x, right.y, on: rightDock) == nil,
+              target(frame.minX + 10, left.y, on: sideDock) == .left,
+              target(frame.maxX - 10, right.y, on: rightDock) == .right,
+              target(right.x, right.y, on: sideDock) == .right,
+              target(left.x, left.y, on: rightDock) == .left,
+              target(physicalBottom.x, physicalBottom.y, on: autoHide) == .bottom,
+              target(frame.midX, frame.minY + 17, on: autoHide) == nil else { return false }
 
         for screen in [display, sideDock, autoHide] {
             for edge in [PetEdge.left, .right, .bottom] {
                 let placement = PetEdgePlacement(edge: edge, displayID: screen.id, anchor: 0.5)
-                guard let peek = placement.frame(in: screen, petSize: size, neighbors: []), screen.visible.contains(peek) else {
-                    return false
-                }
+                guard let peek = placement.frame(in: screen, petSize: size, neighbors: []) else { return false }
                 switch edge {
-                case .left: if peek.minX != screen.visible.minX { return false }
-                case .right: if peek.maxX != screen.visible.maxX { return false }
-                case .bottom: if peek.minY != screen.visible.minY { return false }
+                case .left:
+                    guard screen.visible.contains(peek), peek.minX == screen.visible.minX else { return false }
+                case .right:
+                    guard screen.visible.contains(peek), peek.maxX == screen.visible.maxX else { return false }
+                case .bottom:
+                    guard screen.frame.contains(peek), peek.minY == screen.frame.minY,
+                          peek.midX == screen.visible.midX else { return false }
                 }
             }
         }
@@ -3767,7 +3819,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 """
             guard let saved = try? JSONDecoder().decode(PetPlacement.self, from: Data(json.utf8)),
                   let restored = saved.resolve(in: [display], petSize: size),
-                  restored.edge?.edge == .bottom, restored.frame.minY == visible.minY,
+                  restored.edge?.edge == .bottom, restored.frame.minY == frame.minY,
                   corner == .left ? restored.frame.minX == visible.minX : restored.frame.maxX == visible.maxX,
                   let fallback = saved.resolve(in: [primary], petSize: size),
                   fallback.edge == nil, primary.visible.contains(fallback.frame) else { return false }
@@ -3776,7 +3828,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let oldDock = Data(#"{"peeking":{"_0":{"edge":"bottom","surface":"dock","displayID":"second","anchor":0.5}}}"#.utf8)
         guard let saved = try? JSONDecoder().decode(PetPlacement.self, from: oldDock),
               let restored = saved.resolve(in: [display], petSize: size),
-              restored.edge?.edge == .bottom, restored.frame.minY == visible.minY else { return false }
+              restored.edge?.edge == .bottom, restored.frame.minY == frame.minY else { return false }
         let lowerNeighbor = PetDisplay(id: "below", frame: below, visible: below)
         return saved.resolve(in: [display, lowerNeighbor], petSize: size)?.edge == nil
             && saved.resolve(in: [display], petSize: size, canPeek: false)?.edge == nil
@@ -3868,28 +3920,46 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             return true
         }
 
+        let leftInset: CGFloat = screen.minX > display.frame.minX + 20 ? 10 : 20
+        let rightInset: CGFloat = screen.maxX <= display.frame.maxX - 20 ? 10 : 20
         let tests: [(PetEdge, NSPoint)] = [
-            (.left, NSPoint(x: display.frame.minX + 6, y: screen.midY)),
-            (.right, NSPoint(x: display.frame.maxX - 6, y: screen.midY)),
-            (.bottom, NSPoint(x: screen.midX, y: screen.minY + 6)),
+            (.left, NSPoint(x: display.frame.minX + leftInset, y: screen.midY)),
+            (.right, NSPoint(x: display.frame.maxX - rightInset, y: screen.midY)),
+            (.bottom, NSPoint(x: screen.midX, y: display.frame.minY + 14)),
         ]
         let neighborFrames = NSScreen.screens.filter { $0 != display }.map(\.frame)
         for (edge, point) in tests where !edge.isShared(at: point, in: display.frame, neighbors: neighborFrames) {
             panel.setFrameOrigin(NSPoint(x: start.x - size / 2, y: start.y - size / 2))
-            guard drag(from: start, to: point), edgePlacement?.edge == edge, screen.contains(panel.frame) else { return false }
+            guard drag(from: start, to: point), edgePlacement?.edge == edge else { return false }
+            switch edge {
+            case .bottom:
+                guard display.frame.contains(panel.frame), panel.frame.minY == display.frame.minY else { return false }
+                print("PASS: bottom peek minY \(panel.frame.minY), physical minY \(display.frame.minY), available minY \(screen.minY)")
+            case .left:
+                guard screen.contains(panel.frame), panel.frame.minX == screen.minX else { return false }
+            case .right:
+                guard screen.contains(panel.frame), panel.frame.maxX == screen.maxX else { return false }
+            }
             let grip = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
             guard drag(from: grip, to: start), edgePlacement == nil,
                   panel.frame.size == NSSize(width: size, height: size) else { return false }
         }
 
-        let ordinaryDrops = [
+        var ordinaryDrops = [
             NSPoint(x: screen.midX, y: screen.maxY - 6),
-            NSPoint(x: screen.midX + 90, y: screen.midY + 35)
+            NSPoint(x: screen.midX + 90, y: screen.midY + 35),
+            NSPoint(x: screen.midX, y: display.frame.minY + 17),
+            // Starting at the panel center puts the cat's feet at the work area's bottom.
+            NSPoint(x: screen.midX, y: screen.minY + size * (0.5 - 35.0 / 320))
         ]
+        if screen.minY - display.frame.minY > 16 {
+            ordinaryDrops += [0, 4].map { NSPoint(x: screen.midX, y: screen.minY + $0) }
+        }
         for point in ordinaryDrops {
             panel.setFrameOrigin(NSPoint(x: start.x - size / 2, y: start.y - size / 2))
             guard drag(from: start, to: point), edgePlacement == nil, screen.contains(panel.frame) else { return false }
         }
+        print("PASS: ordinary drops stay full-size; exposed display edges support drag-out; shared edges and legacy placement checked")
         return true
     }
 
@@ -4020,12 +4090,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard let screen = pawScreen ?? NSScreen.main else { return }
 
         let host = NSHostingView(rootView:
-            Text("小猫已隐藏。点击菜单栏爪印可以唤回。")
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
-                .fixedSize()
+            PetStatusToast(text: "小猫已隐藏。点击菜单栏爪印可以唤回。", tone: .hint)
         )
         fitCardHost(host, fallback: NSSize(width: 280, height: 35))
         let hint = PetPanel(contentRect: host.frame, styleMask: [.borderless, .nonactivatingPanel],
@@ -4460,7 +4525,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         // Leave room for the wider focus card so it is not clamped at rest and
         // can keep a fixed offset while the pet is dragged.
         let petWidth = panel.frame.width
-        let cardInset = max(24, (FocusCard.width - petWidth) / 2 + 8)
+        let cardInset = max(24, (FocusCard.resultWidth - petWidth) / 2 + 8)
         panel.setFrameOrigin(NSPoint(x: display.visible.maxX - petWidth - cardInset, y: display.visible.minY + 58))
         rememberDesktopPosition(on: display)
     }

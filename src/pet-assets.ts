@@ -155,6 +155,8 @@ export const atlasNoseTips = { NO01: 131, NO02: 131, NO03: 130, NO04: 133 } as c
 export const sharedNoseStyles = {
   NO05: ['小方鼻', 125], NO06: ['中鼻', 130], NO07: ['大鼻', 135], NO08: ['长鼻', 136],
 } as const;
+// Bottom occupied 80×80 row in each layer of centered-noses.aseprite.
+export const centeredNoseTips = { NO05: 31, NO06: 32, NO07: 33, NO08: 33 } as const;
 export const retiredNoseStyles = { NO01: 'NO05', NO03: 'NO06', NO04: 'NO07' } as const;
 export const sharedTailStyles = {
   CT05: '直尾', CT06: '短尾', CT07: 'L字型弯尾', CT08: 'Z字型弯尾', CT09: '卷环型尾',
@@ -222,7 +224,10 @@ export const orangeSquareGlints = 'cat/eye-glints/orange-square-v8';
 export const breedEyeGlints = 'cat/hd/breeds/eye_glints';
 export const facePartsPath = 'cat/hd/face-parts/';
 export const catNosePath = facePartsPath + 'noses/';
+export const centeredNosePath = 'cat/centered-noses/';
 export const catMouthPath = facePartsPath + 'mouths/';
+export const historicalConvexMouthPath = facePartsPath + 'historical-cn05/CN05';
+export const historicalConvexLiHuaBacking = facePartsPath + 'historical-cn05/li-hua-backing';
 export const mouthSkinPath = catMouthPath + 'skin_cleanup';
 export const mouthSkinColumns = 4;
 export const legacyNoseOutlinePath = facePartsPath + 'legacy_nose_outline';
@@ -484,6 +489,27 @@ export const liHuaLibTVCoatPath = 'cat/li-hua-v14/';
 export const liHuaSampledPath = 'cat/li-hua-v16/';
 export const liHuaFrenzyFurAsset = 'cat/li-hua-v19/frenzy-mouth-fur';
 export const liHuaReferenceCheekAsset = 'cat/li-hua-v15/head';
+export const approvedRestingCatPath = 'cat/resting-30/';
+export const calicoBodyIndex = 'cat/shared-calico-body/body-index';
+export const standingEarPath = 'cat/standing-ears-v25/';
+export const frontPawSolesPath = 'cat/front-paw-soles-v26/';
+export const frontPawSoleGuide = frontPawSolesPath + 'guide';
+export const updatedRestingCatPath = 'cat/resting-v30/';
+export const catComponentRecipePath = 'cat/component-recipes-v40/';
+export const catChestWhitePath = 'cat/component-chest-v42/';
+export const catForeheadLockPath = 'cat/component-forehead-v43/';
+export const frontGloveGuide = 'cat/front-glove/front-glove';
+export const orangeStripeRestingAsset = 'cat/resting-v31/orange';
+export const chinShadeMask = 'cat/chin-shading/shared';
+export const combinedRestingCatPath = 'cat/resting-v29/';
+export const diluteEarMarkPath = 'cat/dilute-ear-mark-v27/';
+export const diluteEarMarkPatch = diluteEarMarkPath + 'left-crown';
+export const diluteEarMarkStock = diluteEarMarkPath + 'CC12';
+export const approvedRestingCatIds = [
+  'black', 'CC09', 'orange', 'british_blue', 'american_shorthair', 'CC11',
+  'siamese', 'ragdoll', 'li_hua', 'CC10', 'calico', 'CC12',
+] as const;
+export const sharedRestingOutlinePath = 'cat/body-retouch/shared-v22/';
 export const breedBodyOutlinePath = 'cat/body-retouch/breeds-v12/';
 export const orangeForelegBodyPath = 'cat/body-retouch/orange-foreleg-v4';
 export const catFaceEdgesPath = 'cat/face-edges/';
@@ -507,7 +533,47 @@ export const catBreedDetailPresets = {
 
 const faceEdgeParts = ['ear-left', 'ear-left-erase', 'ear-right', 'ear-right-erase', 'whiskers', 'whiskers-erase', 'mouth'];
 
+export const sharedTabbyCheekPath = catFaceEdgesPath + 'shared-tabby-cheeks/';
+export const orangeForeheadPatch = 'cat/orange-forehead-v35/forehead';
+export const liHuaCrownTone = 'cat/li-hua-crown-v36/crown';
+export const goldenFlankTone = 'cat/golden-flank-v37/flank';
+export const goldenChinTone = 'cat/golden-chin-v38/chin';
 export const assetGroups: readonly AssetGroup[] = [
+  group('cat.component-recipes', 'current', [
+    ...pngs(withPrefix(catComponentRecipePath, approvedRestingCatIds.flatMap(id => [id + '-stock', id + '-native-edit-mask', id + '-coat-roles', id + '-mouth-backing', id + '-eyes-backing'])), 80),
+    ...pngs(withPrefix(catComponentRecipePath, ['CE01-left-mask', 'CE01-right-mask']), 80),
+    ...approvedRestingCatIds.map(id => ({ key: catComponentRecipePath + id + '-ear-swatches', width: 4, height: 1 })),
+  ], [{
+    source: 'art/cat-pixel80/component-recipes84/shared.aseprite',
+    script: 'scripts/export-cat-component-recipes.lua', outputDir: catComponentRecipePath, args: { runtime: 1, coatRoles: 1 },
+  }], {
+    ...cat, sources: approvedRestingCatIds.map(id => 'art/cat-pixel80/component-recipes84/' + id + '.aseprite'),
+  }),
+  group('cat.component-recipes.chest-white', 'current',
+    pngs(withPrefix(catChestWhitePath, ['calico', 'CC12']), 80), [{
+      source: 'art/cat-pixel80/component-recipes84/shared.aseprite',
+      script: 'scripts/export-cat-component-recipes.lua', outputDir: catChestWhitePath, args: { chestWhite: 1 },
+    }], {
+      ...cat, sources: ['calico', 'CC12'].map(id => 'art/cat-pixel80/component-recipes84/' + id + '.aseprite'),
+    }),
+  group('cat.component-recipes.forehead-lock', 'current',
+    pngs(withPrefix(catForeheadLockPath, approvedRestingCatIds), 80), [{
+      source: 'art/cat-pixel80/component-recipes84/shared.aseprite',
+      script: 'scripts/export-cat-component-recipes.lua', outputDir: catForeheadLockPath, args: { forehead: 1 },
+    }], {
+      ...cat, sources: approvedRestingCatIds.map(id => 'art/cat-pixel80/component-recipes84/' + id + '.aseprite'),
+    }),
+  scriptGroup('cat.face-edges.shared-tabby-cheeks', 'current', 'art/cat-pixel80/shared-tabby-cheeks/cheeks.aseprite',
+    'export-cat-shared-cheeks', sharedTabbyCheekPath,
+    pngs(withPrefix(sharedTabbyCheekPath, ['stripes', 'orange-restore', 'li-hua-restore']), 80)),
+  scriptGroup('cat.forehead.orange-native-v35', 'current', 'art/cat-pixel80/orange-forehead-v35/forehead.aseprite',
+    'export-cat-resting-30', 'cat/orange-forehead-v35/', pngs([orangeForeheadPatch], 80), { id: 'forehead' }),
+  scriptGroup('cat.li-hua-coat.crown-tones', 'current', 'art/cat-pixel80/li-hua-crown-v36/crown.aseprite',
+    'export-cat-resting-30', 'cat/li-hua-crown-v36/', pngs([liHuaCrownTone], 80), { id: 'crown' }),
+  scriptGroup('cat.body-outline.golden-flank', 'current', 'art/cat-pixel80/golden-flank-v37/flank.aseprite',
+    'export-cat-resting-30', 'cat/golden-flank-v37/', pngs([goldenFlankTone], 80), { id: 'flank' }),
+  scriptGroup('cat.body-outline.golden-chin', 'current', 'art/cat-pixel80/golden-chin-v38/chin.aseprite',
+    'export-cat-resting-30', 'cat/golden-chin-v38/', pngs([goldenChinTone], 80), { id: 'chin' }),
   group('dog.m1', 'compatibility', pngs(dogLayers, PET_SIZE), [], {
     consumer: 'dog', sources: [], note: 'Retained PNGs for the standalone Web editor and native fallback.',
   }),
@@ -586,6 +652,12 @@ export const assetGroups: readonly AssetGroup[] = [
     Object.keys(sharedNoseStyles).map((layer, index) => ({
       source: 'art/cat-shared/front-noses.aseprite', layer, frame: index + 1, output: catNosePath + layer,
     })), cat),
+  group('cat.centered-noses', 'current', pngs(withPrefix(centeredNosePath, Object.keys(centeredNoseTips)), 80),
+    Object.keys(centeredNoseTips).map(layer => ({
+      source: 'art/cat-pixel80/centered-noses.aseprite', layer, frame: 1, output: centeredNosePath + layer,
+    })), cat),
+  scriptGroup('cat.mouths.historical-cn05', 'current', 'art/cat-pixel80/historical-cn05.aseprite',
+    'export-cat-historical-cn05', facePartsPath + 'historical-cn05/', pngs([historicalConvexMouthPath, historicalConvexLiHuaBacking])),
   group('cat.mouths', 'current', pngs([...withPrefix(catMouthPath, Object.keys(sharedMouthStyles)), mouthSkinPath]), [
     // The Aseprite frames run from CN05 to CN09 independently of menu order.
     ...Object.keys(sharedMouthStyles).sort().map((id, index) => ({
@@ -679,6 +751,43 @@ export const assetGroups: readonly AssetGroup[] = [
     'export-cat-li-hua-coat', 'cat/li-hua-v15/', pngs([liHuaReferenceCheekAsset]), { pattern: 'reference-cheeks' }),
   scriptGroup('cat.li-hua-coat.sampled', 'current', 'art/cat-pixel80/li-hua-redesign/sampled-reference.aseprite',
     'export-cat-li-hua-coat', liHuaSampledPath, pngs(withPrefix(liHuaSampledPath, ['head', 'ears', 'body', 'tail'])), { pattern: 'sampled-reference' }),
+  ...approvedRestingCatIds.map(id => scriptGroup('cat.resting-30.' + id, 'current',
+    `art/cat-pixel80/resting-30/${id}.aseprite`, 'export-cat-resting-30', approvedRestingCatPath,
+    pngs([approvedRestingCatPath + id], 80), { id })),
+  scriptGroup('cat.ear-retouch.CE01-masks', 'current',
+    'art/cat-pixel80/standing-ears-v25/CE01-inner-ear-shared.aseprite',
+    'export-cat-standing-ear-masks', standingEarPath,
+    pngs(withPrefix(standingEarPath, ['CE01-left-mask', 'CE01-right-mask']), 80)),
+  ...approvedRestingCatIds.map(id => scriptGroup('cat.ear-retouch.CE01-' + id, 'current',
+    `art/cat-pixel80/standing-ears-v25/${id}.aseprite`, 'export-cat-resting-30', standingEarPath,
+    pngs([standingEarPath + id], 80), { id })),
+  layerGroup('cat.body-outline.front-paw-soles', 'current', 'art/cat-pixel80/body-retouch/front-paw-soles.aseprite',
+    'Front sole inner ink', frontPawSoleGuide, cat, 80),
+  ...approvedRestingCatIds.map(id => scriptGroup('cat.body-outline.front-paw-stock.' + id, 'current',
+    `art/cat-pixel80/front-paw-soles-v26/${id}.aseprite`, 'export-cat-resting-30', frontPawSolesPath,
+    pngs([frontPawSolesPath + id], 80), { id })),
+  layerGroup('cat.ear-retouch.dilute-crown-patch', 'current', 'art/cat-pixel80/dilute-ear-mark-v27/CC12.aseprite',
+    'CC12 left crown - soften fur stripe', diluteEarMarkPatch, cat, 80),
+  scriptGroup('cat.ear-retouch.dilute-crown-stock', 'current', 'art/cat-pixel80/dilute-ear-mark-v27/CC12.aseprite',
+    'export-cat-resting-30', diluteEarMarkPath, pngs([diluteEarMarkStock], 80), { id: 'CC12' }),
+  ...approvedRestingCatIds.filter(id => id !== 'li_hua').map(id =>
+    scriptGroup('cat.body-outline.rear-paw-stock.' + id, 'current',
+      `art/cat-pixel80/resting-v29/${id}.aseprite`, 'export-cat-resting-30', combinedRestingCatPath,
+      pngs([combinedRestingCatPath + id], 80), { id })),
+  ...approvedRestingCatIds.map(id => scriptGroup('cat.body-outline.resting-v30.' + id, 'current',
+    `art/cat-pixel80/resting-v30/${id}.aseprite`, 'export-cat-resting-30', updatedRestingCatPath,
+    pngs([updatedRestingCatPath + id], 80), { id })),
+  scriptGroup('cat.body-outline.orange-stripe-resting', 'current', 'art/cat-pixel80/resting-v31/orange.aseprite',
+    'export-cat-resting-30', 'cat/resting-v31/', pngs([orangeStripeRestingAsset], 80), { id: 'orange' }),
+  scriptGroup('cat.body-outline.front-gloves', 'current', 'art/cat-pixel80/front-glove/front-glove.aseprite',
+    'export-cat-resting-30', 'cat/front-glove/', pngs([frontGloveGuide], 80), { id: 'front-glove' }),
+  scriptGroup('cat.body-outline.chin-shading', 'current', 'art/cat-pixel80/resting-v30/chin-shared-mask.aseprite',
+    'export-cat-resting-30', 'cat/chin-shading/', pngs([chinShadeMask], 80), { id: 'shared' }),
+  scriptGroup('cat.body-outline.shared-calico', 'current', 'art/cat-pixel80/shared-calico-body/body-index.aseprite',
+    'export-cat-calico-body-index', 'cat/shared-calico-body', pngs([calicoBodyIndex], 80)),
+  scriptGroup('cat.body-outline.shared', 'current', 'art/cat-pixel80/body-retouch/shared-resting-outline.aseprite',
+    'export-cat-shared-outline', sharedRestingOutlinePath,
+    pngs(withPrefix(sharedRestingOutlinePath, ['body', 'legs', 'leg-fur', 'cheek-fur']), 80)),
   ...Object.keys(catBreedDetailPresets).map(breed => scriptGroup('cat.body-outline.' + breed, 'current',
     `art/cat-pixel80/breed-body-outline/${breed}.aseprite`, 'export-cat-breed-body-outline', breedBodyOutlinePath,
     pngs([breedBodyOutlinePath + breed, breedBodyOutlinePath + breed + '-erase']), { breed })),

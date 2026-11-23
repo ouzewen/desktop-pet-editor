@@ -1,0 +1,7 @@
+local sprite = assert(app.activeSprite, "Open the approved resting sprite")
+local id = assert(app.params.id, "Missing breed ID")
+local output = assert(app.params.output, "Missing output directory")
+assert(sprite.width == 80 and sprite.height == 80 and sprite.colorMode == ColorMode.RGB)
+local composite = Image(80, 80, ColorMode.RGB)
+composite:drawSprite(sprite, 1, Point(0, 0))
+assert(composite:saveAs(app.fs.joinPath(output, id .. ".png")))

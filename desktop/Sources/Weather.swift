@@ -446,9 +446,9 @@ struct WeatherCard: View {
     var onRetry: () -> Void = {}
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     private var advice: [String] {
         guard let snapshot else { return [] }
@@ -457,59 +457,46 @@ struct WeatherCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                PixelGlyph(kind: .cloud, color: palette.accent, size: 12)
-                Text(snapshot == nil ? "天气" : "今日天气")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.ink)
-                Spacer(minLength: 6)
-                Button(action: onDismiss) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("关闭")
+            WorkbenchCardHeading(title: snapshot == nil ? "天气" : "今日天气", glyph: .cloud, palette: palette) {
+                WorkbenchCardIconButton(glyph: .close, title: "关闭天气", palette: palette, action: onDismiss)
             }
 
             if let snapshot {
                 Text(snapshot.headline)
-                    .font(PixelFont.font(12))
+                    .font(.system(size: 12))
                     .foregroundStyle(palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(advice, id: \.self) { line in
                     HStack(alignment: .top, spacing: 6) {
                         Rectangle().fill(palette.accent).frame(width: 5, height: 5).padding(.top, 5)
                         Text(line)
-                            .font(PixelFont.font(11))
+                            .font(.system(size: 11))
                             .foregroundStyle(palette.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 HStack(spacing: 6) {
                     Button("知道了", action: onDismiss)
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                        .workbenchButton(palette: palette, prominent: true)
                     Button("看天气", action: onOpenWeather)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                 }
             } else {
                 Text(failure ?? "暂时获取不到天气。")
-                    .font(PixelFont.font(11))
+                    .font(.system(size: 11))
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     Button("重试", action: onRetry)
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                        .workbenchButton(palette: palette, prominent: true)
                     Button("关闭", action: onDismiss)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                 }
             }
         }
         .padding(10)
         .frame(width: 252, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
         .background(
             GeometryReader { proxy in
                 Color.clear
@@ -533,10 +520,10 @@ struct WeatherCityCard: View {
     var onSave: () -> Void = {}
     var onCancel: () -> Void = {}
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     private var trimmed: String {
         model.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -544,45 +531,32 @@ struct WeatherCityCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                PixelGlyph(kind: .cloud, color: palette.accent, size: 12)
-                Text("天气城市")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Spacer(minLength: 6)
-                Button(action: onCancel) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("取消")
+            WorkbenchCardHeading(title: "天气城市", glyph: .cloud, palette: palette) {
+                WorkbenchCardIconButton(glyph: .close, title: "取消", palette: palette, action: onCancel)
             }
 
             HStack(spacing: 6) {
                 TextField("留空则自动定位", text: $model.text)
                     .textFieldStyle(.plain)
-                    .font(PixelFont.font(12))
+                    .font(.system(size: 12))
                     .foregroundStyle(palette.ink)
                     .focused($focused)
                     .onSubmit(save)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
-                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                    .workbenchCardField(palette: palette, focused: focused)
                 Button("保存", action: save)
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .workbenchButton(palette: palette, prominent: true)
             }
 
             Text("当前：\(current)。留空并保存可恢复自动定位。")
-                .font(PixelFont.font(11))
+                .font(.system(size: 11))
                 .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(10)
         .frame(width: 252, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }

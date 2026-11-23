@@ -1,0 +1,931 @@
+{
+  "schema": 2,
+  "displayOrder": [
+    "black",
+    "CC09",
+    "orange",
+    "british_blue",
+    "american_shorthair",
+    "CC11",
+    "siamese",
+    "ragdoll",
+    "li_hua",
+    "CC10",
+    "calico",
+    "CC12"
+  ],
+  "pose": "stock resting front",
+  "placement": {
+    "canvasOrigin": [
+      0,
+      0
+    ],
+    "bilateralAxis": 37.5,
+    "forepawRestingSwatches": [
+      [
+        30,
+        67
+      ],
+      [
+        45,
+        67
+      ]
+    ],
+    "pawOcclusion": [
+      "rear paws at outer body sides",
+      "front paws above seated body",
+      "typing paws use existing pose atlases above laptop"
+    ],
+    "zOrder": [
+      "tail",
+      "torso",
+      "paws",
+      "head and crown",
+      "ears",
+      "eyes",
+      "nose mouth whiskers"
+    ],
+    "anchorNote": "Part anchors are review landmarks in the sitting pose; cels remain in canvas space. The runtime animation retains its existing anchors."
+  },
+  "baseline": "12cf694",
+  "size": [
+    80,
+    80
+  ],
+  "coordinates": "origin upper-left, screen sides, bounds end-exclusive. All cels are stored in canvas space.",
+  "catalogNote": "Snapshot of approved trial data. recipes.lua is the consumed order and routing. Color swatches list actual cel values including colors hidden by later cels.",
+  "sharedSprite": "shared.aseprite",
+  "guides": {
+    "body.seam.roles": {
+      "layer": "body.seam.roles",
+      "bounds": [
+        13,
+        44,
+        63,
+        72
+      ],
+      "pixels": 1194
+    },
+    "chin.split": {
+      "layer": "chin.split",
+      "bounds": [
+        17,
+        39,
+        58,
+        44
+      ],
+      "pixels": 55
+    },
+    "ear.CE01.left": {
+      "layer": "ear.CE01.left",
+      "bounds": [
+        15,
+        5,
+        33,
+        23
+      ],
+      "pixels": 189
+    },
+    "ear.CE01.lining.left.main": {
+      "layer": "ear.CE01.lining.left.main",
+      "bounds": [
+        19,
+        10,
+        22,
+        18
+      ],
+      "pixels": 18
+    },
+    "ear.CE01.lining.left": {
+      "layer": "ear.CE01.lining.left",
+      "bounds": [
+        19,
+        9,
+        22,
+        19
+      ],
+      "pixels": 24
+    },
+    "ear.CE01.lining.left.shadow": {
+      "layer": "ear.CE01.lining.left.shadow",
+      "bounds": [
+        19,
+        9,
+        22,
+        19
+      ],
+      "pixels": 6
+    },
+    "ear.CE01.lining.right.main": {
+      "layer": "ear.CE01.lining.right.main",
+      "bounds": [
+        54,
+        10,
+        57,
+        18
+      ],
+      "pixels": 18
+    },
+    "ear.CE01.lining.right": {
+      "layer": "ear.CE01.lining.right",
+      "bounds": [
+        54,
+        9,
+        57,
+        19
+      ],
+      "pixels": 24
+    },
+    "ear.CE01.lining.right.shadow": {
+      "layer": "ear.CE01.lining.right.shadow",
+      "bounds": [
+        54,
+        9,
+        57,
+        19
+      ],
+      "pixels": 6
+    },
+    "ear.CE01.right": {
+      "layer": "ear.CE01.right",
+      "bounds": [
+        42,
+        5,
+        61,
+        23
+      ],
+      "pixels": 201
+    },
+    "ear.CE04.ownership": {
+      "layer": "ear.CE04.ownership",
+      "bounds": [
+        12,
+        5,
+        64,
+        27
+      ],
+      "pixels": 525
+    },
+    "eye.Y01.left": {
+      "layer": "eye.Y01.left",
+      "bounds": [
+        23,
+        24,
+        33,
+        34
+      ],
+      "pixels": 76
+    },
+    "eye.Y01.right": {
+      "layer": "eye.Y01.right",
+      "bounds": [
+        43,
+        24,
+        53,
+        34
+      ],
+      "pixels": 76
+    },
+    "mouth.CN08": {
+      "layer": "mouth.CN08",
+      "bounds": [
+        32,
+        32,
+        43,
+        37
+      ],
+      "pixels": 14
+    },
+    "nose.NO05": {
+      "layer": "nose.NO05",
+      "bounds": [
+        36,
+        30,
+        39,
+        32
+      ],
+      "pixels": 6
+    },
+    "paw.front.glove-guide": {
+      "layer": "paw.front.glove-guide",
+      "bounds": [
+        27,
+        61,
+        49,
+        71
+      ],
+      "pixels": 160
+    },
+    "tail.CT05": {
+      "layer": "tail.CT05",
+      "bounds": [
+        55,
+        47,
+        70,
+        70
+      ],
+      "pixels": 220
+    },
+    "whiskers.B3.left": {
+      "layer": "whiskers.B3.left",
+      "bounds": [
+        11,
+        31,
+        16,
+        39
+      ],
+      "pixels": 11
+    },
+    "whiskers.B3.right": {
+      "layer": "whiskers.B3.right",
+      "bounds": [
+        60,
+        31,
+        65,
+        39
+      ],
+      "pixels": 11
+    }
+  },
+  "cats": {
+    "black": {
+      "sprite": "black.aseprite",
+      "frozenStock": "reference/black.png",
+      "visibleRgb": 21,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/black.aseprite",
+        "approvedOverlays": [],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#0A0A0B", "#181719", "#222023", "#1A191B", "#161517"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#19181A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 65], "pixels": 267, "role": "coat", "stockSwatches": ["#161517", "#171618", "#151416", "#181719", "#1A191B", "#141315", "#161417"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": null, "pixels": 0, "role": "pale", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#0A0A0B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#19181A", "#161517", "#171618", "#161417", "#151416", "#141315", "#201B1E"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#0A0A0B"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#19181A", "#151416"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#171618"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#0A0A0B"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#19181A", "#151416", "#141315"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#171618"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#0A0A0B"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#19181A", "#171618", "#161417", "#141315", "#151416", "#201B1E"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#0A0A0B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#19181A", "#141315", "#0A0A0B", "#171618", "#161517", "#181719", "#1A191B", "#201B1E", "#161417", "#151416"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 273, "role": "forehead", "stockSwatches": ["#1A191B", "#171618"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 27, 44], "pixels": 45, "role": "left", "stockSwatches": ["#161517", "#181719", "#171618", "#161417", "#1A191B", "#141315", "#201B1E"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [52, 27, 61, 44], "pixels": 34, "role": "right", "stockSwatches": ["#171618", "#161517", "#181719", "#141315", "#1A191B", "#161417"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [32, 25, 44, 38], "pixels": 13, "role": "coat", "stockSwatches": ["#1A191B"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#181719", "#19181A", "#161517", "#171618", "#141315"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#0A0A0B"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#19181A", "#0A0A0B", "#1A191B", "#141315", "#171618", "#161517", "#151416", "#181719"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#19181A", "#1A191B", "#0A0A0B", "#151416", "#161517", "#171618", "#181719", "#141315"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F9F4DB"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#8F9B43"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F9F4DB"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#8F9B43"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#ED8495", "#DB7283"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#ADA4B0", "#8F8892"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#413945"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#413945"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "CC09": {
+      "sprite": "CC09.aseprite",
+      "frozenStock": "reference/CC09.png",
+      "visibleRgb": 23,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/CC09.aseprite",
+        "approvedOverlays": [],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#707077", "#EDEBEA", "#F8F6F3", "#F4F2EF", "#E8E6E6"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#F4F2EF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 521, "role": "coat", "stockSwatches": ["#F3F1EE", "#F2F0EE", "#F3F1EF", "#F1EFED", "#EDEBEA", "#F2F0ED", "#F0EEEC"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": null, "pixels": 0, "role": "pale", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#707077"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#F1EFED", "#F0EEEC", "#F2F0ED"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#707077"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#F1EFED", "#EDEBEA"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#F1EFED"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#707077"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#F1EFED", "#EDEBEA"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#F1EFED"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#707077"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#F1EFED", "#F0EEEC", "#F2F0ED"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#707077"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#F4F2EF", "#E8E6E6", "#707077", "#F3F1EF", "#F2F0EE", "#EDEBEA", "#F3F1EE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 18, 60, 25], "pixels": 63, "role": "forehead", "stockSwatches": ["#F3F1EF", "#F3F1EE", "#F2F0EE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 175, "role": "left", "stockSwatches": ["#F3F1EE", "#F2F0EE", "#F3F1EF", "#F2F0ED"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 44], "pixels": 171, "role": "right", "stockSwatches": ["#F3F1EE", "#F2F0EE", "#F3F1EF", "#F2F0ED"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 38, 45, 44], "pixels": 90, "role": "coat", "stockSwatches": ["#F3F1EF", "#F3F1EE", "#F2F0EE"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#EDEBEA", "#E8E6E6"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#707077"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#F3F1EE", "#707077", "#F4F2EF", "#F3F1EF", "#EBE9E8", "#E0DEE0", "#E5E3E4", "#EDEBEA", "#E8E6E6"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#F3F1EE", "#F4F2EF", "#707077", "#F3F1EF", "#E5E3E4", "#E8E6E6", "#EBE9E8", "#EDEBEA", "#E0DEE0"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F9F4DB"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#91C4E2"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F9F4DB"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#91C4E2"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F2B1BA", "#E09FA8"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#594E55", "#7D7478"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#707077"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#707077"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "orange": {
+      "sprite": "orange.aseprite",
+      "frozenStock": "reference/orange.png",
+      "visibleRgb": 29,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v31/orange.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/orange-forehead-v35/forehead.png",
+          "desktop/assets-pixel80/cat/face-edges/shared-tabby-cheeks/stripes.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/orange-front.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#3A1E13", "#F5C393", "#BB7548", "#F4AD6A", "#D38D57", "#F2AD6C", "#EC9B5E"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 66], "pixels": 864, "role": "fur", "stockSwatches": ["#F2AD6C", "#F4AD6A", "#F4AC6C", "#F3AF6B", "#F5C393", "#D38D57", "#F2B182", "#AF9D9C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 63], "pixels": 217, "role": "coat", "stockSwatches": ["#D57D4B", "#D07645", "#D07F4E", "#DD8651", "#EC9B5E", "#D28057", "#E28E56", "#B8613C", "#B95D43"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [27, 44, 48, 66], "pixels": 198, "role": "pale", "stockSwatches": ["#FDFDFD", "#D3D0DC"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#3A1E13", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#B8613C", "#D57D4B", "#D28057", "#D07645", "#DD8651"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [20, 63, 27, 70], "pixels": 10, "role": "shade", "stockSwatches": ["#D3D0DC"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#3A1E13", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#B8613C", "#F4AD6A", "#F4AC6C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D3D0DC"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#3A1E13", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#B8613C", "#F3AF6B"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D3D0DC"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#3A1E13", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#B8613C", "#D07F4E", "#D57D4B", "#D07645"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 56, 70], "pixels": 10, "role": "shade", "stockSwatches": ["#D3D0DC"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#3A1E13", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#F2AD6C", "#F4AD6A", "#F4AC6C", "#F3AF6B", "#3A1E13", "#FDFDFD", "#B8613C", "#D07F4E", "#D07645", "#D57D4B", "#BB7548", "#B95D43", "#D28057", "#F2B182", "#F5C393"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [32, 12, 43, 19], "pixels": 28, "role": "forehead", "stockSwatches": ["#D07F4E", "#DD8651"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [15, 27, 23, 38], "pixels": 36, "role": "left", "stockSwatches": ["#D07645", "#DD8651", "#E28E56"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [54, 27, 61, 38], "pixels": 37, "role": "right", "stockSwatches": ["#D07645", "#DD8651", "#E28E56"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": null, "pixels": 0, "role": "coat", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#D07645", "#F2AD6C", "#F2B182", "#D57D4B", "#DD8651", "#EC9B5E", "#B8613C"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#3A1E13"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#F2AD6C", "#3A1E13", "#F4AC6C", "#F4AD6A", "#DD8651", "#D57D4B", "#F3AF6B", "#B8613C", "#D07645", "#E28E56", "#B95D43", "#D28057"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#F2AD6C", "#3A1E13", "#D07645", "#F4AD6A", "#F4AC6C", "#F3AF6B", "#E28E56", "#DD8651", "#B95D43", "#B8613C", "#D57D4B", "#BB7548", "#EC9B5E", "#F2B182", "#D28057"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 15, 55, 18], "pixels": 2, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#D07645"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFDFD"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#3A1E13"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [29, 27, 31, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FDFDFD"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFDFD"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#3A1E13"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [49, 27, 51, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FDFDFD"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#ED8495", "#DB7283"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#3B2013", "#774527"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#68402A"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#68402A"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "british_blue": {
+      "sprite": "british_blue.aseprite",
+      "frozenStock": "reference/british_blue.png",
+      "visibleRgb": 29,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/british_blue.aseprite",
+        "approvedOverlays": [],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#2E313C", "#8B8E94", "#B3B6BB", "#95999F", "#828588"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 797, "role": "fur", "stockSwatches": ["#95999F"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 64], "pixels": 292, "role": "coat", "stockSwatches": ["#95999E", "#93979D", "#76787A", "#7A7D7F", "#717376", "#616263", "#8B8E94", "#6B6C6E", "#B7BABF", "#828588", "#8E8482"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [27, 44, 49, 66], "pixels": 200, "role": "pale", "stockSwatches": ["#FDFDFD", "#D2D2D8", "#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 67, "role": "structure", "stockSwatches": ["#2E313C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#616263", "#76787A", "#D5D3DF", "#6B6C6E", "#8E8482"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [19, 68, 27, 70], "pixels": 12, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF", "#D2D2D8"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#2E313C"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#95999F", "#616263"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 37, 71], "pixels": 18, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#2E313C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#616263", "#95999F"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 68, 48, 71], "pixels": 18, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#2E313C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#616263", "#76787A", "#D5D3DF", "#95999E", "#717376", "#6B6C6E", "#4E4A49"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 68, 57, 70], "pixels": 13, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#2E313C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#95999F", "#95999E", "#4E4A49", "#93979D", "#2E313C", "#B3B6BB", "#8B8E94", "#717376", "#6B6C6E", "#76787A", "#828588", "#7A7D7F", "#A7AAB0"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 170, "role": "forehead", "stockSwatches": ["#95999E", "#93979D", "#717376"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 104, "role": "left", "stockSwatches": ["#95999E", "#93979D", "#717376", "#FDFDFD", "#8B8E94", "#7A7D7F", "#76787A", "#B3B6BB"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 44], "pixels": 114, "role": "right", "stockSwatches": ["#95999E", "#93979D", "#717376", "#6B6C6E", "#FDFDFD", "#8B8E94", "#7A7D7F", "#76787A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 44], "pixels": 111, "role": "coat", "stockSwatches": ["#95999E", "#93979D", "#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#717376", "#B3B6BB", "#76787A", "#A7AAB0", "#93979D", "#8B8E94", "#D2D2D8", "#7A7D7F", "#6B6C6E", "#616263"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 52, "role": "ink", "stockSwatches": ["#2E313C"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#B3B6BB", "#2E313C", "#B7BABF", "#95999F", "#717376", "#95999E", "#76787A", "#93979D", "#828588", "#7A7D7F", "#6B6C6E", "#8B8E94"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#E197B0"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#BC738A"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [18, 9, 19, 13], "pixels": 4, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#B7BABF"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#B3B6BB", "#2E313C", "#B7BABF", "#95999F", "#717376", "#95999E", "#7A7D7F", "#93979D", "#76787A", "#6B6C6E", "#4E4A49", "#828588", "#616263", "#8B8E94"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#E197B0"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#BC738A"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 15, 54, 16], "pixels": 1, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#717376"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#C1831A"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#C1831A"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#EA90A9", "#D87E97"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#353A44", "#4A4F58"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#434954"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#434954"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "american_shorthair": {
+      "sprite": "american_shorthair.aseprite",
+      "frozenStock": "reference/american_shorthair.png",
+      "visibleRgb": 25,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/american_shorthair.aseprite",
+        "approvedOverlays": [],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#373437", "#D4D5D6", "#919398", "#C4C5C8", "#A7A8AB", "#B5B6BA"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#C4C5C8"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 63], "pixels": 180, "role": "coat", "stockSwatches": ["#919398", "#8D8F93", "#989A9E", "#807B83", "#A7A8AB", "#B5B6BA", "#87858B", "#D4D5D6", "#797072", "#70574B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [15, 44, 61, 66], "pixels": 306, "role": "pale", "stockSwatches": ["#FDFDFD", "#C4C5C8", "#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#373437"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#D5D3DF", "#797072", "#989A9E", "#C4C5C8", "#8D8F93", "#A7A8AB", "#87858B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [19, 68, 27, 70], "pixels": 12, "role": "shade", "stockSwatches": ["#D5D3DF", "#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#373437"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#C4C5C8"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 37, 71], "pixels": 18, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#373437"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#C4C5C8"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 68, 48, 71], "pixels": 18, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#373437"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#C4C5C8", "#989A9E", "#8D8F93", "#D5D3DF", "#797072", "#87858B", "#807B83"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 68, 57, 70], "pixels": 13, "role": "shade", "stockSwatches": ["#FDFDFD", "#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#373437"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#C4C5C8", "#70574B", "#373437", "#D4D5D6", "#919398", "#B5B6BA", "#A7A8AB", "#807B83", "#989A9E", "#87858B", "#8D8F93"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 12, 46, 22], "pixels": 65, "role": "forehead", "stockSwatches": ["#8D8F93", "#87858B", "#919398", "#B5B6BA", "#807B83", "#989A9E"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 27, 30, 44], "pixels": 43, "role": "left", "stockSwatches": ["#919398", "#FDFDFD", "#989A9E", "#8D8F93", "#B5B6BA", "#D4D5D6", "#87858B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 27, 61, 44], "pixels": 42, "role": "right", "stockSwatches": ["#919398", "#FDFDFD", "#989A9E", "#A7A8AB", "#B5B6BA", "#D4D5D6"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 42, 45, 44], "pixels": 8, "role": "coat", "stockSwatches": ["#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#C4C5C8", "#B5B6BA", "#A7A8AB", "#919398", "#87858B", "#8D8F93", "#807B83", "#D4D5D6"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 52, "role": "ink", "stockSwatches": ["#373437"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#C4C5C8", "#373437", "#807B83", "#919398", "#87858B", "#8D8F93", "#D4D5D6", "#A7A8AB"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#DC92A9"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#CA809F"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [18, 9, 23, 20], "pixels": 7, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#C4C5C8", "#D4D5D6"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#C4C5C8", "#373437", "#807B83", "#989A9E", "#797072", "#87858B", "#919398", "#B5B6BA", "#70574B", "#8D8F93", "#594644"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#DC92A9"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#CA809F"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 9, 59, 20], "pixels": 11, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#C4C5C8", "#807B83", "#B5B6BA"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#326337"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#326337"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#E592AC", "#D3809A"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#3C373B", "#5C585B"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#4A464C"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#4A464C"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "CC11": {
+      "sprite": "CC11.aseprite",
+      "frozenStock": "reference/CC11.png",
+      "visibleRgb": 28,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/CC11.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/golden-flank-v37/flank.png",
+          "desktop/assets-pixel80/cat/golden-chin-v38/chin.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#543725", "#D0A164", "#704328", "#E5B770", "#8B572F", "#AE7443", "#C3945C", "#CB9053"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#DDAF6C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 607, "role": "coat", "stockSwatches": ["#F9E1B5", "#E1B36E", "#E9B97C", "#D0A164", "#E5B770", "#CB9053", "#F2CC98", "#BB8047"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": null, "pixels": 0, "role": "pale", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#543725"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#E9B97C", "#DDAF6C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#543725"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#F2CC98", "#DDAF6C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#E9B97C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#543725"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#F2CC98", "#DDAF6C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#E9B97C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#543725"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#E9B97C", "#DDAF6C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#543725"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#F9E2B7", "#E5B770", "#704328", "#543725", "#E1B36E", "#F6D8A9", "#E9B97C", "#F2CC98", "#F2CB90", "#DDAF6C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 328, "role": "forehead", "stockSwatches": ["#E5B770", "#D79D56", "#9E653A", "#BB8047", "#E1B36E", "#CB9053"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 148, "role": "left", "stockSwatches": ["#E1B36E", "#F2CB90", "#CB9053", "#E9B97C", "#E5B770"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 40], "pixels": 141, "role": "right", "stockSwatches": ["#E1B36E", "#F2CB90", "#CB9053", "#E9B97C", "#E5B770"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 35], "pixels": 98, "role": "coat", "stockSwatches": ["#E5B770", "#F2CB90", "#E9B97C"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#F6D8A9", "#F2CC98"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#543725"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#E1B36E", "#543725", "#BB8047", "#C3945C", "#D79D56", "#AF7E4F", "#E5B770", "#9E653A", "#D0A164"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#E1B36E", "#543725", "#BB8047", "#D79D56", "#C3945C", "#E5B770", "#9E653A", "#D0A164", "#AF7E4F"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA8894"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD6E78"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F6D8A9"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#7F985F"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F6D8A9"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#7F985F"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#ED8495", "#DB7283"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#543725", "#78593E"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#664831"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#664831"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "siamese": {
+      "sprite": "siamese.aseprite",
+      "frozenStock": "reference/siamese.png",
+      "visibleRgb": 26,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/siamese.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/shared-calico-body/body-index.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#39241E", "#794F35", "#946C51", "#81553A", "#6E472C"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#6E472C"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 63], "pixels": 444, "role": "coat", "stockSwatches": ["#F8E9D2", "#DAB591", "#6E472C", "#EDD7BB", "#794F35", "#39241E", "#FDF3E1", "#946C51", "#B98D6B", "#583620"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [26, 44, 51, 66], "pixels": 354, "role": "pale", "stockSwatches": ["#FDF3E1", "#E8CCAD", "#F8E9D2"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#39241E", "#341D0F"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 61, "role": "fur", "stockSwatches": ["#6E472C", "#583620", "#794F35"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 22, "role": "ink", "stockSwatches": ["#39241E", "#341D0F", "#583620"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 60, "role": "fur", "stockSwatches": ["#6E472C", "#FDF3E1"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 70], "pixels": 3, "role": "shade", "stockSwatches": ["#583620"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 22, "role": "ink", "stockSwatches": ["#39241E", "#341D0F", "#583620"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 62, "role": "fur", "stockSwatches": ["#6E472C", "#FDF3E1", "#F8E9D2"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 70], "pixels": 5, "role": "shade", "stockSwatches": ["#583620"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 20, "role": "ink", "stockSwatches": ["#39241E", "#341D0F", "#583620"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 59, "role": "fur", "stockSwatches": ["#6E472C", "#583620", "#794F35", "#EDD7BB", "#81553A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 24, "role": "ink", "stockSwatches": ["#39241E", "#341D0F", "#583620"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#FDF3E1", "#6E472C", "#39241E", "#794F35", "#81553A", "#EDD7BB", "#F8E9D2", "#946C51", "#E8CCAD", "#B98D6B", "#CBA17F", "#DAB591"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 89, "role": "forehead", "stockSwatches": ["#6E472C", "#B98D6B", "#EDD7BB", "#DAB591", "#E8CCAD", "#CBA17F", "#794F35", "#F8E9D2"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 117, "role": "left", "stockSwatches": ["#6E472C", "#EDD7BB", "#B98D6B", "#CBA17F", "#DAB591", "#E8CCAD", "#FCFCFC", "#F8E9D2", "#603C24", "#794F35"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 44], "pixels": 111, "role": "right", "stockSwatches": ["#6E472C", "#EDD7BB", "#CBA17F", "#B98D6B", "#E8CCAD", "#DAB591", "#FCFCFC", "#603C24", "#794F35", "#F8E9D2", "#81553A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 44], "pixels": 220, "role": "coat", "stockSwatches": ["#6E472C", "#E8CCAD", "#DAB591", "#FCFCFC", "#CBA17F", "#603C24", "#F8E9D2"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#E8CCAD", "#F8E9D2", "#EDD7BB", "#CBA17F"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 52, "role": "ink", "stockSwatches": ["#39241E"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#6E472C", "#39241E", "#FDF3E1", "#B98D6B", "#81553A", "#583620", "#603C24", "#794F35", "#E8CCAD", "#EDD7BB", "#F8E9D2", "#CBA17F"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA90A2"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#D16A72"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [20, 18, 21, 19], "pixels": 1, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#B98D6B"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#6E472C", "#39241E", "#FDF3E1", "#81553A", "#603C24", "#583620", "#EDD7BB", "#CBA17F", "#B98D6B", "#DAB591"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA90A2"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#D16A72"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 9, 56, 19], "pixels": 6, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#6E472C", "#81553A"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FBF8F0"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#6695D0"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FBF8F0"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#6695D0"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F092A5", "#DE8093"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#291B17", "#37241B"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#51382B"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#51382B"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "ragdoll": {
+      "sprite": "ragdoll.aseprite",
+      "frozenStock": "reference/ragdoll.png",
+      "visibleRgb": 28,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite",
+        "approvedOverlays": [],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#B38058", "#4E3124", "#CC9E75", "#C18B60"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 66], "pixels": 864, "role": "fur", "stockSwatches": ["#FAE8CB", "#F6DDBA", "#F2D4AE", "#EFCEA5", "#DADAE2", "#D5D3DF", "#CC9E75", "#CABFBE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 56, 61, 63], "pixels": 62, "role": "coat", "stockSwatches": ["#E9C396", "#E1B586", "#DCAD80", "#B38058"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [27, 44, 49, 62], "pixels": 186, "role": "pale", "stockSwatches": ["#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 67, "role": "structure", "stockSwatches": ["#4E3124", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#E1B586", "#DCAD80", "#E9C396", "#C69064", "#B38058", "#CABFBE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [23, 66, 27, 69], "pixels": 6, "role": "shade", "stockSwatches": ["#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#4E3124", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#F2D4AE", "#DCAD80"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#4E3124", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#D19D70", "#E9C396"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D5D3DF"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#4E3124", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#DCAD80", "#E1B586", "#FAE8CB", "#D19D70", "#C69064", "#B38058"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 66, 56, 70], "pixels": 9, "role": "shade", "stockSwatches": ["#D5D3DF"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#4E3124", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#FAE8CB", "#F6DDBA", "#F2D4AE", "#D19D70", "#C69064", "#4E3124", "#E9C396", "#FDFDFD", "#E1B586", "#DCAD80", "#EFCEA5"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 20, 60, 25], "pixels": 60, "role": "forehead", "stockSwatches": ["#C69064", "#EFCEA5", "#DCAD80", "#D19D70", "#E1B586", "#E9C396"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [19, 27, 30, 44], "pixels": 66, "role": "left", "stockSwatches": ["#D19D70", "#EFCEA5", "#DCAD80", "#E1B586", "#E9C396"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 28, 56, 41], "pixels": 64, "role": "right", "stockSwatches": ["#D19D70", "#DCAD80", "#EFCEA5", "#E1B586", "#C69064", "#E9C396"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 43], "pixels": 207, "role": "coat", "stockSwatches": ["#C69064", "#D19D70", "#DCAD80", "#EFCEA5", "#E1B586"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#F6DDBA", "#F2D4AE", "#EFCEA5", "#FAE8CB"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 52, "role": "ink", "stockSwatches": ["#4E3124"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#C69064", "#C18B60", "#4E3124", "#FAE8CB", "#DCAD80", "#B38058", "#D19D70", "#714729", "#E1B586", "#F2D4AE", "#F6DDBA", "#EFCEA5", "#CC9E75"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EEA9B9"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD8A95"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [17, 10, 19, 13], "pixels": 4, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#C18B60"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#C18B60", "#C69064", "#4E3124", "#FAE8CB", "#DCAD80", "#B38058", "#EFCEA5", "#E9C396", "#F6DDBA", "#634636", "#E1B586", "#CC9E75", "#F2D4AE", "#D19D70"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EEA9B9"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#DD8A95"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [57, 11, 59, 12], "pixels": 2, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#C18B60"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#478CC9"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FCFAF7"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#478CC9"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F19CAE", "#DF8A9C"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#493023", "#634636"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#634636"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#634636"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "li_hua": {
+      "sprite": "li_hua.aseprite",
+      "frozenStock": "reference/li_hua.png",
+      "visibleRgb": 30,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/li_hua.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/li-hua-v16/head.png",
+          "desktop/assets-pixel80/cat/li-hua-crown-v36/crown.png",
+          "desktop/assets-pixel80/cat/face-edges/shared-tabby-cheeks/stripes.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#312017", "#45332A", "#412F27", "#523E33", "#2C1D16", "#5A4439", "#6B5748", "#4B382C", "#655042", "#72564A", "#7F6857"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [15, 44, 62, 66], "pixels": 786, "role": "fur", "stockSwatches": ["#907967"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [15, 44, 62, 66], "pixels": 645, "role": "coat", "stockSwatches": ["#947E6C", "#B2987E", "#523E33", "#AE9178", "#6B5748", "#846E5D", "#8B7462", "#7F6857", "#5A4439", "#A78B74", "#977A64", "#72564A", "#4B382C", "#655042", "#866655", "#795A46", "#927561", "#412F27"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": null, "pixels": 0, "role": "pale", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 78, "role": "structure", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [17, 63, 27, 70], "pixels": 55, "role": "fur", "stockSwatches": ["#AE9178", "#5A4439", "#977A64", "#866655", "#6B5748", "#523E33", "#655042", "#795A46", "#72564A", "#A78B74", "#B2987E", "#412F27"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 28, "role": "ink", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 63, 37, 71], "pixels": 62, "role": "fur", "stockSwatches": ["#C3A88C", "#7F6857", "#947E6C"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#866655"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 38, 72], "pixels": 20, "role": "ink", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 48, 71], "pixels": 62, "role": "fur", "stockSwatches": ["#C3A88C", "#947E6C", "#7F6857"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#866655"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 63, 49, 72], "pixels": 20, "role": "ink", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 59, 70], "pixels": 55, "role": "fur", "stockSwatches": ["#AE9178", "#5A4439", "#977A64", "#866655", "#523E33", "#6B5748", "#655042", "#795A46", "#72564A", "#A78B74", "#B2987E", "#412F27"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 28, "role": "ink", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#B2987E", "#412F27", "#312017", "#977A64", "#A78B74", "#947E6C", "#907967", "#4B382C", "#AE9178", "#8B7462", "#9B705E", "#866655", "#45332A", "#927561"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 12, 59, 25], "pixels": 308, "role": "forehead", "stockSwatches": ["#8B7462", "#846E5D", "#907967", "#412F27", "#45332A", "#947E6C", "#4B382C", "#6B5748", "#AE9178", "#977A64", "#523E33", "#927561", "#655042", "#7F6857"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 136, "role": "left", "stockSwatches": ["#977A64", "#947E6C", "#927561", "#4B382C", "#AE9178", "#A78B74", "#6B5748", "#8B7462", "#655042", "#5A4439", "#907967", "#866655", "#523E33", "#7F6857", "#846E5D", "#72564A", "#412F27", "#45332A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 44], "pixels": 131, "role": "right", "stockSwatches": ["#977A64", "#907967", "#927561", "#AE9178", "#655042", "#947E6C", "#45332A", "#A78B74", "#846E5D", "#4B382C", "#8B7462", "#866655", "#523E33", "#6B5748", "#5A4439"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 44], "pixels": 70, "role": "coat", "stockSwatches": ["#8B7462", "#AE9178", "#927561", "#866655", "#907967", "#A78B74", "#9B705E", "#4B382C", "#977A64", "#C3A88C"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#A78B74", "#977A64"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 86, "role": "ink", "stockSwatches": ["#312017", "#2C1D16"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#866655", "#312017", "#846E5D", "#655042", "#A78B74", "#7F6857", "#795A46", "#5A4439", "#8B7462", "#72564A", "#907967", "#412F27", "#2C1D16", "#6B5748", "#3E2718", "#45332A", "#523E33", "#977A64"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#B58473"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#9B705E"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#795A46", "#312017", "#846E5D", "#8B7462", "#866655", "#655042", "#6B5748", "#5A4439", "#A78B74", "#907967", "#412F27", "#7F6857", "#4B382C", "#45332A", "#947E6C", "#3E2718", "#523E33", "#927561", "#2C1D16"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#B58473"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#9B705E"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F6EFE6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#2C1D16"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#F6DEC3"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#F6EFE6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#2C1D16"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#F6DEC3"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#C58273", "#C27D70"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#312017"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#312017"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#312017"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "CC10": {
+      "sprite": "CC10.aseprite",
+      "frozenStock": "reference/CC10.png",
+      "visibleRgb": 29,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/CC10.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/shared-calico-body/body-index.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#A26338", "#432C27", "#45291E", "#34282A", "#CB793D", "#291E22", "#805034"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 796, "role": "fur", "stockSwatches": ["#362D2D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 63], "pixels": 442, "role": "coat", "stockSwatches": ["#AF6A3A", "#34282A", "#362D2D", "#AC6839", "#352C2D", "#CB793D", "#A26338", "#45291E", "#734A33", "#2B2625"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [26, 44, 51, 66], "pixels": 354, "role": "pale", "stockSwatches": ["#362D2D", "#34282A", "#2B2625", "#352C2D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 68, "role": "structure", "stockSwatches": ["#291E22", "#45291E"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#362D2D", "#2B2625", "#352C2D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#45291E", "#291E22"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#362D2D", "#34282A"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#2B2625"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#45291E", "#291E22"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#362D2D", "#34282A", "#352C2D"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#2B2625"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#45291E", "#291E22"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#362D2D", "#2B2625", "#352C2D", "#AC6839"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": null, "pixels": 0, "role": "shade", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#45291E", "#291E22"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#34282A", "#2B2625", "#291E22", "#362D2D", "#32272A", "#B26B3A", "#45291E", "#AF6A3A", "#352C2D", "#AC6839", "#A26338", "#CB793D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 58, 25], "pixels": 282, "role": "forehead", "stockSwatches": ["#362D2D", "#AF6A3A", "#B26B3A", "#352C2D", "#AC6839", "#A26338", "#CB793D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 25, 35], "pixels": 80, "role": "left", "stockSwatches": ["#362D2D", "#352C2D", "#AC6839", "#B26B3A", "#AF6A3A", "#734A33", "#995E37", "#805034"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [51, 25, 61, 31], "pixels": 43, "role": "right", "stockSwatches": ["#AC6839", "#AF6A3A", "#B26B3A", "#5A3C30"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [31, 25, 45, 27], "pixels": 7, "role": "coat", "stockSwatches": ["#362D2D", "#352C2D", "#AC6839", "#CB793D", "#A26338"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#32272A", "#2B2625"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#291E22", "#45291E"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#362D2D", "#291E22", "#352C2D", "#AC6839", "#2B2625", "#AF6A3A", "#45291E", "#34282A", "#A26338", "#5A3C30", "#995E37"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#C96966"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#AC6839", "#AF6A3A", "#34282A", "#B26B3A", "#291E22", "#45291E", "#432C27", "#734A33", "#995E37", "#5A3C30", "#362D2D", "#623D3A", "#A26338"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#C96966"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 14, 54, 16], "pixels": 2, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#AC6839"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#D9A64C"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#D9A64C"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F18595", "#DF7383"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#C89D8F", "#AA867B"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#4C3840", "#68412F"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#4C3840"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "calico": {
+      "sprite": "calico.aseprite",
+      "frozenStock": "reference/calico.png",
+      "visibleRgb": 28,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/calico.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/shared-calico-body/body-index.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#494140", "#3E221D", "#F7C593", "#DF975B", "#FDFDFD", "#F2A45F", "#272120", "#CF854F", "#FDFCF8"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 66], "pixels": 864, "role": "fur", "stockSwatches": ["#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 63], "pixels": 390, "role": "coat", "stockSwatches": ["#F2A45F", "#393433", "#E78C4B", "#F7C593", "#D4713A", "#594036", "#794C33"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 57, 66], "pixels": 406, "role": "pale", "stockSwatches": ["#FDFDFD", "#D5D3DE", "#E7E6E9"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 68, "role": "structure", "stockSwatches": ["#381C11", "#272120", "#3E221D"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#D5D3DE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 22, "role": "shade", "stockSwatches": ["#D5D3DE", "#FDFDFD", "#E7E6E9"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#3E221D", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 35, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D5D3DE"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#3E221D", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [41, 68, 48, 71], "pixels": 7, "role": "shade", "stockSwatches": ["#D5D3DE"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#3E221D", "#381C11"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FDFDFD", "#E78C4B", "#DBC2B7", "#D5D3DE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 19, "role": "shade", "stockSwatches": ["#D5D3DE", "#FDFDFD"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#3E221D", "#381C11"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#FDFDFD", "#F2A45F", "#393433", "#3E221D", "#E7E6E9", "#594036"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 286, "role": "forehead", "stockSwatches": ["#393433", "#F2A45F", "#D4713A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 25, 44], "pixels": 87, "role": "left", "stockSwatches": ["#393433", "#F2A45F", "#E78C4B", "#E7E6E9", "#D4713A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [51, 25, 61, 39], "pixels": 58, "role": "right", "stockSwatches": ["#F2A45F", "#E7E6E9", "#D8D7DD", "#D4713A", "#E78C4B"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [31, 25, 45, 27], "pixels": 7, "role": "coat", "stockSwatches": ["#393433", "#F2A45F"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#E7E6E9", "#D8D7DD"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 55, "role": "ink", "stockSwatches": ["#3E221D", "#272120"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#393433", "#272120", "#F2A45F", "#3E221D", "#E78C4B", "#D4713A", "#794C33", "#CF854F", "#494140"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#D06566"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#F2A45F", "#3E221D", "#D4713A", "#E78C4B", "#813E1D"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#D06566"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [53, 14, 54, 16], "pixels": 2, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#D4713A"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#6B9756"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#6B9756"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F18595", "#DF7383"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#3E221D", "#6A5450"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#674235"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#594036"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    },
+    "CC12": {
+      "sprite": "CC12.aseprite",
+      "frozenStock": "reference/CC12.png",
+      "visibleRgb": 28,
+      "visibleTailPixels": 165,
+      "sources": {
+        "historicalLayers": "art/cat-pixel80/resting-v30/CC12.aseprite",
+        "approvedOverlays": [
+          "desktop/assets-pixel80/cat/shared-calico-body/body-index.png",
+          "desktop/assets-pixel80/cat/dilute-ear-mark-v27/left-crown.png"
+        ],
+        "eyeLayers": "art/cat-pixel80/resting-v30/ragdoll.aseprite"
+      },
+      "parts": [
+        {"geometryMode": "shared-guide", "id": "tail.CT05", "layer": "tail.CT05", "group": "01 Tail behind body", "order": 1, "part": "tail", "screenSide": "center", "anchor": [58, 66], "bounds": [55, 47, 70, 70], "pixels": 220, "role": "tail ground, pigment, structure", "stockSwatches": ["#838088", "#704F3E", "#F4D3B1", "#D7BEA8", "#FFFAF3", "#535D70", "#BCB3AF", "#E1C3A6"], "sharedGuide": "tail.CT05"},
+        {"geometryMode": "breed-specific", "id": "body.fur", "layer": "body.fur", "group": "02 Body", "order": 2, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 62, 66], "pixels": 798, "role": "fur", "stockSwatches": ["#60626A"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.coat", "layer": "body.coat", "group": "02 Body", "order": 3, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 44, 62, 63], "pixels": 275, "role": "coat", "stockSwatches": ["#E1C3A6", "#60626A", "#D7BEA8", "#535D70", "#F4D3B1", "#BCB3AF", "#705442", "#838088", "#EDEBE9"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.pale", "layer": "body.pale", "group": "02 Body", "order": 4, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [14, 44, 57, 66], "pixels": 405, "role": "pale", "stockSwatches": ["#FFFAF3", "#EDEBE9", "#F7F3EE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "body.structure", "layer": "body.structure", "group": "02 Body", "order": 5, "part": "body", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 44, 63, 64], "pixels": 66, "role": "structure", "stockSwatches": ["#535D70"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.fur", "layer": "paw.rear.left.fur", "group": "03 Paws", "order": 6, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [16, 63, 27, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FFFAF3", "#EDEBE9"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.shade", "layer": "paw.rear.left.shade", "group": "03 Paws", "order": 7, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [19, 68, 23, 70], "pixels": 7, "role": "shade", "stockSwatches": ["#FFFAF3", "#F7F3EE"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.left.ink", "layer": "paw.rear.left.ink", "group": "03 Paws", "order": 8, "part": "paw", "screenSide": "left", "anchor": [22, 63], "bounds": [15, 63, 28, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#535D70"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.fur", "layer": "paw.front.left.fur", "group": "03 Paws", "order": 9, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 63, 37, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FFFAF3"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.shade", "layer": "paw.front.left.shade", "group": "03 Paws", "order": 10, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [28, 68, 37, 71], "pixels": 18, "role": "shade", "stockSwatches": ["#FFFAF3", "#EDEBE9"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.left.ink", "layer": "paw.front.left.ink", "group": "03 Paws", "order": 11, "part": "paw", "screenSide": "left", "anchor": [32, 63], "bounds": [27, 64, 38, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#535D70"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.fur", "layer": "paw.front.right.fur", "group": "03 Paws", "order": 12, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 63, 49, 71], "pixels": 64, "role": "fur", "stockSwatches": ["#FFFAF3"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.shade", "layer": "paw.front.right.shade", "group": "03 Paws", "order": 13, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [39, 68, 48, 71], "pixels": 15, "role": "shade", "stockSwatches": ["#FFFAF3", "#EDEBE9"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "shared-guide", "id": "paw.front.right.ink", "layer": "paw.front.right.ink", "group": "03 Paws", "order": 14, "part": "paw", "screenSide": "right", "anchor": [43, 63], "bounds": [38, 64, 49, 72], "pixels": 18, "role": "ink", "stockSwatches": ["#535D70"], "sharedGuide": "paw.front.glove-guide"},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.fur", "layer": "paw.rear.right.fur", "group": "03 Paws", "order": 15, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [49, 63, 60, 70], "pixels": 64, "role": "fur", "stockSwatches": ["#FFFAF3", "#EDEBE9", "#D7BEA8"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.shade", "layer": "paw.rear.right.shade", "group": "03 Paws", "order": 16, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [52, 68, 57, 70], "pixels": 8, "role": "shade", "stockSwatches": ["#FFFAF3"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "paw.rear.right.ink", "layer": "paw.rear.right.ink", "group": "03 Paws", "order": 17, "part": "paw", "screenSide": "right", "anchor": [53, 63], "bounds": [48, 63, 61, 71], "pixels": 19, "role": "ink", "stockSwatches": ["#535D70"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.fur", "layer": "head.fur", "group": "04 Head and crown", "order": 18, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 1344, "role": "fur", "stockSwatches": ["#63666F", "#FFFAF3", "#535D70", "#E1C3A6", "#F7F3EE", "#676A73", "#838088", "#EDEBE9", "#705442", "#60626A", "#D7BEA8"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.forehead", "layer": "head.forehead", "group": "04 Head and crown", "order": 19, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [16, 12, 60, 25], "pixels": 258, "role": "forehead", "stockSwatches": ["#E1C3A6", "#676A73", "#FFFAF3", "#60626A", "#D7BEA8", "#8D95A7", "#F4D3B1", "#838088", "#363335"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.left", "layer": "head.cheek.left", "group": "04 Head and crown", "order": 20, "part": "head", "screenSide": "left", "anchor": [0, 0], "bounds": [14, 25, 30, 44], "pixels": 157, "role": "left", "stockSwatches": ["#FFFAF3", "#E1C3A6", "#60626A", "#676A73", "#F7F3EE", "#BCB3AF", "#D7BEA8", "#8D95A7", "#838088", "#363335"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.cheek.right", "layer": "head.cheek.right", "group": "04 Head and crown", "order": 21, "part": "head", "screenSide": "right", "anchor": [0, 0], "bounds": [45, 25, 61, 44], "pixels": 185, "role": "right", "stockSwatches": ["#FFFAF3", "#E1C3A6", "#F7F3EE", "#363335", "#8D95A7", "#A9ABB4", "#EDEBE9"], "sharedGuide": null},
+        {"geometryMode": "breed-specific", "id": "head.coat", "layer": "head.coat", "group": "04 Head and crown", "order": 22, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [30, 25, 45, 44], "pixels": 236, "role": "coat", "stockSwatches": ["#FFFAF3", "#676A73", "#60626A", "#E1C3A6", "#F4D3B1", "#D7BEA8"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "head.chin", "layer": "head.chin", "group": "04 Head and crown", "order": 23, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [17, 39, 58, 44], "pixels": 55, "role": "two local under-chin shadow tiers", "stockSwatches": ["#F7F3EE", "#EDEBE9"], "sharedGuide": "chin.split"},
+        {"geometryMode": "breed-specific", "id": "head.ink", "layer": "head.ink", "group": "04 Head and crown", "order": 24, "part": "head", "screenSide": "center", "anchor": [0, 0], "bounds": [13, 11, 62, 44], "pixels": 53, "role": "ink", "stockSwatches": ["#535D70", "#704F3E"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.left.outer", "layer": "ear.left.outer", "group": "05 Left ear", "order": 25, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [15, 5, 33, 23], "pixels": 188, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#63666F", "#676A73", "#E1C3A6", "#60626A", "#535D70", "#765947", "#D7BEA8", "#566173", "#A9ABB4", "#363335", "#8D95A7", "#838088"], "sharedGuide": "ear.CE01.left"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.main", "layer": "ear.left.liner.main", "group": "05 Left ear", "order": 26, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 10, 22, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.left.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.left.liner.shadow", "layer": "ear.left.liner.shadow", "group": "05 Left ear", "order": 27, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": [19, 9, 22, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#C96966"], "sharedGuide": "ear.CE01.lining.left.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.left.liner.fringe", "layer": "ear.left.liner.fringe", "group": "05 Left ear", "order": 28, "part": "ear", "screenSide": "left", "anchor": [27, 12], "bounds": null, "pixels": 0, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": [], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "ear.right.outer", "layer": "ear.right.outer", "group": "05 Right ear", "order": 29, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [42, 5, 61, 23], "pixels": 200, "role": "ear fur, markings, outline and fur behind lining", "stockSwatches": ["#E1C3A6", "#8D95A7", "#765947", "#535D70", "#A9ABB4", "#838088", "#D7BEA8", "#BCB3AF", "#676A73", "#60626A", "#704F3E"], "sharedGuide": "ear.CE01.right"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.main", "layer": "ear.right.liner.main", "group": "05 Right ear", "order": 30, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 10, 57, 18], "pixels": 18, "role": "main", "stockSwatches": ["#EA7F8F"], "sharedGuide": "ear.CE01.lining.right.main"},
+        {"geometryMode": "shared-mask-with-local-swatch", "id": "ear.right.liner.shadow", "layer": "ear.right.liner.shadow", "group": "05 Right ear", "order": 31, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [54, 9, 57, 19], "pixels": 6, "role": "shadow", "stockSwatches": ["#C96966"], "sharedGuide": "ear.CE01.lining.right.shadow"},
+        {"geometryMode": "breed-specific", "id": "ear.right.liner.fringe", "layer": "ear.right.liner.fringe", "group": "05 Right ear", "order": 32, "part": "ear", "screenSide": "right", "anchor": [48, 12], "bounds": [52, 14, 54, 16], "pixels": 4, "role": "compatibility pixels outside the CE01 two-tone roles", "stockSwatches": ["#E1C3A6", "#8D95A7"], "sharedGuide": null},
+        {"geometryMode": "shared-guide", "id": "eye.left.shape", "layer": "eye.left.shape", "group": "06 Left eye", "order": 33, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [23, 24, 33, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.pupil", "layer": "eye.left.pupil", "group": "06 Left eye", "order": 34, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [24, 25, 32, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#627247"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.left.glint", "layer": "eye.left.glint", "group": "06 Left eye", "order": 35, "part": "eye", "screenSide": "left", "anchor": [27, 27], "bounds": [28, 27, 30, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.left"},
+        {"geometryMode": "shared-guide", "id": "eye.right.shape", "layer": "eye.right.shape", "group": "06 Right eye", "order": 36, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [43, 24, 53, 34], "pixels": 24, "role": "eye rim", "stockSwatches": ["#FDFCF8"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.pupil", "layer": "eye.right.pupil", "group": "06 Right eye", "order": 37, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [44, 25, 52, 33], "pixels": 52, "role": "pupil", "stockSwatches": ["#627247"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "eye.right.glint", "layer": "eye.right.glint", "group": "06 Right eye", "order": 38, "part": "eye", "screenSide": "right", "anchor": [49, 27], "bounds": [48, 27, 50, 29], "pixels": 4, "role": "glint", "stockSwatches": ["#FFFDF6"], "sharedGuide": "eye.Y01.right"},
+        {"geometryMode": "shared-guide", "id": "face.nose", "layer": "face.nose", "group": "07 Nose mouth and whiskers", "order": 39, "part": "face", "screenSide": "center", "anchor": [37, 30], "bounds": [36, 30, 39, 32], "pixels": 6, "role": "nose light and shade rows", "stockSwatches": ["#F2B1BA", "#E09FA8"], "sharedGuide": "nose.NO05"},
+        {"geometryMode": "shared-guide", "id": "face.mouth", "layer": "face.mouth", "group": "07 Nose mouth and whiskers", "order": 40, "part": "face", "screenSide": "center", "anchor": [37, 32], "bounds": [32, 32, 43, 37], "pixels": 14, "role": "philtrum and smile ink", "stockSwatches": ["#594036", "#84685F"], "sharedGuide": "mouth.CN08"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.left", "layer": "face.whiskers.left", "group": "07 Nose mouth and whiskers", "order": 41, "part": "face", "screenSide": "left", "anchor": [0, 0], "bounds": [11, 31, 16, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#566173", "#765947", "#705442"], "sharedGuide": "whiskers.B3.left"},
+        {"geometryMode": "shared-guide", "id": "face.whiskers.right", "layer": "face.whiskers.right", "group": "07 Nose mouth and whiskers", "order": 42, "part": "face", "screenSide": "right", "anchor": [0, 0], "bounds": [60, 31, 65, 39], "pixels": 11, "role": "three B3 marks in local ink", "stockSwatches": ["#566173", "#765947", "#705442"], "sharedGuide": "whiskers.B3.right"}
+      ]
+    }
+  }
+}

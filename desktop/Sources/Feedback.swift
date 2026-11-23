@@ -104,6 +104,7 @@ enum FeedbackClient {
 }
 
 struct FeedbackSheet: View {
+    @FocusState private var editingMessage: Bool
     @Binding var draft: FeedbackDraft
     let palette: PixelPalette
     @Environment(\.dismiss) private var dismiss
@@ -150,8 +151,15 @@ struct FeedbackSheet: View {
                     .scrollContentBackground(.hidden)
                     .padding(5)
                     .frame(height: 150)
+                    .focused($editingMessage)
+                    .foregroundStyle(palette.ink)
                     .background(PixelBox(corner: 2).fill(palette.panelDeep))
-                    .overlay(PixelBox(corner: 2).stroke(palette.borderSoft, lineWidth: 1))
+                    .overlay {
+                        let focused = editingMessage
+                        PixelBox(corner: 2, inset: 0.5)
+                            .stroke(focused ? palette.accentDeep : palette.borderSoft, lineWidth: focused ? 2 : 1)
+                            .allowsHitTesting(false)
+                    }
                     .accessibilityLabel("修改意见")
                     .accessibilityIdentifier("feedback-message")
                     .disabled(!editable)
@@ -174,11 +182,11 @@ struct FeedbackSheet: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button(sent ? "完成" : "关闭") { dismiss() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
+                    .workbenchButton(palette: palette)
                     .disabled(sending)
                 if !sent {
                     Button(sending ? "提交中…" : "提交") { submit() }
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                        .workbenchButton(palette: palette, prominent: true)
                         .accessibilityIdentifier("feedback-submit")
                         .disabled(!canSubmit)
                 }
@@ -188,7 +196,11 @@ struct FeedbackSheet: View {
         .foregroundStyle(palette.ink)
         .padding(20)
         .frame(width: 460)
-        .background(PixelBackdrop(palette: palette))
+        .background {
+            WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 9, framed: true)
+                .padding(4)
+                .background(palette.background)
+        }
         .interactiveDismissDisabled(sending)
     }
 

@@ -1,110 +1,203 @@
 import { catPetLove } from './pet-assets';
 
-export const catPetLoveFrameDuration = catPetLove.frameDuration;
-export const catPetLoveFrameCount = catPetLove.frames;
-
-// Upper chest settles before the bow. The face leads the ears back up;
-// the chest stays low until the head has almost recovered.
-const catPetLovePoses = [
-  [0, 0, 0, 0], [0, 0, 0, 0], [0, 1, 0, 0], [1, 1, 0, 0],
-  [2, 2, 0, 3], [3, 2, 1, 8], [4, 3, 2, 15], [5, 3, 3, 25],
-  [6, 3, 4, 36], [6, 3, 5, 47], [7, 3, 6, 57], [7, 3, 7, 64],
-  [7, 3, 7, 67], [7, 3, 7, 67], [7, 3, 7, 65], [7, 3, 7, 61],
-  [7, 3, 7, 55], [7, 3, 7, 50], [6, 3, 6, 45], [6, 3, 6, 39],
-  [5, 3, 5, 32], [4, 3, 4, 26], [3, 2, 3, 20], [2, 2, 2, 14],
-  [2, 1, 1, 9], [1, 1, 1, 5], [0, 1, 0, 2], [0, 0, 0, 0],
-  [0, 0, 0, 0], [0, 0, 0, 0],
-] as const satisfies { length: typeof catPetLove.frames };
+export const catPetLoveDuration = catPetLove.frames * catPetLove.frameDuration;
+// Sample the curve on the display callback. Finer clock buckets prevent
+// a slightly early 60 Hz callback from reusing the preceding pose number.
+export const catPetLoveFrameDuration = 1000 / 120;
+export const catPetLoveFrameCount = Math.ceil(catPetLoveDuration / catPetLoveFrameDuration);
 
 export function catPetLoveFrameAt(elapsedMs: number): number | undefined {
-  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return undefined;
-  const frame = Math.floor(elapsedMs / catPetLoveFrameDuration);
-  return frame < catPetLoveFrameCount ? frame : undefined;
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= catPetLoveDuration) return undefined;
+  return Math.min(catPetLoveFrameCount - 1, Math.floor(elapsedMs / catPetLoveFrameDuration));
 }
+
+const smooth = (start: number, end: number, position: number) => {
+  const t = Math.min(1, Math.max(0, (position - start) / (end - start)));
+  return t * t * (3 - 2 * t);
+};
+
+// Build 90's 30 tail poses, 48 ms apart. Only the sampling cadence changes.
+const originalTailSweep = [
+  0, 0, 0, 0, 3, 8, 15, 25, 36, 47, 57, 64, 67, 67, 65,
+  61, 55, 50, 45, 39, 32, 26, 20, 14, 9, 5, 2, 0, 0, 0,
+] as const satisfies { length: typeof catPetLove.frames };
 
 export function catPetLovePose(frame: number | undefined) {
-  if (frame === undefined) return;
-  const key = catPetLovePoses[frame];
-  if (!key) return;
-  const [drop, shoulders, crease, sweep] = key;
-  return { frame, drop, shoulders, crease, sweep, squint: frame >= 1 && frame <= 26 };
+  if (frame === undefined || frame < 0 || frame >= catPetLoveFrameCount) return undefined;
+  const time = frame * catPetLoveFrameDuration;
+  const arc = (a: number, b: number, c: number, d: number) =>
+    smooth(a, b, time) * (1 - smooth(c, d, time));
+  const phase = time / catPetLove.frameDuration;
+  const first = Math.floor(phase);
+  const a = originalTailSweep[first]!;
+  const b = originalTailSweep[first + 1] ?? a;
+  return {
+    shoulders: 2.5 * arc(32, 390, 945, 1310),
+    bow: 6 * arc(85, 540, 825, 1285),
+    ears: arc(165, 570, 830, 1250),
+    tail: a + (b - a) * (phase - first),
+    squint: time >= 52 && time < 1260,
+    heartFrame: Math.min(catPetLove.frames - 1, Math.floor(time / catPetLove.frameDuration)),
+  };
 }
 
-const gridSize = 80;
+export const petLoveGrid = 80;
 const center = 37.5;
-const unit = (x: number) => Math.min(1, Math.max(0, x));
+// A transparent marker stops seam repair from closing authored holes.
+export const petLoveClear = 1;
+const opaque = (value: number) => value >>> 24 !== 0;
 
-function copyCell(source: ImageData, target: ImageData, sx: number, sy: number, x: number, y: number) {
-  const from = (sy * gridSize + sx) * 4;
-  target.data.set(source.data.subarray(from, from + 4), (y * gridSize + x) * 4);
-}
-
-function headRows(drop: number) {
-  // Give the brow less travel than the nose. Ease the chin up into the neck
-  // while carrying the existing eye and nose sprites at an integral offset.
-  const destinations = Array.from({ length: gridSize }, (_, y) => {
-    const brow = 0.64 + 0.36 * unit((y - 12) / 10);
-    const chin = 1 - 0.32 * unit((y - 38) / 6);
-    return y + Math.round(drop * brow * chin);
-  });
-  let sourceY = 0;
-  return destinations.map((_, y) => {
-    if (y < destinations[0]!) return -1;
-    while (sourceY < gridSize - 1 && destinations[sourceY + 1]! <= y) sourceY++;
-    return sourceY;
-  });
-}
-
-export function warpCatPetLoveHead(source: ImageData, target: ImageData, drop: number, crease: number) {
-  const root = 20;
-  const rows = headRows(drop);
-  for (let y = 0; y < gridSize; y++) {
-    const headY = rows[y]!;
-    if (headY < 0) continue;
-    for (let x = 0; x < gridSize; x++) {
-      const side = unit((Math.abs(x - center) - 6) / 12);
-      const squeeze = 1 - crease * side / 17;
-      const rawY = headY < root ? root + (headY - root) / squeeze : headY;
-      const spread = 1 + crease * Math.min(14, Math.max(0, root - rawY)) / 420;
-      const sx = Math.round(center + (x - center) / spread), sy = Math.round(rawY);
-      if (sx >= 0 && sy >= 0 && sx < gridSize && sy < gridSize) copyCell(source, target, sx, sy, x, y);
-    }
-  }
-  if (!crease) return;
-  // Reapply the original one-cell rim where ear compression skips it.
-  for (let x = 0; x < gridSize; x++) {
-    for (let y = 0; y < drop + root; y++) {
-      const into = (y * gridSize + x) * 4;
-      if (!target.data[into + 3]) continue;
-      const sx = Math.round(center + (x - center) / (1 + crease / 30));
-      for (let sy = 0; sy < root; sy++) {
-        if (!source.data[(sy * gridSize + sx) * 4 + 3]) continue;
-        copyCell(source, target, sx, sy, x, y);
-        break;
+function visitInteriorGaps(pixels: Uint32Array, left: number, top: number, right: number, bottom: number,
+  visit: (cells: number[]) => void,
+) {
+  const grid = petLoveGrid;
+  const visited = new Uint8Array(grid * grid);
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const first = y * grid + x;
+      if (visited[first] || opaque(pixels[first]!)) continue;
+      visited[first] = 1;
+      const cells = [first];
+      let open = false;
+      for (const cell of cells) {
+        const cx = cell % grid, cy = Math.floor(cell / grid);
+        if (cx === left || cx === right || cy === top || cy === bottom) open = true;
+        if (cx > left) add(cell - 1);
+        if (cx < right) add(cell + 1);
+        if (cy > top) add(cell - grid);
+        if (cy < bottom) add(cell + grid);
       }
-      break;
+      if (!open) visit(cells);
+      function add(i: number) {
+        if (visited[i] || opaque(pixels[i]!)) return;
+        visited[i] = 1;
+        cells.push(i);
+      }
     }
   }
 }
 
-export function warpCatPetLoveShoulders(source: ImageData, target: ImageData, amount: number) {
-  const collarY = 44, pawY = 56;
-  target.data.set(source.data);
-  for (let y = collarY; y < pawY; y++) {
-    const height = (pawY - y) / (pawY - collarY);
-    const shoulderFade = unit((53 - y) / 8);
-    const chestFollow = amount === 3 ? 0.75 + 0.25 * shoulderFade : shoulderFade;
-    for (let x = 15; x <= 58; x++) {
-      const distance = Math.abs(x - center);
-      const side = unit((distance - 8) / 6);
-      // Keep the neck's leading edge attached while the outer shoulder
-      // line rounds down. Fade the pull out before the exposed tail.
-      const edge = x < center ? unit((x - 15) / 4) : unit((58 - x) / 4);
-      const settle = Math.round(amount * height * chestFollow * edge * (0.5 + 0.5 * side));
-      const collar = y - Math.min(settle, y - collarY);
-      const sy = side < 0.5 ? collar : y - settle;
-      const sx = x + Math.sign(x - center) * Math.round(amount / 3 * height * side * edge);
-      copyCell(source, target, sx, sy, x, y);
+export function protectPetLoveTailOpenings(tail: Uint32Array) {
+  let opening = petLoveClear + 1;
+  visitInteriorGaps(tail, 0, 0, petLoveGrid - 1, petLoveGrid - 1, cells => {
+    if (cells.some(i => tail[i] === petLoveClear)) return;
+    for (const i of cells) tail[i] = opening;
+    opening++;
+  });
+}
+
+type LovePose = NonNullable<ReturnType<typeof catPetLovePose>>;
+
+export function warpPetLove(pixels: Uint32Array, target: Uint32Array, pose: LovePose) {
+  const grid = petLoveGrid;
+  // Invert one continuous, monotonic deformation from ear to shoulder.
+  // The forward knots taper to zero above the stationary paws.
+  const from = [0, 12, 21, 35, 44, 52, 57, 79];
+  const { bow, shoulders, ears } = pose;
+  const to = [0, 12 + bow * .62, 21 + bow * .88, 35 + bow,
+    44 + bow * .48 + shoulders * .62, 52 + shoulders, 57, 79];
+  const rows = new Float64Array(grid);
+  let segment = 0;
+  for (let y = 0; y < grid; y++) {
+    while (segment < from.length - 2 && y > to[segment + 1]!) segment++;
+    const f = (y - to[segment]!) / (to[segment + 1]! - to[segment]!);
+    rows[y] = from[segment]! + f * (from[segment + 1]! - from[segment]!);
+  }
+  for (let y = 0; y < grid; y++) {
+    const sampleY = rows[y]!;
+    const earWeight = ears * (1 - smooth(5, 23, sampleY));
+    const spread = 1 + earWeight * .13;
+    const row = y * grid;
+    for (let x = 0; x < grid; x++) {
+      const dx = x - center;
+      const earSide = smooth(6, 18, Math.abs(dx));
+      const sy = Math.round(sampleY - 2 * earWeight * earSide);
+      const sx = Math.round(center + dx / spread);
+      const sample = sy * grid + sx;
+      target[row + x] = sy >= 0 ? pixels[sample]! : 0;
     }
+  }
+}
+
+export function drawPetLoveTail(tail: Uint32Array, target: Uint32Array, degrees: number, rootY: number, bent: boolean,
+  edits: ReadonlySet<number>,
+) {
+  const grid = petLoveGrid;
+  const rootX = 58;
+  const rad = degrees * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const height = bent ? 1 - degrees / 330 : 1;
+  const ownership = edits.size ? new Uint8Array(grid * grid) : undefined;
+  const drawn = new Set<number>();
+  // Match the original pivot and inverse rotation, with the current seated
+  // pixels in front of the complete tail. Nearest-neighbor keeps 80px ink.
+  for (let y = 32; y < grid; y++) {
+    const dy = y + .5 - rootY;
+    for (let x = 46; x < grid; x++) {
+      const i = y * grid + x;
+      if (target[i]) continue;
+      const dx = x + .5 - rootX;
+      const sx = Math.floor(rootX + cos * dx + sin * dy);
+      const sy = Math.floor(rootY + (-sin * dx + cos * dy) / height);
+      if (sx < 0 || sx >= grid || sy < 0 || sy >= grid) continue;
+      const sample = sy * grid + sx;
+      target[i] = tail[sample]!;
+      if (ownership && target[i]) {
+        ownership[i] = edits.has(sample) ? 2 : 1;
+        if (ownership[i] === 2) drawn.add(sample);
+      }
+    }
+  }
+  // A one-cell brush mark can fall between two inverse samples. Put it
+  // back on the nearest rotated tail pixel, respecting body occlusion.
+  if (ownership) for (const sample of edits) {
+    if (drawn.has(sample)) continue;
+    const dx = sample % grid + .5 - rootX;
+    const dy = (Math.floor(sample / grid) + .5 - rootY) * height;
+    const x = rootX + cos * dx - sin * dy;
+    const y = rootY + sin * dx + cos * dy;
+    const cx = Math.floor(x), cy = Math.floor(y);
+    if (cx < 1 || cx >= grid - 1 || cy < 1 || cy >= grid - 1 || (target[cy * grid + cx] && !ownership[cy * grid + cx])) continue;
+    let nearest = -1, distance = Infinity;
+    for (let row = cy - 1; row <= cy + 1; row++) {
+      for (let col = cx - 1; col <= cx + 1; col++) {
+        const i = row * grid + col;
+        const error = (col + .5 - x) ** 2 + (row + .5 - y) ** 2;
+        if (ownership[i] === 1 && opaque(target[i]!) && error < distance) {
+          nearest = i;
+          distance = error;
+        }
+      }
+    }
+    if (nearest >= 0) {
+      target[nearest] = tail[sample]!;
+      ownership[nearest] = 2;
+    }
+  }
+  // Close raster gaps at the join. If nearest-neighbor rotation splits
+  // a curled tail's original opening, keep its connected main component.
+  const gaps: number[][] = [];
+  const openings = new Map<number, number[]>();
+  visitInteriorGaps(target, 55, 44, grid - 1, grid - 1, cells => {
+    gaps.push(cells);
+    for (const i of cells) {
+      const mark = target[i]!;
+      if (mark > petLoveClear && (openings.get(mark)?.length ?? 0) < cells.length) openings.set(mark, cells);
+    }
+  });
+  const keep = new Set(openings.values());
+  for (const cells of gaps) {
+    if (keep.has(cells) || cells.some(i => target[i] === petLoveClear)) continue;
+    if (cells.every(i => !target[i]) && cells.some(i => i % grid > 67)) continue;
+    let fur = 0;
+    let at = grid;
+    for (const i of cells) {
+      const x = i % grid;
+      if (x < at && opaque(target[i - 1]!)) {
+        at = x;
+        fur = target[i - 1]!;
+      }
+    }
+    if (fur) for (const i of cells) target[i] = fur;
   }
 }

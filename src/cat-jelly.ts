@@ -1,5 +1,7 @@
 import { CAT_SIZE } from './pet-assets';
 
+export const dragHoldStrength = 0.4;
+
 export type JellyPose = { head: number; body: number; tail: number };
 type SpringState = { position: number; velocity: number };
 type Spring = { stiffness: number; damping: number };
@@ -29,7 +31,7 @@ const parts = ['head', 'body', 'tail'] as const;
 
 export class CatJellyMotion {
   private state = { head: stopped(), body: stopped(), tail: stopped() };
-  private samples: { at: number; value: number }[] = [];
+  private samples: { at: number; value: number; hold: number }[] = [];
   private time: number | undefined;
   private releasedAt: number | undefined;
 
@@ -47,10 +49,12 @@ export class CatJellyMotion {
   drag(dx: number, elapsed: number, now: number) {
     if (this.time === undefined || this.releasedAt !== undefined) return;
     this.advanceDrag(now);
-    const speed = dx * 1000 / Math.max(1, elapsed);
+    // After a pause, the event interval includes the dwell as well as the move.
+    const speed = dx * 1000 / clamp(elapsed, 1, 120);
     const strength = clamp((Math.abs(speed) - 8) / (900 - 45), 0, 1);
-    const value = Math.sign(speed) * Math.pow(strength, 0.72);
-    this.samples.push({ at: now, value });
+    const hold = dx ? Math.sign(dx) * dragHoldStrength : this.samples.at(-1)?.hold ?? dragHoldStrength;
+    const value = Math.sign(hold) * Math.max(dragHoldStrength, Math.pow(strength, 0.72));
+    this.samples.push({ at: now, value, hold });
     while (this.samples[1] && this.samples[1].at < now - 300) this.samples.shift();
   }
 
@@ -102,10 +106,13 @@ export class CatJellyMotion {
   }
 
   private targetAt(at: number) {
-    // A stopped mouse sends no events. Let the last sample fade while held.
+    // Ease from the velocity response into a held pose until mouse-up.
     for (let i = this.samples.length - 1; i >= 0; i--) {
       const sample = this.samples[i]!;
-      if (sample.at <= at) return sample.value * clamp((120 - (at - sample.at)) / 75, 0, 1);
+      if (sample.at <= at) {
+        const moving = clamp((120 - (at - sample.at)) / 75, 0, 1);
+        return sample.hold + (sample.value - sample.hold) * moving;
+      }
     }
     return 0;
   }
@@ -119,8 +126,7 @@ const smooth = (start: number, end: number, position: number) => {
   return t * t * (3 - 2 * t);
 };
 
-export function splitJellySprite(image: ImageData, tailMask?: Uint8Array): JellySprite {
-  const pixels = new Uint32Array(image.data.buffer);
+export function splitJellySprite(pixels: Uint32Array, tailMask?: Uint8Array): JellySprite {
   const rows: (TailRow | undefined)[] = [];
   let top = size, root = 0, attachment = size;
   if (tailMask) {
@@ -196,6 +202,25 @@ export function warpJellySprite(sprite: JellySprite, pose: JellyPose, front: Ima
     for (let x = start; x < end; x++) {
       const sx = Math.floor(tailRow.left + (x + 0.5 - left) / tailScale);
       if (tailMask?.[row + sx]) background[row + x] = pixels[row + sx]!;
+    }
+  }
+}
+
+
+export function warpStretchSprite(pixels: Uint32Array, stretch: number, target: ImageData) {
+  const output = new Uint32Array(target.data.buffer);
+  const headShift = 2 * Math.round(stretch * 7);
+  for (let y = 0; y < size; y++) {
+    // Keep the sit's original ground anchor and taper the move into the planted paws.
+    const weight = 1 - smooth(204, 236, y);
+    const scaleX = 1 + Math.abs(stretch) * 0.11 * weight;
+    const scaleY = 1 - Math.abs(stretch) * 0.055 * weight;
+    const sourceY = Math.floor(278 + (y + 0.5 - 278) / scaleY);
+    const hinge = 160 + scaleX * headShift * (1 - smooth(143, 204, sourceY));
+    for (let x = 0; x < size; x++) {
+      const sourceX = Math.floor(160 + (x + 0.5 - hinge) / scaleX);
+      output[y * size + x] = sourceY >= 0 && sourceY < size && sourceX >= 0 && sourceX < size
+        ? pixels[sourceY * size + sourceX]! : 0;
     }
   }
 }

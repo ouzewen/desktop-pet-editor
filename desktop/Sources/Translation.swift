@@ -202,23 +202,20 @@ final class TranslationService {
 struct TranslationButtonCard: View {
     var onTap: () -> Void = {}
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     var body: some View {
         Button(action: onTap) {
-            Text("翻译")
-                .font(PixelFont.font(12))
-                .foregroundStyle(palette.ink)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(PixelBox(corner: 2).fill(palette.panel))
-                .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
-                .background(PixelBox(corner: 2).fill(palette.shadow).offset(x: 2, y: 2))
-                .contentShape(Rectangle())
+            HStack(spacing: 5) {
+                PixelGlyph(kind: .clip, color: palette.ink, size: 10)
+                Text("翻译")
+            }
         }
-        .buttonStyle(.plain)
+        .workbenchButton(palette: palette)
+        .padding(3)
+        .workbenchCardSurface(theme)
         .help("翻译选中的英文")
     }
 }
@@ -238,48 +235,38 @@ struct TranslationCard: View {
     var onClose: () -> Void = {}
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @State private var copied = false
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                Text("翻译")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Spacer(minLength: 6)
-                Button(action: onClose) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("关闭")
+            WorkbenchCardHeading(title: "翻译", glyph: .clip, palette: palette) {
+                WorkbenchCardIconButton(glyph: .close, title: "关闭翻译", palette: palette, action: onClose)
             }
 
             switch state {
             case .loading:
                 Text("翻译中…")
-                    .font(PixelFont.font(11))
+                    .font(.system(size: 11))
                     .foregroundStyle(palette.inkSoft)
                     .padding(.vertical, 4)
             case .failure:
                 Text("翻不出来，再试一次。")
-                    .font(PixelFont.font(11))
-                    .foregroundStyle(palette.inkSoft)
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.red)
                     .padding(.vertical, 4)
             case .permission:
                 Text("需要在「系统设置 › 隐私与安全性 › 辅助功能」里允许桌宠，才能读取你选中的文字。")
-                    .font(PixelFont.font(11))
+                    .font(.system(size: 11))
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("打开系统设置", action: onOpenSettings)
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .workbenchButton(palette: palette, prominent: true)
             case let .result(original, translated, truncated):
                 Text(original)
-                    .font(PixelFont.font(10))
+                    .font(.system(size: 10))
                     .foregroundStyle(palette.inkSoft)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -287,13 +274,13 @@ struct TranslationCard: View {
                     .fill(palette.borderSoft)
                     .frame(height: 1)
                 Text(translated)
-                    .font(PixelFont.font(13))
+                    .font(.system(size: 13))
                     .foregroundStyle(palette.ink)
                     .lineLimit(8)
                     .fixedSize(horizontal: false, vertical: true)
                 if truncated {
                     Text("太长了，只翻了前面。")
-                        .font(PixelFont.font(10))
+                        .font(.system(size: 10))
                         .foregroundStyle(palette.inkSoft)
                 }
                 HStack(spacing: 6) {
@@ -302,15 +289,13 @@ struct TranslationCard: View {
                         copied = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
                     }
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
+                    .workbenchButton(palette: palette, prominent: true)
                 }
             }
         }
         .padding(10)
         .frame(width: 286, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
         .background(
             GeometryReader { proxy in
                 Color.clear

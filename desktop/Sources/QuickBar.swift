@@ -17,7 +17,7 @@ struct QuickBar: View {
     var body: some View {
         PixelPanel(palette: palette, padding: 5) {
             HStack(spacing: 4) {
-                button(.microphone, isRecording ? "停止" : "录音", color: isRecording ? palette.red : palette.ink, onRecording)
+                button(.workbenchRecord, isRecording ? "停止" : "录音", color: isRecording ? palette.red : palette.ink, onRecording)
                     .disabled(recordingUnavailableReason != nil)
                     .opacity(recordingUnavailableReason == nil ? 1 : 0.6)
                     .help(recordingUnavailableReason ?? recordingAction)
@@ -31,6 +31,7 @@ struct QuickBar: View {
             }
         }
         .environment(\.workbenchChrome, true)
+        .environment(\.workbenchTheme, workbenchTheme)
         .fixedSize()
     }
 

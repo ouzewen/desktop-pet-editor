@@ -201,48 +201,43 @@ struct DropActionBar: View {
     var onConvert: (() -> Void)?
     var onCancel: (() -> Void)?
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 7) {
+            WorkbenchCardHeading(title: "文件操作", glyph: .file, palette: palette) {}
             Text(selectionTitle)
-                .font(PixelFont.font(10))
+                .font(.system(size: 11))
                 .foregroundStyle(palette.inkSoft)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
-                button("删除", .close, onTrash)
-                if let onZip { button("压缩", .chevron, onZip) }
-                if let onConvert { button("转格式", .arrowRight, onConvert) }
-                if let onCancel { button("取消", .chevron, onCancel) }
+                button("删除", .trash, destructive: true, action: onTrash)
+                if let onZip { button("压缩", .chevron, action: onZip) }
+                if let onConvert { button("转格式", .arrowRight, action: onConvert) }
+                if let onCancel { button("取消", action: onCancel) }
             }
         }
-        .padding(9)
+        .padding(10)
         .frame(width: onCancel == nil ? 236 : 190)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
     }
 
-    private func button(_ title: String, _ icon: PixelIconKind, _ action: @escaping () -> Void) -> some View {
+    private func button(_ title: String, _ icon: PixelIconKind? = nil, destructive: Bool = false,
+                        action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                PixelGlyph(kind: icon, color: palette.ink, size: 10)
-                Text(title)
-                    .font(PixelFont.font(11))
-                    .foregroundStyle(palette.ink)
+                if let icon {
+                    PixelGlyph(kind: icon, color: destructive ? Color(pixelHex: 0xFFF9EC) : palette.ink, size: 10)
+                }
+                Text(title).fixedSize()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(PixelBox(corner: 2).fill(palette.panelAlt))
-            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .workbenchButton(palette: palette, prominent: destructive, tint: destructive ? palette.red : nil)
     }
 }
 
@@ -252,29 +247,27 @@ struct DropFormatBar: View {
 
     var onPick: (ConvertFormat) -> Void = { _ in }
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     var body: some View {
-        VStack(spacing: 7) {
-            Text("把 \(fileName) 转成")
-                .font(PixelFont.font(10))
+        VStack(alignment: .leading, spacing: 7) {
+            WorkbenchCardHeading(title: "转格式", glyph: .arrowRight, palette: palette) {}
+            Text(verbatim: fileName)
+                .font(.system(size: 11))
                 .foregroundStyle(palette.inkSoft)
                 .lineLimit(1)
                 .truncationMode(.middle)
             HStack(spacing: 6) {
                 ForEach(formats, id: \.title) { format in
                     Button(format.title) { onPick(format) }
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-                        .frame(maxWidth: .infinity)
+                        .workbenchButton(palette: palette)
                 }
             }
         }
-        .padding(9)
-        .frame(width: 220)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .padding(10)
+        .frame(width: 220, alignment: .leading)
+        .workbenchCardSurface(theme)
     }
 }

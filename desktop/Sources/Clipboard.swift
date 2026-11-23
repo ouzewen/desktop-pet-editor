@@ -116,102 +116,95 @@ struct ClipboardCard: View {
     var onClear: () -> Void = {}
     var onClose: () -> Void = {}
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @State private var copiedID: UUID?
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    static let width: CGFloat = 300
+    private var palette: PixelPalette { theme.palette }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                PixelGlyph(kind: .clip, color: palette.accent, size: 12)
-                Text("剪贴板")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Spacer(minLength: 6)
-                Text("\(items.count)")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
-                Button(action: onClose) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("关闭")
-            }
-
-            if items.isEmpty {
-                Text("复制过的文字会出现在这里。")
-                    .font(PixelFont.font(11))
-                    .foregroundStyle(palette.inkSoft)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
-            } else {
-                ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(items) { item in
-                            HStack(alignment: .top, spacing: 6) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.preview)
-                                        .font(PixelFont.font(11))
-                                        .foregroundStyle(palette.ink)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text(Self.time.string(from: item.at))
-                                        .font(PixelFont.font(10))
-                                        .foregroundStyle(palette.inkSoft.opacity(0.7))
-                                }
-                                Button {
-                                    copy(item)
-                                } label: {
-                                    Text(copiedID == item.id ? "已复制" : "复制")
-                                        .frame(minWidth: 34)
-                                }
-                                .buttonStyle(PixelButtonStyle(
-                                    palette: palette,
-                                    prominent: copiedID == item.id
-                                ))
-                                .help("复制到剪贴板")
-                                Button {
-                                    onDelete(item)
-                                } label: {
-                                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                                        .frame(width: 16, height: 16)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help("从剪贴板删除这一条")
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 5)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(PixelBox(corner: 1).fill(palette.panelAlt))
-                        }
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                WorkbenchCardHeading(title: "剪贴板", glyph: .clip, palette: palette) {
+                    if !items.isEmpty {
+                        Text("\(items.count) 条")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(palette.inkSoft)
                     }
+                    Button(action: onClose) {
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                            .frame(width: 12, height: 12)
+                    }
+                    .workbenchButton(palette: palette)
+                    .accessibilityLabel("关闭")
+                    .help("关闭")
                 }
-                .frame(height: 300)
 
-                HStack(spacing: 6) {
-                    Button("清空", action: onClear)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
-                    Spacer(minLength: 0)
-                    Text("点「复制」再去粘贴")
-                        .font(PixelFont.font(10))
+                if items.isEmpty {
+                    Text("复制过的文字会出现在这里。")
+                        .font(.system(size: 12))
                         .foregroundStyle(palette.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 7)
+                } else {
+                    if items.count > 4 {
+                        ScrollView { rows }
+                            .frame(height: 245)
+                    } else {
+                        rows
+                    }
+
+                    Button("清空", action: onClear)
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("clipboard-clear")
                 }
             }
         }
-        .padding(10)
-        .frame(width: 300, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .frame(width: Self.width)
+        .environment(\.workbenchChrome, true)
+        .environment(\.workbenchTheme, theme)
+    }
+
+    private var rows: some View {
+        VStack(spacing: 4) {
+            ForEach(items) { item in
+                HStack(alignment: .center, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(verbatim: item.preview)
+                            .font(.system(size: 12))
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(Self.time.string(from: item.at))
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundStyle(palette.inkSoft)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        copy(item)
+                    } label: {
+                        Text(copiedID == item.id ? "已复制" : "复制")
+                            .frame(minWidth: 34)
+                    }
+                    .workbenchButton(palette: palette, prominent: copiedID == item.id)
+                    .help("复制到剪贴板")
+                    .accessibilityIdentifier("clipboard-copy")
+                    Button {
+                        onDelete(item)
+                    } label: {
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 8)
+                            .frame(width: 10, height: 10)
+                    }
+                    .workbenchButton(palette: palette)
+                    .accessibilityLabel("删除这一条")
+                    .help("从剪贴板删除这一条")
+                    .accessibilityIdentifier("clipboard-delete")
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
+                .background(PixelBox(corner: 3).fill(palette.panelAlt))
+            }
+        }
     }
 
     private func copy(_ item: ClipboardItem) {

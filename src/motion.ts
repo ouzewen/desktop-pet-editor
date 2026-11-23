@@ -3,8 +3,8 @@ import { usesOrangeCatArt, type PetConfig } from './cat';
 import type { CatCustomization } from './cat-custom';
 import { catListeningFrameAt } from './cat-listening';
 import { catFileActionDuration, catFileActionFrameAt, type CatFileAction, type CatFileActionPose } from './cat-file-action';
-import { CatJellyMotion } from './cat-jelly';
-import { catPetLoveFrameAt, catPetLoveFrameCount, catPetLoveFrameDuration } from './cat-pet-love';
+import { CatJellyMotion, dragHoldStrength } from './cat-jelly';
+import { catPetLoveDuration, catPetLoveFrameAt } from './cat-pet-love';
 import { catTypingFrameCount, catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
 
 const catTypingTimeout = 1001;
@@ -36,8 +36,10 @@ export class Motion {
   private listeningSince?: number;
   private fileAction?: { kind: CatFileAction; started: number };
   private petLoveStarted?: number;
+  private petLoveGaze?: Gaze;
 
-  constructor(private canvas: HTMLCanvasElement, private config: PetConfig) {}
+  constructor(private canvas: HTMLCanvasElement, private config: PetConfig,
+    private readonly approvedStockIdle = false) {}
 
   setConfig(config: PetConfig) {
     this.config = config;
@@ -88,13 +90,15 @@ export class Motion {
     this.jelly.reset();
     this.stretch = this.stretchTarget = this.releaseStretch = 0;
     this.petLoveStarted = now;
+    this.petLoveGaze = this.gaze;
     this.tick(now);
-    return catPetLoveFrameCount * catPetLoveFrameDuration;
+    return catPetLoveDuration;
   }
 
   cancelPetLove(now = performance.now()) {
     if (this.petLoveStarted === undefined) return;
     this.petLoveStarted = undefined;
+    this.petLoveGaze = undefined;
     this.idleSince = now;
     this.rendered = '';
   }
@@ -127,11 +131,12 @@ export class Motion {
       this.jelly.drag(dx, elapsed, now);
       return;
     }
-    if (!dx) return;
     if (this.config.frame === 'CAT') {
-      this.stretchTarget = Math.max(-1, Math.min(1, dx / 12));
+      if (dx) this.stretchTarget = Math.sign(dx) * Math.min(1, Math.max(dragHoldStrength, Math.abs(dx) / 12));
+      else if (!this.stretchTarget) this.stretchTarget = dragHoldStrength;
       return;
     }
+    if (!dx) return;
     const next = dx < 0 ? 'left' : 'right';
     if (this.dragAction !== next) this.dragDistance = 0;
     this.dragAction = next;
@@ -234,7 +239,8 @@ export class Motion {
       frame = 0;
       if (!jellyCat) {
         this.stretch += (this.stretchTarget - this.stretch) * 0.36;
-        this.stretchTarget *= 0.86;
+        const heldStretch = this.dragging ? Math.sign(this.stretchTarget) * dragHoldStrength : 0;
+        this.stretchTarget += (heldStretch - this.stretchTarget) * 0.14;
       }
     } else if (this.pressing) {
       action = this.dragAction ?? 'sit';
@@ -262,8 +268,8 @@ export class Motion {
       ? frenzyHeatFrameAt(now - this.frenzyStarted) : undefined;
     const pose = `${action}/${frame}/${this.typingMode}/${stretch}/${frenzyHeatFrame}/${edge}/${jelly?.head}/${jelly?.body}/${jelly?.tail}/${listeningFrame}/${fileAction?.kind}/${fileAction?.frame}/${petLoveFrame}`;
     if (pose !== this.rendered) {
-      render(this.canvas, config, action, frame, this.gaze, {
-        typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, edge, jelly,
+      render(this.canvas, config, action, frame, this.petLoveGaze ?? this.gaze, {
+        approvedStockIdle: this.approvedStockIdle, typingMode: this.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, stretch, edge, jelly,
         listeningFrame, fileAction, petLoveFrame, custom: this.custom,
       });
       this.rendered = pose;

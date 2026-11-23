@@ -686,7 +686,7 @@ struct PixelEditorTools: View {
                     VStack(alignment: .leading, spacing: 8) {
                         brushControls
                         Button(model.isFurOnly ? "恢复可见毛色" : "清空画布") { model.clear() }
-                            .buttonStyle(PixelButtonStyle(palette: palette))
+                            .workbenchButton(palette: palette)
                             .help(model.isFurOnly ? "恢复此姿势下可见的原毛色，可撤销" : "擦除当前画面，可撤销")
                     }.padding(.top, 7)
                 }
@@ -710,7 +710,7 @@ struct PixelEditorTools: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Button("−") { model.zoom(by: -1) }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                         .accessibilityLabel("缩小画布")
                         .disabled(model.viewport.zoom == PixelViewport.zoomLevels.first)
                     Text("\(model.viewport.zoom)×")
@@ -719,7 +719,7 @@ struct PixelEditorTools: View {
                         .monospacedDigit()
                         .frame(minWidth: 28)
                     Button("+") { model.zoom(by: 1) }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                         .accessibilityLabel("放大画布")
                         .disabled(model.viewport.zoom == PixelViewport.zoomLevels.last)
                     Text("\(model.side)×\(model.side)")
@@ -729,9 +729,9 @@ struct PixelEditorTools: View {
                 }
                 HStack(spacing: 6) {
                     Button(model.showingOriginal ? "返回微调稿" : "查看原稿") { model.toggleOriginal() }
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: model.showingOriginal))
+                        .workbenchButton(palette: palette, selected: model.showingOriginal)
                     Button("撤销") { model.undo() }
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette)
                         .keyboardShortcut("z", modifiers: .command)
                         .disabled(!model.canUndo || model.showingOriginal)
                 }
@@ -741,7 +741,7 @@ struct PixelEditorTools: View {
 
     private func toolButton(_ title: String, _ tool: PixelEditTool) -> some View {
         Button(title) { model.tool = tool }
-            .buttonStyle(PixelButtonStyle(palette: palette, prominent: model.tool == tool))
+            .workbenchButton(palette: palette, selected: model.tool == tool)
             .accessibilityAddTraits(model.tool == tool ? .isSelected : [])
     }
 
@@ -769,7 +769,7 @@ struct PixelEditorTools: View {
                 ForEach(PixelBrushShape.allCases, id: \.self) { shape in
                     let selected = model.brushShape == shape
                     Button(shape.rawValue) { model.brushShape = shape }
-                        .buttonStyle(PixelTabStyle(palette: palette, selected: selected))
+                        .workbenchButton(palette: palette, selected: selected)
                         .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }

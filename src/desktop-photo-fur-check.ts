@@ -1,7 +1,8 @@
-import { catPresets, currentFurPatternColors, type CatConfig } from './cat';
+import { catCoatCards, catPresets, currentFurPatternColors, type CatConfig } from './cat';
 import { catEditorSide, photoFurEditorData, prepareStructuredCatCustomization, saveCatInk, type CatInkSource } from './cat-custom';
 import { catInkParts, readCatInk, type CatInkChange } from './cat-ink';
 import { appearanceFromCatPhoto } from './cat-photo';
+import { catPetLoveFrameAt } from './cat-pet-love';
 import { currentTypingAnimation } from './cat-typing';
 import { CAT_SIZE } from './pet-assets';
 import { catMarkingLayout, catTypingLaptop, currentCatArtVersion, currentTypingInkVersion, makeLayer, prepareCatAssets, render, type TypingMode } from './render';
@@ -58,14 +59,20 @@ export async function checkPhotoFurEditing() {
       markingLayout: catMarkingLayout(config.pattern), legacyNoseOutline: false,
       pixelEdits: { version: 1, scope: 'photo-fur', parts: {} },
     };
-    const oldVersions = (['pixel80-v16', 'pixel80-v17'] as const)
-      .map(artVersion => atob(photoFurEditorData({ ...source, artVersion }, 80).furMask));
-    const active = atob(photoFurEditorData(source, 80).furMask);
-    const smile = [34 * 80 + 37, ...[32, 36, 37, 38, 42].map(x => 35 * 80 + x),
+    const smile = [32 * 80 + 37, 33 * 80 + 37, 34 * 80 + 37, ...[32, 36, 37, 38, 42].map(x => 35 * 80 + x),
       ...[33, 34, 35, 39, 40, 41].map(x => 36 * 80 + x)];
-    check(smile.every(index => !active.charCodeAt(index))
-      && oldVersions.every(old => Array.from(old).every((pixel, index) => pixel === active[index] || !active.charCodeAt(index))),
-      '默认笑线或旧保护格进入照片画笔蒙版 · ' + config.name);
+    for (const { id: coat } of catCoatCards[config.palette] ?? []) {
+      const coatSource = { ...source, config: { ...config, coat } };
+      const versions = coat === config.coat ? (['pixel80-v16', 'pixel80-v17', 'pixel80-v22'] as const)
+        : (['pixel80-v22'] as const);
+      const active = atob(photoFurEditorData(coatSource, 80).furMask);
+      const preserved = versions.every(artVersion => {
+        const old = atob(photoFurEditorData({ ...coatSource, artVersion }, 80).furMask);
+        return Array.from(old).every((pixel, index) => pixel === active[index] || !active.charCodeAt(index));
+      });
+      check(smile.every(index => !active.charCodeAt(index)) && preserved,
+        '默认笑线或旧保护格进入照片画笔蒙版 · ' + config.name + ' / ' + coat);
+    }
   }
 
   for (const config of examples) {
@@ -123,7 +130,8 @@ export async function checkPhotoFurEditing() {
 
     // The saved paint must follow the shoulders, head and rotating tail
     // through the double-click pose, while the outline remains intact.
-    for (const frame of [1, 10, 15]) {
+    for (const elapsed of [48, 480, 720]) {
+      const frame = catPetLoveFrameAt(elapsed);
       const unpaintedLove = pixels(saved, false, frame);
       const paintedLove = pixels(saved, true, frame);
       check(unpaintedLove.every((pixel, i) => (pixel >>> 24) === (paintedLove[i]! >>> 24)),
@@ -131,8 +139,8 @@ export async function checkPhotoFurEditing() {
       check(paintedLove.some((pixel, i) => pixel !== unpaintedLove[i]), '双击动作丢失了照片笔迹');
       const alternateNose = pixels({ ...saved, config: { ...config, noseColor: 'plum' } }, false, frame);
       check(alternateNose.some((pixel, i) => pixel !== unpaintedLove[i]), '双击动作中的鼻色对照没有变化');
-      check(alternateNose.every((pixel, i) => pixel === unpaintedLove[i] || paintedLove[i] === unpaintedLove[i]),
-        '双击动作中的照片笔迹覆盖了鼻子');
+      const touched = alternateNose.findIndex((pixel, i) => pixel !== unpaintedLove[i] && paintedLove[i] !== unpaintedLove[i]);
+      check(touched < 0, `双击动作中的照片笔迹覆盖了鼻子 · ${config.palette}/${elapsed}/${touched % size},${Math.floor(touched / size)}`);
     }
 
     const bobbed = { ...saved, frame: 17 };

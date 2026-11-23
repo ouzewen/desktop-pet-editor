@@ -18,10 +18,10 @@ struct ReminderListCard: View {
     let onBeginAdd: () -> Void
     let onHeightChange: (CGFloat) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     private var trimmedDraft: String {
         model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -37,30 +37,16 @@ struct ReminderListCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                PixelGlyph(kind: .bell, color: palette.accent, size: 12)
-                Text("重要提醒")
-                    .font(PixelFont.font(12))
+            WorkbenchCardHeading(title: "重要提醒", glyph: .bell, palette: palette) {
+                Text("\(model.items.count)")
+                    .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(palette.inkSoft)
-                Spacer(minLength: 6)
                 if !model.isAdding {
-                    Button {
+                    WorkbenchCardIconButton(glyph: .plus, title: "添加一条提醒", palette: palette) {
                         onBeginAdd()
                         model.isAdding = true
-                    } label: {
-                        PixelGlyph(kind: .plus, color: palette.ink, size: 11)
-                            .frame(width: 16, height: 16)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .help("添加一条提醒")
                 }
-                Text("\(model.items.count)")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
             }
 
             ForEach(model.items.indices, id: \.self) { index in
@@ -70,61 +56,46 @@ struct ReminderListCard: View {
                         .frame(width: 5, height: 5)
                         .padding(.top, 5)
                     Text(model.items[index])
-                        .font(PixelFont.font(12))
+                        .font(.system(size: 12))
                         .foregroundStyle(palette.ink)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
+                    WorkbenchCardIconButton(glyph: .close, title: "移除这条提醒", palette: palette) {
                         onClose(index)
-                    } label: {
-                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                            .frame(width: 15, height: 15)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .help("移除这条提醒")
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
-                .background(PixelBox(corner: 1).fill(palette.panelAlt))
+                .background(PixelBox(corner: 3).fill(palette.panelAlt))
             }
 
             if model.isAdding {
                 HStack(spacing: 5) {
                     TextField("添加一条重要提醒…", text: $model.draft)
                         .textFieldStyle(.plain)
-                        .font(PixelFont.font(12))
+                        .font(.system(size: 12))
                         .foregroundStyle(palette.ink)
                         .focused($focused)
                         .onSubmit(submit)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)
-                        .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                        .workbenchCardField(palette: palette, focused: focused)
 
                     Button("添加", action: submit)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+                        .workbenchButton(palette: palette, prominent: true)
                         .disabled(trimmedDraft.isEmpty)
-                        .opacity(trimmedDraft.isEmpty ? 0.5 : 1)
 
-                    Button {
+                    WorkbenchCardIconButton(glyph: .close, title: "收起", palette: palette) {
                         model.isAdding = false
                         model.draft = ""
-                    } label: {
-                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                            .frame(width: 15, height: 15)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .help("收起")
                 }
             }
         }
         .padding(10)
         .frame(width: 240, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
         .background(
             GeometryReader { proxy in
                 Color.clear
@@ -159,10 +130,10 @@ struct ReminderInputCard: View {
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
 
     private var trimmed: String {
         model.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -174,32 +145,23 @@ struct ReminderInputCard: View {
 
             TextField("添加一条重要提醒…", text: $model.text)
                 .textFieldStyle(.plain)
-                .font(PixelFont.font(12))
+                .font(.system(size: 12))
                 .foregroundStyle(palette.ink)
                 .focused($focused)
                 .onSubmit(onSubmit)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
-                .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                .workbenchCardField(palette: palette, focused: focused)
 
             Button("添加", action: onSubmit)
-                .buttonStyle(PixelButtonStyle(palette: palette))
+                .workbenchButton(palette: palette, prominent: true)
                 .disabled(trimmed.isEmpty)
-                .opacity(trimmed.isEmpty ? 0.5 : 1)
 
-            Button(action: onCancel) {
-                PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                    .frame(width: 15, height: 15)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("取消")
+            WorkbenchCardIconButton(glyph: .close, title: "取消", palette: palette, action: onCancel)
         }
         .padding(8)
         .frame(width: 288)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .workbenchCardSurface(theme)
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }

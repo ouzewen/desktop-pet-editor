@@ -777,6 +777,53 @@ export function checkIndependentPupils() {
   }
 }
 
+export function checkDragHold() {
+  const live = document.createElement('canvas');
+  const expected = document.createElement('canvas');
+  for (const preset of [catPresets.preset_cat_orange, catPresets.preset_cat_calico]) {
+    const motion = new Motion(live, preset);
+    render(expected, preset, 'sit', 0);
+    const idle = expected.toDataURL();
+    const start = Math.ceil(performance.now());
+    const at = (elapsed: number) => start + elapsed;
+    const snapshot = (elapsed: number) => {
+      motion.tick(at(elapsed));
+      return live.toDataURL();
+    };
+
+    const advance = (from: number, to: number) => {
+      for (let time = from; time < to; time += 16) motion.tick(at(time));
+      return snapshot(to);
+    };
+
+    motion.beginDrag(at(0));
+    if (snapshot(1200) !== idle) throw Error(`${preset.name} changed pose on a plain hold`);
+    motion.drag(24, 16, at(1216));
+    const heldRight = advance(1216, 2450);
+    if (heldRight === idle || snapshot(3200) !== heldRight) {
+      throw Error(`${preset.name} lost its right drag pose while held`);
+    }
+    motion.drag(-24, 2000, at(3216));
+    const heldLeft = advance(3216, 4450);
+    if (heldLeft === idle || heldLeft === heldRight || snapshot(5200) !== heldLeft) {
+      throw Error(`${preset.name} did not resume dragging to the left after a pause`);
+    }
+    motion.release(at(5200));
+    motion.drag(24, 16, at(5216)); // A late move without a new press cannot grab the cat.
+    render(expected, preset, 'sit', 16);
+    if (snapshot(6645) !== expected.toDataURL()) throw Error(`${preset.name} did not settle after release`);
+
+    motion.beginDrag(at(6700));
+    for (let time = 6716; time < 7036; time += 16) {
+      motion.drag(0, 16, at(time));
+      motion.tick(at(time));
+    }
+    if (snapshot(7036) === idle || advance(7036, 8000) === idle) {
+      throw Error(`${preset.name} did not hold a pose during and after a vertical drag`);
+    }
+  }
+}
+
 export function checkListeningDrag() {
   const live = document.createElement('canvas');
   const expected = document.createElement('canvas');

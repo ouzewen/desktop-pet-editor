@@ -165,6 +165,26 @@ struct PixelBackdrop: View {
     }
 }
 
+struct WorkbenchPixelSurface: View {
+    let palette: PixelPalette
+    let fill: Color
+    var corner: CGFloat = 5
+    var framed = false
+
+    var body: some View {
+        PixelBox(corner: corner)
+            .fill(fill)
+            .overlay(PixelBox(corner: corner, inset: 0.5).stroke(palette.borderSoft, lineWidth: 1))
+            .overlay {
+                if framed {
+                    PixelBox(corner: corner, inset: 4).stroke(palette.border, lineWidth: 1)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Panel
 
 struct PixelPanel<Content: View>: View {
@@ -182,8 +202,7 @@ struct PixelPanel<Content: View>: View {
     @ViewBuilder var body: some View {
         if workbenchChrome {
             content.padding(padding)
-                .background(palette.panel, in: RoundedRectangle(cornerRadius: 15))
-                .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(palette.borderSoft, lineWidth: 1))
+                .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel))
         } else {
             content
             .padding(padding)
@@ -192,6 +211,61 @@ struct PixelPanel<Content: View>: View {
             .overlay(PixelBox(corner: 2, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
                 .background(PixelBox(corner: 4).fill(palette.shadow).offset(x: 3, y: 3))
         }
+    }
+}
+
+struct WorkbenchCardHeading<Actions: View>: View {
+    let title: String
+    let glyph: PixelIconKind
+    let palette: PixelPalette
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        HStack(spacing: 7) {
+            PixelGlyph(kind: glyph, color: palette.accentDeep, size: 12)
+            Text(title)
+                .font(PixelFont.font(15))
+                .foregroundStyle(palette.ink)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 4)
+            actions()
+        }
+    }
+}
+
+struct WorkbenchCardIconButton: View {
+    let glyph: PixelIconKind
+    let title: String
+    let palette: PixelPalette
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            PixelGlyph(kind: glyph, color: palette.inkSoft, size: 9)
+                .frame(width: 12, height: 10)
+        }
+        .workbenchButton(palette: palette)
+        .accessibilityLabel(title)
+        .help(title)
+    }
+}
+
+extension View {
+    func workbenchCardSurface(_ theme: WorkbenchTheme) -> some View {
+        background(WorkbenchPixelSurface(palette: theme.palette, fill: theme.palette.panel))
+            .environment(\.workbenchChrome, true)
+            .environment(\.workbenchTheme, theme)
+            .preferredColorScheme(.light)
+    }
+
+    func workbenchCardField(palette: PixelPalette, focused: Bool) -> some View {
+        background(PixelBox(corner: 3).fill(palette.panelDeep))
+            .overlay {
+                PixelBox(corner: 3, inset: 0.5)
+                    .stroke(focused ? palette.accentDeep : palette.borderSoft, lineWidth: focused ? 2 : 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 
@@ -229,6 +303,8 @@ struct PixelChecker: View {
 
 enum PixelIconKind {
     case bell, plus, close, check, paw, eye, keyboard, chevron, arrowLeft, arrowRight, pin, cloud, note, clip, microphone, timer
+    case workbenchCat, workbenchRecord, workbenchBrush, workbenchApply, workbenchSettings
+    case pencil, trash, file
 }
 
 struct PixelGlyph: View {
@@ -261,6 +337,51 @@ struct PixelGlyph: View {
 
     private static func pattern(_ kind: PixelIconKind) -> [String] {
         switch kind {
+        case .file:
+            return [
+                "11111...", "1...11..", "1...111.", "1.....1.",
+                "1.111.1.", "1.....1.", "1.111.1.", "1111111.",
+            ]
+        case .pencil:
+            return [
+                ".....11.", "....1111", "...11.11", "..11111.",
+                ".11111..", "11111...", "1111....", "11......",
+            ]
+        case .trash:
+            return [
+                "...11...", "..1111..", "11111111", ".1....1.",
+                ".1.11.1.", ".1.11.1.", ".1....1.", ".111111.",
+            ]
+        case .workbenchCat:
+            return [
+                "..1......1..", ".111....111.", ".1111..1111.", ".1.111111.1.",
+                ".1111111111.", "111111111111", "111.1111.111", "111.1111.111",
+                "111111111111", ".1111..1111.", "..11111111..", "....1111....",
+            ]
+        case .workbenchRecord:
+            return [
+                "....1111....", "...111111...", "...11..11...", "...111111...",
+                ".1.11..11.1.", ".1.111111.1.", ".1..1111..1.", ".11......11.",
+                "..11111111..", ".....11.....", "...111111...", "...111111...",
+            ]
+        case .workbenchBrush:
+            return [
+                "........11..", ".......1111.", "......11111.", ".....11111..",
+                "....11111...", "...11111....", "..11.11.....", ".11111......",
+                ".1111...11..", "1111....11..", "111..11.....", ".....11.....",
+            ]
+        case .workbenchApply:
+            return [
+                ".1111111111.", "11........11", "1..........1", "1......11..1",
+                "1.....11...1", "1..1.11....1", "1..111.....1", "1...1......1",
+                "11........11", ".1111111111.", ".....11.....", "...111111...",
+            ]
+        case .workbenchSettings:
+            return [
+                "......11....", "......11....", "111111111111", "......11....",
+                "..11........", "..11........", "111111111111", "..11........",
+                "........11..", "........11..", "111111111111", "........11..",
+            ]
         case .bell:
             return [
                 "...11...",
@@ -516,11 +637,12 @@ struct WorkbenchButtonStyle: ButtonStyle {
     var prominent = false
     var card = false
     var keyboardFocused = false
+    var tint: Color?
 
     func makeBody(configuration: Configuration) -> some View {
         WorkbenchButtonFace(label: configuration.label, palette: palette, selected: selected,
                             prominent: prominent, card: card, pressed: configuration.isPressed,
-                            keyboardFocused: keyboardFocused)
+                            keyboardFocused: keyboardFocused, tint: tint)
     }
 }
 
@@ -529,11 +651,12 @@ private struct WorkbenchButtonChrome: ViewModifier {
     let selected: Bool
     let prominent: Bool
     let card: Bool
+    let tint: Color?
     @FocusState private var focused: Bool
 
     private var style: WorkbenchButtonStyle {
         WorkbenchButtonStyle(palette: palette, selected: selected, prominent: prominent, card: card,
-                            keyboardFocused: focused)
+                            keyboardFocused: focused, tint: tint)
     }
 
     func body(content: Content) -> some View {
@@ -546,8 +669,9 @@ private struct WorkbenchButtonChrome: ViewModifier {
 }
 
 extension View {
-    func workbenchButton(palette: PixelPalette, selected: Bool = false, prominent: Bool = false, card: Bool = false) -> some View {
-        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent, card: card))
+    func workbenchButton(palette: PixelPalette, selected: Bool = false, prominent: Bool = false, card: Bool = false,
+                         tint: Color? = nil) -> some View {
+        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent, card: card, tint: tint))
     }
 }
 
@@ -559,6 +683,7 @@ private struct WorkbenchButtonFace<Label: View>: View {
     let card: Bool
     let pressed: Bool
     let keyboardFocused: Bool
+    let tint: Color?
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.workbenchTheme) private var workbenchTheme
@@ -568,6 +693,8 @@ private struct WorkbenchButtonFace<Label: View>: View {
 
     private var feedback: Bool { enabled && (hovered || pressed || focused || keyboardFocused) }
     private var fill: Color {
+        if !enabled { return prominent ? palette.panelDeep : palette.panelAlt }
+        if let tint, prominent { return pressed ? tint.opacity(0.85) : tint }
         if prominent && workbenchTheme != nil {
             return pressed ? palette.accent.opacity(0.86) : palette.accent
         }
@@ -576,8 +703,9 @@ private struct WorkbenchButtonFace<Label: View>: View {
         return selected || feedback ? palette.panelDeep : palette.panelAlt
     }
     private var foreground: Color {
+        if !enabled { return palette.inkSoft }
         guard prominent else { return palette.ink }
-        if workbenchTheme != nil { return Color(pixelHex: 0xFFF9EC) }
+        if workbenchTheme != nil || tint != nil { return Color(pixelHex: 0xFFF9EC) }
         return Color(pixelHex: colorScheme == .dark ? 0x322313 : 0xFFF9EC)
     }
     private var edge: Color {
@@ -592,11 +720,11 @@ private struct WorkbenchButtonFace<Label: View>: View {
             .foregroundStyle(foreground)
             .padding(.horizontal, card ? 0 : 9)
             .padding(.vertical, card ? 0 : 6)
-            .background(fill, in: RoundedRectangle(cornerRadius: card ? 11 : 8))
+            .background(PixelBox(corner: card ? 5 : 3).fill(fill))
             .overlay {
-                if feedback {
-                    PixelBox(corner: 3, inset: 1)
-                        .stroke(edge, lineWidth: focused || keyboardFocused || pressed ? 2 : 1)
+                if feedback || (enabled && selected) {
+                    PixelBox(corner: card ? 5 : 3, inset: 1)
+                        .stroke(feedback ? edge : palette.border, lineWidth: focused || keyboardFocused || pressed ? 2 : 1)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -798,9 +926,10 @@ struct PixelSelect: View {
     let options: [(id: String, name: String)]
     @Binding var selection: String
     let palette: PixelPalette
+    var placeholder: String?
 
     private var currentName: String {
-        options.first { $0.id == selection }?.name ?? selection
+        options.first { $0.id == selection }?.name ?? placeholder ?? selection
     }
 
     var body: some View {
@@ -831,6 +960,8 @@ struct PixelSelect: View {
 // MARK: - Field
 
 struct PixelTextField: View {
+    @Environment(\.workbenchChrome) private var workbenchChrome
+    @Environment(\.isFocused) private var focused
     @Binding var text: String
     let placeholder: String
     let palette: PixelPalette
@@ -843,6 +974,12 @@ struct PixelTextField: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(PixelBox(corner: 2).fill(palette.panelAlt))
-            .overlay(PixelBox(corner: 2).stroke(palette.border, lineWidth: 2))
+            .overlay {
+                let stepped = workbenchChrome
+                PixelBox(corner: 2, inset: stepped ? 0.5 : 0)
+                    .stroke(stepped && focused ? palette.accentDeep : palette.border,
+                            lineWidth: stepped && !focused ? 1 : 2)
+                    .allowsHitTesting(false)
+            }
     }
 }

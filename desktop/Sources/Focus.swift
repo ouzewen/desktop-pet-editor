@@ -30,6 +30,7 @@ final class FocusModel: ObservableObject {
     /// ticks publish `remaining` instead.
     var onChange: (() -> Void)?
 
+    private(set) var sessionID = UUID()
     private var timer: Timer?
     private var lastTickAt: Date?
     /// False under `--self-test`, where the test drives the countdown itself.
@@ -60,6 +61,7 @@ final class FocusModel: ObservableObject {
     func startFocus(minutes: Int? = nil) {
         if let minutes { setFocusMinutes(minutes) }
         stopTimer()
+        sessionID = UUID()
         phase = .focusing
         paused = false
         result = nil
@@ -86,6 +88,13 @@ final class FocusModel: ObservableObject {
     func extend(minutes: Int = 5) {
         guard phase == .focusing else { return }
         remaining += minutes * 60
+    }
+
+    func editRemaining(seconds: Int, initial: Int, session: UUID) {
+        guard phase == .focusing, sessionID == session,
+              (1...max(Self.minuteRange.upperBound * 60, initial)).contains(seconds),
+              seconds != initial else { return }
+        remaining = seconds
     }
 
     func stop() {
@@ -202,12 +211,28 @@ final class FocusModel: ObservableObject {
 
 // MARK: - Card
 
+enum PetUserAddress {
+    static let defaultsKey = "petUserAddress"
+
+    static func normalized(_ address: String) -> String {
+        address.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func focusFinishedMessage(address: String) -> String {
+        let message = "起来走两步，看看远处，喝口水。"
+        return address.isEmpty ? message : "\(address)，\(message)"
+    }
+}
+
 struct FocusCard: View {
-    /// The card's fixed width, also used to keep it clear of the screen edge.
-    static let width: CGFloat = 252
+    static let timerSize = CGSize(width: 120, height: 40)
+    static let resultWidth: CGFloat = 252
 
     @ObservedObject var model: FocusModel
+    @AppStorage(PetUserAddress.defaultsKey) private var userAddress = ""
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
+    var onEditRemaining: () -> Void = {}
     var onTogglePause: () -> Void = {}
     var onStop: () -> Void = {}
     var onStartBreak: () -> Void = {}
@@ -216,137 +241,152 @@ struct FocusCard: View {
     var onDismiss: () -> Void = {}
     var onHideCard: () -> Void = {}
     var onTogglePin: () -> Void = {}
-    var onHeightChange: (CGFloat) -> Void = { _ in }
+    var onSizeChange: (CGSize) -> Void = { _ in }
 
-    @Environment(\.colorScheme) private var colorScheme
+    private enum TimerControl: Hashable { case edit, time, stop }
+    @State private var timerHovered = false
+    @FocusState private var timerFocus: TimerControl?
+    private var showsTimerControls: Bool { timerHovered || timerFocus != nil }
 
-    private var palette: PixelPalette { .of(colorScheme) }
-
-    private var title: String {
-        switch model.result {
-        case .focusFinished: return "专注完成"
-        case .breakFinished: return "休息结束"
-        case nil:
-            if model.paused { return "已暂停" }
-            return model.phase == .resting ? "休息中" : "专注中"
-        }
-    }
-
-    private var detail: String {
-        switch model.result {
-        case .focusFinished:
-            return "起来走两步，看看远处，喝口水。"
-        case .breakFinished:
-            return "准备好了就开始下一段专注。"
-        case nil:
-            if model.paused { return "倒计时停住了，点「继续」接着走。" }
-            return model.phase == .resting
-                ? "离开屏幕，活动一下肩颈。"
-                : "到点会提醒你休息，不用一直看时间。"
-        }
-    }
-
-    private var glyph: PixelIconKind {
-        switch model.result {
-        case .focusFinished: return .check
-        case .breakFinished: return .bell
-        case nil: return model.phase == .resting ? .eye : .paw
-        }
+    private var palette: PixelPalette { theme.palette }
+    private var focusFinished: Bool { model.result == .focusFinished }
+    private var timerStatus: String {
+        if model.paused { return "已暂停" }
+        return model.phase == .resting ? "休息中" : "专注中"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                PixelGlyph(kind: glyph, color: palette.accent, size: 12)
-                Text(title)
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.ink)
-                Spacer(minLength: 6)
-                if model.isActive || model.pinned {
-                    Button(action: onTogglePin) {
-                        PixelGlyph(
-                            kind: .pin,
-                            color: model.pinned ? palette.accent : palette.inkSoft,
-                            size: 12
-                        )
-                        .frame(width: 17, height: 15)
-                        .background {
-                            if model.pinned {
-                                PixelBox(corner: 1).fill(palette.panelDeep)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(model.pinned ? "已钉住，点击恢复拖动" : "钉住：猫和卡片固定在当前位置")
-                    .accessibilityLabel(model.pinned ? "取消钉住" : "钉住")
-                }
-                Button(action: model.isActive ? onHideCard : onDismiss) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(model.isActive ? "收起卡片，计时继续" : "关闭")
-            }
-
-            if model.isActive {
-                Text(model.clockText)
-                    .font(PixelFont.font(36))
-                    .foregroundStyle(palette.ink)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 1)
-                    .accessibilityLabel("剩余 \(model.clockText)")
-            }
-
-            Text(detail)
-                .font(PixelFont.font(11))
-                .foregroundStyle(palette.inkSoft)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            actions
+        Group {
+            if model.isActive { timer }
+            else { resultCard }
         }
-        .padding(10)
-        .frame(width: Self.width, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
-        .background(
+        .fixedSize()
+        .environment(\.workbenchChrome, true)
+        .environment(\.workbenchTheme, theme)
+        .background {
             GeometryReader { proxy in
                 Color.clear
-                    .onAppear { onHeightChange(proxy.size.height) }
-                    .onChange(of: proxy.size.height) { onHeightChange($0) }
+                    .onAppear { onSizeChange(proxy.size) }
+                    .onChange(of: proxy.size) { onSizeChange($0) }
             }
-        )
+        }
     }
 
-    @ViewBuilder
-    private var actions: some View {
-        HStack(spacing: 6) {
-            switch model.result {
-            case .focusFinished:
-                Button("休息 \(model.breakMinutes) 分钟", action: onStartBreak)
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-                Button("再来一段", action: onStartFocus)
-                    .buttonStyle(PixelButtonStyle(palette: palette))
-            case .breakFinished:
-                Button("继续专注", action: onStartFocus)
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-            case nil:
-                if model.phase == .resting {
-                    Button("结束休息", action: onSkipBreak)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
-                } else {
-                    Button(model.paused ? "继续" : "暂停", action: onTogglePause)
-                        .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-                    Button("结束", action: onStop)
-                        .buttonStyle(PixelButtonStyle(palette: palette))
+    private var timer: some View {
+        ZStack {
+            timerMenu
+
+            // Draw outside AppKit's menu label to keep the theme color and
+            // the same centered layout with or without the side controls.
+            Text(verbatim: model.clockText)
+                .font(PixelFont.font(24))
+                .monospacedDigit()
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .frame(maxWidth: Self.timerSize.width - 46)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+            if model.phase == .focusing {
+                HStack(spacing: 0) {
+                    timerTool(.edit, glyph: .pencil, label: "编辑剩余时间", action: onEditRemaining)
+                    Spacer(minLength: 0)
+                    timerTool(.stop, glyph: .trash, label: "结束本轮专注", action: onStop)
                 }
+                .padding(.horizontal, 1)
+                .opacity(showsTimerControls ? 1 : 0)
+                .allowsHitTesting(showsTimerControls)
+                .accessibilityHidden(!showsTimerControls)
             }
-            Spacer(minLength: 0)
         }
+        .frame(width: Self.timerSize.width, height: Self.timerSize.height)
+        .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 4))
+        .onHover { timerHovered = $0 }
+    }
+
+    private var timerMenu: some View {
+        Menu {
+            if model.phase == .focusing {
+                Button("编辑剩余时间", action: onEditRemaining)
+                Button(model.paused ? "继续专注" : "暂停专注", action: onTogglePause)
+                Button("结束专注", action: onStop)
+            } else {
+                Button("结束休息", action: onSkipBreak)
+            }
+            Divider()
+            Button(model.pinned ? "取消钉住" : "钉住", action: onTogglePin)
+            Button("收起计时", action: onHideCard)
+        } label: {
+            Color.clear
+                .frame(width: Self.timerSize.width, height: Self.timerSize.height)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .focused($timerFocus, equals: .time)
+        .accessibilityLabel("\(timerStatus)，剩余 \(model.clockText)")
+        .accessibilityHint("打开计时操作")
+        .accessibilityIdentifier("focus-timer")
+    }
+
+    private func timerTool(_ control: TimerControl, glyph: PixelIconKind, label: String,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            PixelGlyph(kind: glyph, color: palette.inkSoft, size: 12)
+                .frame(width: 22, height: 32)
+        }
+        .buttonStyle(WorkbenchButtonStyle(palette: palette, card: true, keyboardFocused: timerFocus == control))
+        .focused($timerFocus, equals: control)
+        .help(label)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(control == .edit ? "focus-edit-remaining" : "focus-end-current")
+    }
+
+    private var resultCard: some View {
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                WorkbenchCardHeading(title: focusFinished ? "专注完成" : "休息结束",
+                                     glyph: focusFinished ? .check : .bell, palette: palette) {
+                    if model.pinned {
+                        Button(action: onTogglePin) {
+                            PixelGlyph(kind: .pin, color: palette.accentDeep, size: 12)
+                        }
+                        .workbenchButton(palette: palette, selected: true)
+                        .help("已钉住，点击恢复拖动")
+                        .accessibilityLabel("取消钉住")
+                    }
+                    Button(action: onDismiss) {
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                            .frame(width: 12, height: 12)
+                    }
+                    .workbenchButton(palette: palette)
+                    .accessibilityLabel("关闭")
+                }
+
+                Text(verbatim: focusFinished ? PetUserAddress.focusFinishedMessage(address: userAddress)
+                     : "准备好了就开始下一段专注。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 6) {
+                    if focusFinished {
+                        Button("休息 \(model.breakMinutes) 分钟", action: onStartBreak)
+                            .workbenchButton(palette: palette, prominent: true)
+                        Button("再来一段", action: onStartFocus)
+                            .workbenchButton(palette: palette)
+                    } else {
+                        Button("继续专注", action: onStartFocus)
+                            .workbenchButton(palette: palette, prominent: true)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(width: Self.resultWidth)
     }
 }
 
@@ -361,68 +401,69 @@ final class FocusMinutesModel: ObservableObject {
         guard let minutes = Int(trimmed), FocusModel.minuteRange.contains(minutes) else { return nil }
         return minutes
     }
+
+    func remainingSeconds(upTo maximum: Int) -> Int? {
+        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, let minutes = Int(parts[0]), let seconds = Int(parts[1]),
+              (0...maximum / 60).contains(minutes), (0...59).contains(seconds) else { return nil }
+        let total = minutes * 60 + seconds
+        return (1...maximum).contains(total) ? total : nil
+    }
 }
 
 struct FocusMinutesCard: View {
     @ObservedObject var model: FocusMinutesModel
+    var maximumRemaining: Int?
 
     var onStart: () -> Void = {}
     var onCancel: () -> Void = {}
 
-    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { .of(colorScheme) }
+    private var palette: PixelPalette { theme.palette }
+    private var editing: Bool { maximumRemaining != nil }
+    private var valid: Bool {
+        if let maximumRemaining { return model.remainingSeconds(upTo: maximumRemaining) != nil }
+        return model.value != nil
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                PixelGlyph(kind: .bell, color: palette.accent, size: 12)
-                Text("专注时长")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-                Spacer(minLength: 6)
-                Button(action: onCancel) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
-                        .frame(width: 15, height: 15)
-                        .contentShape(Rectangle())
+        PixelPanel(palette: palette, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                WorkbenchCardHeading(title: editing ? "编辑剩余时间" : "专注时长", glyph: .timer, palette: palette) {
+                    Button(action: onCancel) {
+                        PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                            .frame(width: 12, height: 12)
+                    }
+                    .workbenchButton(palette: palette)
+                    .accessibilityLabel("取消")
+                    .help("取消")
                 }
-                .buttonStyle(.plain)
-                .help("取消")
-            }
 
-            HStack(spacing: 6) {
-                TextField("分钟", text: $model.text)
-                    .textFieldStyle(.plain)
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.ink)
-                    .focused($focused)
-                    .onSubmit(onStart)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
+                HStack(spacing: 8) {
+                    PixelTextField(text: $model.text, placeholder: editing ? "分:秒" : "分钟", palette: palette)
+                        .focused($focused)
+                        .onSubmit(onStart)
+                        .accessibilityLabel(editing ? "本轮剩余时间" : "专注分钟数")
+                        .accessibilityIdentifier("focus-minutes-field")
+                    Text(editing ? "分:秒" : "分钟")
+                        .font(.system(size: 12))
+                        .foregroundStyle(palette.inkSoft)
+                    Spacer(minLength: 8)
+                    Button(editing ? "保存" : "开始", action: onStart)
+                        .workbenchButton(palette: palette, prominent: true)
+                        .disabled(!valid)
+                }
 
-                Text("分钟")
-                    .font(PixelFont.font(12))
+                Text(editing ? "只修改本轮。回车保存，Esc 取消。" : "1–180 分钟。回车开始，Esc 取消。")
+                    .font(.system(size: 11))
                     .foregroundStyle(palette.inkSoft)
-
-                Spacer(minLength: 4)
-
-                Button("开始", action: onStart)
-                    .buttonStyle(PixelButtonStyle(palette: palette, prominent: true))
-                    .disabled(model.value == nil)
-                    .opacity(model.value == nil ? 0.5 : 1)
             }
-
-            Text("1–180 分钟。回车开始，Esc 取消。")
-                .font(PixelFont.font(11))
-                .foregroundStyle(palette.inkSoft)
         }
-        .padding(10)
-        .frame(width: 252, alignment: .leading)
-        .background(PixelBox(corner: 3).fill(palette.panel))
-        .overlay(PixelBox(corner: 3).stroke(palette.border, lineWidth: 3))
-        .overlay(PixelBox(corner: 1, inset: 4).stroke(palette.borderSoft.opacity(0.55), lineWidth: 1))
+        .frame(width: FocusCard.resultWidth)
+        .environment(\.workbenchChrome, true)
+        .environment(\.workbenchTheme, theme)
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }

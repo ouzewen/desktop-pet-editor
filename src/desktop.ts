@@ -1,12 +1,12 @@
 import { checkPhotoFurEditing, checkPhotoSplitEars } from './desktop-photo-fur-check';
-import { checkPixel80Review } from './desktop-pixel80-check';
+import { checkDragArtwork, checkPixel80Review } from './desktop-pixel80-check';
 import { catPhotoEarPigments } from './cat-photo-request';
 import { catPhotoEarSides, catPhotoParts } from './pet-assets';
 import { appearanceFromCatPhoto, appearanceFromCatPhotoViews } from './cat-photo';
 import { furPatchBounds, furPatchDimensions, furPatchLimit, furPatchPresets } from './cat-fur-patches';
 import { prepareCatAssets as prepareLegacyCatAssets } from './cat-legacy-render';
 import { prepareCatAssets as prepareFirstPixel80Assets } from './cat-pixel80-v1-render';
-import { checkCatActions } from './desktop-check';
+import { checkCatActions, checkDragHold } from './desktop-check';
 import { catFileActionFrameAt, type CatFileAction } from './cat-file-action';
 import { catListeningFrameAt } from './cat-listening';
 import { Motion } from './motion';
@@ -16,7 +16,7 @@ import { canChooseCatFaceBase, catCoatCards, catCoatColors, catCoatSchemes, catF
 import { catEditorImage, catEditorSide, photoFurEditorData, prepareCatCustomization, prepareStructuredCatCustomization, readCatEditSource, saveCatInk, seedCatInkForEditor,
   type CatCustomization, type CatEditSource, type CatInkSource } from './cat-custom';
 import { catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
-import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, catArtVersionForCustomization, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
+import { actions, assetsReady, catMarkingLayout, catNaturalSwatches, catArtVersionForCustomization, build84CatArtVersion, componentCatArtVersion, hasCuratedCoatRecipes, currentTypingInkVersion, frameCount, horizontalGazeRange, pointerGazeLimit, prepareCatAssets, render, type Action, type CatEdge, type Gaze, type TypingMode } from './render';
 
 const canvas = document.querySelector('canvas')!;
 let preview: { freeze: boolean; config: PetConfig; action: Action; listening: boolean; fileAction?: CatFileAction;
@@ -24,12 +24,13 @@ let preview: { freeze: boolean; config: PetConfig; action: Action; listening: bo
 let visibleSource: CatEditSource | undefined;
 let visibleCustom: CatCustomization | undefined;
 let visibleTransientPose = false;
+let visibleApprovedIdle = false;
 let custom: CatCustomization | undefined;
 let customRequest = 0;
 let gaze: Gaze = { x: 0, y: 0 };
 const allPresets = { ...catPresets, ...presets };
 let configured: PetConfig = catPresets.preset_cat_orange;
-const motion = new Motion(canvas, configured);
+const motion = new Motion(canvas, configured, true);
 const desktopReady = Promise.all([assetsReady, prepareCatAssets()]);
 const pixel80Art = Boolean(import.meta.env.VITE_PET_PIXEL80_KEYS);
 let paintDesktopFrame: ((now: number) => void) | undefined;
@@ -103,8 +104,8 @@ function thumbnailRenderer() {
   const sprite = document.createElement('canvas');
   const tile = document.createElement('canvas');
   const ctx = tile.getContext('2d')!;
-  return (config: PetConfig, crop: readonly [number, number, number, number], overlay?: CatCustomization) => {
-    render(sprite, config, 'sit', 0, undefined, { custom: overlay });
+  return (config: PetConfig, crop: readonly [number, number, number, number], overlay?: CatCustomization, approvedStockIdle = false) => {
+    render(sprite, config, 'sit', 0, undefined, { custom: overlay, approvedStockIdle });
     if (sprite.title) throw Error(sprite.title);
     const [, , width, height] = crop;
     const scale = Math.min(1, 96 / width, 112 / height);
@@ -157,6 +158,7 @@ Object.assign(window, {
   pet: {
     ...(pixel80Art ? {
       checkPixel80Review,
+      checkDragArtwork: async () => { await desktopReady; return checkDragArtwork(); },
       checkPhotoFurEditing,
       checkPhotoSplitEars,
       checkPixel80PreviewFrame: (elapsed: number) => {
@@ -184,6 +186,7 @@ Object.assign(window, {
     } : {}),
     checkCat: async () => {
       await desktopReady;
+      checkDragHold();
       if (!pixel80Art) return checkCatActions();
       await checkPhotoFurEditing();
       await checkPhotoSplitEars();
@@ -202,7 +205,7 @@ Object.assign(window, {
       if (draft.frame !== 'CAT') return {};
       const thumbnail = thumbnailRenderer();
       return Object.fromEntries((catCoatCards[draft.palette] ?? []).map(({ id }) => [
-        id, thumbnail(readDesktopAppearance({ ...draft, coat: id }), portraitCrop, custom),
+        id, thumbnail(readDesktopAppearance({ ...draft, coat: id }), portraitCrop, custom, true),
       ]));
     },
     catalog: () => ({
@@ -266,9 +269,15 @@ Object.assign(window, {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       if (canvas.title) throw Error(canvas.title);
       // Transient props and expressions are excluded from the editable sitting pose.
-      const snapshot = visibleTransientPose && visibleSource ? document.createElement('canvas') : canvas;
+      const layeredTyping = visibleSource?.action === 'typing' && !visibleCustom
+        && (visibleSource.artVersion === build84CatArtVersion || visibleSource.artVersion === componentCatArtVersion
+          || hasCuratedCoatRecipes(visibleSource.artVersion));
+      const snapshot = (visibleTransientPose || visibleApprovedIdle || layeredTyping) && visibleSource ? document.createElement('canvas') : canvas;
       if (snapshot !== canvas && visibleSource) {
-        render(snapshot, visibleSource.config, 'sit', 0, visibleSource.gaze, { custom: visibleCustom });
+        const { config, gaze, frame } = visibleSource;
+        // Keep the source pixel editor and custom-preset reconstruction on the authored layers.
+        render(snapshot, config, layeredTyping ? 'typing' : 'sit', visibleTransientPose ? 0 : frame, gaze,
+          visibleApprovedIdle || layeredTyping ? { ...visibleSource, custom: visibleCustom } : { custom: visibleCustom });
       }
       if (photoResult && visibleCustom && visibleCustom.ink?.scope !== 'photo-fur') {
         throw Error('照片结果仍在加载，请重新打开编辑器');
@@ -362,8 +371,8 @@ void desktopReady.then(() => {
         const action = isCatWalk ? 'sit' : preview.action;
         const renderedFrame = isCatWalk || preview.listening || preview.fileAction ? 0 : frame;
         const artVersion = pixel80Art ? catArtVersionForCustomization(custom) : undefined;
-        render(canvas, config, action, renderedFrame, gaze, {
-          artVersion,
+        visibleApprovedIdle = render(canvas, config, action, renderedFrame, gaze, {
+          approvedStockIdle: !isCatWalk, artVersion,
           typingMode: preview.typingMode, typingAnimation: currentTypingAnimation, frenzyHeatFrame, laptopVersion: 'clean', outlineVersion: 'adaptive', stretch, custom,
           listeningFrame: preview.listening ? frame : undefined,
           fileAction: preview.fileAction && fileActionFrame !== undefined ? {kind: preview.fileAction, frame: fileActionFrame} : undefined,

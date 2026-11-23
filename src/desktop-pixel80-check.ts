@@ -6,15 +6,16 @@ import { checkPixel80Zip } from './desktop-pixel80-zip-check';
 import { checkPixel80Convert } from './desktop-pixel80-convert-check';
 import { liHuaReferenceFur } from './cat-li-hua';
 import { pixel80CatOutline, pixel80WarmOutline } from './cat-outline';
-import { catPresets, catRenderConfig, currentFurPatternColors, legacyCatPresets, type CatConfig } from './cat';
-import { prepareCatCustomization } from './cat-custom';
+import { catCoatCards, catPresets, catRenderConfig, currentFurPatternColors, legacyCatPresets, readPetConfig, usesOrangeCatArt, type CatConfig } from './cat';
+import { prepareCatCustomization, type CatEditSource } from './cat-custom';
 import * as original from './cat-legacy-render';
 import * as firstPixel80 from './cat-pixel80-v1-render';
 import { catMarkingLayout, currentTypingInkVersion, frameCount, makeLayer, prepareCatAssets, render } from './render';
 import { currentTypingAnimation } from './cat-typing';
 import { catFileActionDuration, type CatFileAction } from './cat-file-action';
 import { Motion } from './motion';
-import type { CatPose } from './render';
+import type { CatPose, Gaze } from './render';
+import { approvedRestingCatIds, CAT_SIZE } from './pet-assets';
 
 function checkActionTransitions() {
   const live = makeLayer(320), reference = makeLayer(320);
@@ -55,6 +56,105 @@ function checkActionTransitions() {
   return checks;
 }
 
+export function checkDragArtwork() {
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  let poses = 0;
+  const verify = (config: CatConfig, frame: number, gaze: Gaze, options: CatPose = {}, brushColor?: number) => {
+    const jellyCat = usesOrangeCatArt(config);
+    const shape = (amount: number): CatPose => jellyCat
+      ? { jelly: { head: amount, body: amount * 0.68, tail: amount * 0.72 } } : { stretch: amount };
+    const capture = (deformation: CatPose = {}) => {
+      const stock = render(canvas, config, 'sit', frame, gaze, { ...options, ...deformation });
+      return { stock, pixels: new Uint32Array(ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data.buffer) };
+    };
+    const idle = capture();
+    if (idle.stock !== Boolean(options.approvedStockIdle && !options.custom)) {
+      throw Error(`${config.name} did not use the expected sitting artwork`);
+    }
+    for (const amount of [0, 0.001]) {
+      if (!capture(shape(amount)).pixels.every((pixel, index) => pixel === idle.pixels[index])) {
+        throw Error(`${config.name}/${frame} changed sitting artwork at drag onset (${amount})`);
+      }
+    }
+    const colors = new Set(idle.pixels);
+    if (brushColor !== undefined && !colors.has(brushColor)) throw Error('The old sitting brush mark did not reopen');
+    for (const amount of [-0.85, 0.4, 0.85]) {
+      const moving = capture(shape(amount)).pixels;
+      if (!moving.some((pixel, index) => pixel !== idle.pixels[index])) {
+        throw Error(`${config.name}/${frame} did not deform (${amount})`);
+      }
+      if (brushColor !== undefined && !moving.includes(brushColor)) throw Error('The old brush mark disappeared during dragging');
+      for (let i = 0; i < moving.length; i++) {
+        const pixel = moving[i]!;
+        if (!colors.has(pixel)) throw Error(`${config.name}/${frame} introduced a color while dragging (${amount})`);
+        const x = i % CAT_SIZE;
+        if (i >= 240 * CAT_SIZE && x >= 76 && x < 208 && pixel !== idle.pixels[i]) {
+          throw Error(`${config.name}/${frame} moved the planted paws (${amount})`);
+        }
+      }
+      poses++;
+    }
+    return idle.pixels;
+  };
+  const presets: Readonly<Record<string, CatConfig>> = catPresets;
+  const look = { x: 53, y: -32, space: 'pointer' } as const;
+  for (const id of approvedRestingCatIds) {
+    const config = readPetConfig(presets['preset_cat_' + id]);
+    if (config.frame !== 'CAT') throw Error('Invalid approved resting preset: ' + id);
+    verify(config, 0, look, { approvedStockIdle: true });
+    verify(config, 25, look, { approvedStockIdle: true });
+  }
+  const orange = catPresets.preset_cat_orange;
+  verify({ ...orange, ear: 'CE04', tail: 'CT07', coat: 'honey' }, 0, look);
+  verify({ ...presets['preset_cat_CC12']!, nose: 'NO07', tail: 'CT05' }, 0, look);
+
+  const source: CatEditSource = {
+    config: orange, action: 'sit', frame: 0, gaze: { x: 0, y: 0 }, artVersion: 'pixel80-v23',
+    typingMode: 'gentle', typingAnimation: currentTypingAnimation, laptopVersion: 'clean', outlineVersion: 'adaptive',
+    typingLayout: 'aligned', tailArtVersion: 'clean', earLayout: 'shared',
+    markingLayout: catMarkingLayout(orange.pattern), legacyNoseOutline: false,
+  };
+  render(canvas, orange, 'sit', 0, source.gaze, source);
+  ctx.resetTransform();
+  ctx.fillStyle = '#E711D9';
+  ctx.fillRect(100, 194, 4, 4);
+  // A saved erasure on a planted paw must stay at the same position through the warp.
+  const paw = 252 * CAT_SIZE + 108;
+  if (!ctx.getImageData(108, 252, 1, 1).data[3]) throw Error('The old erasure fixture lost its paw');
+  ctx.clearRect(108, 252, 1, 1);
+  const custom = prepareCatCustomization(canvas, source, orange);
+  if (verify(orange, 0, source.gaze, { custom }, 0xffd911e7)[paw]) throw Error('The old paw erasure did not reopen');
+  return { presets: approvedRestingCatIds.length, layeredExamples: 3, poses };
+}
+
+function checkCuratedCoatGeometry() {
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  const presets: Readonly<Record<string, CatConfig>> = catPresets;
+  const read = (config: CatConfig) => {
+    render(canvas, config, 'sit', 0, undefined, { approvedStockIdle: true });
+    if (canvas.title) throw Error(canvas.title);
+    return new Uint32Array(ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data.buffer);
+  };
+  let alternatives = 0;
+  for (const id of approvedRestingCatIds) {
+    const original = readPetConfig(presets['preset_cat_' + id]);
+    if (original.frame !== 'CAT') throw Error('Invalid curated coat preset: ' + id);
+    const baseline = read(original);
+    for (const { id: coat } of (catCoatCards[original.palette] ?? []).slice(1)) {
+      const variant = read({ ...original, coat });
+      const colors = new Set<number>();
+      for (let i = 0; i < variant.length; i++) {
+        const pixel = variant[i]!;
+        if ((pixel >>> 24) !== (baseline[i]! >>> 24)) throw Error(`花色透明轮廓改变 · ${id}/${coat}`);
+        if (pixel >>> 24) colors.add(pixel & 0xffffff);
+      }
+      if (colors.size > 30) throw Error(`花色超过 30 色 · ${id}/${coat}`);
+      alternatives++;
+    }
+  }
+  return alternatives;
+}
+
 export async function checkPixel80Review() {
   await Promise.all([prepareCatAssets(), original.prepareCatAssets(), firstPixel80.prepareCatAssets()]);
   const { canvas, ctx } = makeLayer(320);
@@ -88,6 +188,22 @@ export async function checkPixel80Review() {
     const tailInk = matchingInk(ink, 244, 193, 41, 89);
     if (!tailInk) throw Error(current.name + ' 尾巴没有使用品种描边');
     if (before === after) throw Error(current.name + ' 未加载新素材');
+    // The approved idle pixels above the lips include the ears, eyes, nose,
+    // coat and outline. A typing mode must not switch this region to old art.
+    const approvedStockIdle = true;
+    render(canvas, current, 'sit', 0, undefined, { approvedStockIdle });
+    const restingFace = ctx.getImageData(0, 0, 320, 128).data;
+    for (const typingMode of ['gentle', 'fast', 'frenzy'] as const) {
+      render(canvas, current, 'typing', 45, undefined, { approvedStockIdle, typingMode });
+      const typingFace = ctx.getImageData(0, 0, 320, 128).data;
+      // Letters can cross the transparent background behind the cat.
+      for (let i = 0; i < restingFace.length; i += 4) {
+        if (restingFace[i + 3] === 255 && (typingFace[i] !== restingFace[i] || typingFace[i + 1] !== restingFace[i + 1]
+          || typingFace[i + 2] !== restingFace[i + 2] || typingFace[i + 3] !== 255)) {
+          throw Error(current.name + ' 打字时切换了待机头部素材 · ' + typingMode);
+        }
+      }
+    }
     const frames = Array.from({length: frameCount(current, 'typing')}, (_, frame) => {
       render(canvas, current, 'typing', frame, undefined, {typingMode: 'gentle'});
       if (canvas.title) throw Error(canvas.title);
@@ -96,6 +212,7 @@ export async function checkPixel80Review() {
     return {name: current.name, ink, tailInk, before, after, right: frames[3], left: frames[11], frames: frames.length};
   });
 
+  checkDragArtwork();
   const config = legacyCatPresets.preset_cat_orange;
   const source = {
     config, action: 'sit', frame: 0, gaze: {x: 0, y: 0}, typingMode: 'gentle',
@@ -169,5 +286,5 @@ export async function checkPixel80Review() {
   }
   return {images, badges, expressions, parts: checkPixel80Parts(), typing: checkPixel80FastTyping(ids),
     listening: checkPixel80Listening(ids), shredder: checkPixel80Shredder(ids), zip: checkPixel80Zip(ids),
-    convert: checkPixel80Convert(ids), actionTransitions: checkActionTransitions(), legacyChecks: 3};
+    convert: checkPixel80Convert(ids), actionTransitions: checkActionTransitions(), curatedCoatChecks: checkCuratedCoatGeometry(), legacyChecks: 3};
 }
