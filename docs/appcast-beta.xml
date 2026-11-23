@@ -6,6 +6,16 @@
     <description>桌宠 macOS 公开内测频道</description>
     <language>zh-CN</language>
     <item>
+      <title>桌宠 0.11.23（构建 93）</title>
+      <link>https://github.com/ouzewen/desktop-pet-editor/releases/tag/v2026-11-23-build93</link>
+      <pubDate>Mon, 23 Nov 2026 13:16:15 GMT</pubDate>
+      <sparkle:version>93</sparkle:version>
+      <sparkle:shortVersionString>0.11.23</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<p>更新原生工作台与操作卡、十二品种分层组件和替代花色、双耳编辑、鼻嘴，以及听歌与抚摸动画。</p>]]></description>
+      <enclosure url="https://github.com/ouzewen/desktop-pet-editor/releases/download/v2026-11-23-build93/DesktopPet-v0.11.23-build93-macos-arm64.zip" sparkle:edSignature="KJXfySgi/gIkRBq2OiCLJuLaW5pI+lBZTx3PWfRYetVazxQdDr91whdWmTWL6UZhV6JTR3NQEeqgyHn377RGBw==" length="12571756" type="application/octet-stream" />
+    </item>
+    <item>
       <title>桌宠 0.11.22 内测版 · 构建 68</title>
       <link>https://github.com/ouzewen/desktop-pet-editor/releases/tag/v2026-11-22</link>
       <sparkle:version>68</sparkle:version>
