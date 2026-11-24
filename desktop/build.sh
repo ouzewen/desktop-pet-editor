@@ -101,6 +101,10 @@ cp "$build_dir/pet.js" desktop/Resources/pet.html "$app/Contents/Resources/"
 cp desktop/Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp desktop/Resources/ArkPixel12.ttf "$app/Contents/Resources/ArkPixel12.ttf"
 cp desktop/Resources/ArkPixel-OFL.txt "$app/Contents/Resources/ArkPixel-OFL.txt"
+# Finder uses the localized display name when the base name matches the on-disk bundle name.
+mkdir -p "$app/Contents/Resources/zh-Hans.lproj"
+/usr/bin/plutil -convert binary1 -o "$app/Contents/Resources/zh-Hans.lproj/InfoPlist.strings" \
+  desktop/Resources/zh-Hans.lproj/InfoPlist.strings
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -109,6 +113,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleIdentifier</key><string>${bundle_id}</string>
 <key>CFBundleName</key><string>${app_name}</string>
 <key>CFBundleDisplayName</key><string>${app_name}</string>
+<key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
+<key>LSHasLocalizedDisplayName</key><true/>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>DesktopPet</string>
 <key>CFBundlePackageType</key><string>APPL</string>

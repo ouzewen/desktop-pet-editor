@@ -252,7 +252,7 @@ struct MeetingWorkbenchView: View {
 
             if let failure = model.captureFailure {
                 Label(failure, systemImage: "exclamationmark.circle")
-                    .font(.callout)
+                    .font(WorkbenchTypography.body())
                     .foregroundStyle(palette.ink)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("meeting-capture-error")
@@ -286,7 +286,7 @@ struct MeetingWorkbenchView: View {
             .clipShape(PixelBox(corner: 3))
             .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1).allowsHitTesting(false))
         }
-        .padding(16)
+        .padding(WorkbenchLayout.panelGap)
         .onChange(of: model.selected?.id, initial: true) {
             document = model.summary.isEmpty && !model.transcript.isEmpty ? .transcript : .minutes
             copyFeedback = nil
@@ -325,7 +325,7 @@ struct MeetingWorkbenchView: View {
                     .fixedSize()
                     .accessibilityIdentifier("meeting-language")
                 }
-                .font(.callout)
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.ink)
                 .tint(palette.accent)
                 .disabled(model.phase != .idle)
@@ -357,7 +357,7 @@ struct MeetingWorkbenchView: View {
                 Text("录音设置")
                 if !model.canStart {
                     Text("请选择至少一个音源")
-                        .font(.callout)
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft)
                 }
             case let .recording(started):
@@ -376,12 +376,12 @@ struct MeetingWorkbenchView: View {
                 Text(activityTitle)
                 if model.phase == .transcribing {
                     Text("首次使用可能下载语言模型")
-                        .font(.callout)
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft)
                 }
             }
         }
-        .font(PixelFont.font(15))
+        .font(WorkbenchTypography.sectionTitle)
         .foregroundStyle(palette.ink)
         .accessibilityIdentifier("meeting-record-status")
     }
@@ -402,7 +402,7 @@ struct MeetingWorkbenchView: View {
         let days = Dictionary(grouping: records) { calendar.startOfDay(for: $0.startedAt) }
         return VStack(alignment: .leading, spacing: 0) {
             Text("录音记录")
-                .font(PixelFont.font(14))
+                .font(WorkbenchTypography.sectionTitle)
                 .foregroundStyle(palette.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -415,13 +415,13 @@ struct MeetingWorkbenchView: View {
                     LazyVStack(alignment: .leading, spacing: 5) {
                         if days.isEmpty {
                             Text(searching ? "无搜索结果" : "暂无记录")
-                                .font(.callout)
+                                .font(WorkbenchTypography.body())
                                 .foregroundStyle(palette.inkSoft)
                                 .padding(.horizontal, 4)
                         }
                         ForEach(days.keys.sorted(by: >), id: \.self) { day in
                             Text(MeetingHistorySearch.dateLabel(for: day))
-                                .font(.caption.weight(.semibold))
+                                .font(WorkbenchTypography.supporting(.semibold))
                                 .foregroundStyle(palette.inkSoft)
                                 .padding(.leading, 4)
                                 .padding(.top, 4)
@@ -442,7 +442,7 @@ struct MeetingWorkbenchView: View {
             }
 
             Label("录音和文稿保存在本机", systemImage: "internaldrive")
-                .font(.caption)
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -474,7 +474,7 @@ struct MeetingWorkbenchView: View {
                     .accessibilityIdentifier("meeting-history-clear-search")
                 }
             }
-            .font(.callout)
+            .font(WorkbenchTypography.body())
             .padding(7)
             .background(PixelBox(corner: 3).fill(palette.panel))
             .overlay {
@@ -485,7 +485,7 @@ struct MeetingWorkbenchView: View {
             }
 
             Text("例如 2026年11月21日")
-                .font(.caption)
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
         }
         .padding(.horizontal, 14)
@@ -499,10 +499,10 @@ struct MeetingWorkbenchView: View {
             HStack(spacing: 6) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(MeetingHistorySearch.title(for: record))
-                        .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                        .font(WorkbenchTypography.body(.semibold).monospacedDigit())
                         .foregroundStyle(palette.ink)
                     Text(activity.isEmpty ? sourceNames(record) : activity)
-                        .font(.caption)
+                        .font(WorkbenchTypography.supporting())
                         .foregroundStyle(palette.inkSoft)
                         .lineLimit(1)
                 }
@@ -534,12 +534,12 @@ struct MeetingWorkbenchView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(record.startedAt.formatted(.dateTime.year().month().day().hour().minute().locale(MeetingHistorySearch.locale)))
-                        .font(.title3.weight(.semibold))
+                        .font(WorkbenchTypography.sectionTitle)
                         .foregroundStyle(palette.ink)
                         .accessibilityAddTraits(.isHeader)
                     Text([sourceNames(record), languages[record.language] ?? record.language]
                         .filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.callout)
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft)
                 }
                 Spacer(minLength: 10)
@@ -609,7 +609,7 @@ struct MeetingWorkbenchView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if !model.notice.isEmpty && !documentContents.hasPrefix(model.notice + "\n") {
                     Label(model.notice, systemImage: "info.circle")
-                        .font(.callout)
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft)
                         .textSelection(.enabled)
                 }
@@ -620,7 +620,7 @@ struct MeetingWorkbenchView: View {
                         .padding(.vertical, 16)
                 } else {
                     Text(formattedDocument(documentContents))
-                        .font(.system(size: 14))
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.ink)
                         .lineSpacing(5)
                         .textSelection(.enabled)
@@ -669,10 +669,10 @@ struct MeetingWorkbenchView: View {
                 .foregroundStyle(palette.inkSoft)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.headline)
+                .font(WorkbenchTypography.body(.semibold))
                 .foregroundStyle(palette.ink)
             Text(detail)
-                .font(.callout)
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
                 .multilineTextAlignment(.center)
         }

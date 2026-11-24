@@ -146,12 +146,8 @@ final class WorkbenchState: ObservableObject {
     @Published var catalog: AppearanceCatalog?
     @Published var thumbnails: AppearanceThumbnails?
     @Published var coatOverlayRevision = 0
-    @Published var appearance: [String: String] = [:] {
-        didSet { if appearance != oldValue { clearApplyConfirmation() } }
-    }
-    @Published private(set) var furPatches: [FurPatch] = [] {
-        didSet { if furPatches != oldValue { clearApplyConfirmation() } }
-    }
+    @Published var appearance: [String: String] = [:]
+    @Published private(set) var furPatches: [FurPatch] = []
     @Published private(set) var selectedFurPatchID: String?
 
     var selectedFurPatch: FurPatch? {
@@ -167,17 +163,18 @@ final class WorkbenchState: ObservableObject {
     @Published var eyeFollow = true
     @Published var message = ""
     @Published var applying = false
+    @Published var applyError: String?
+    @Published private(set) var hasUnappliedAppearance = false
+    @Published private(set) var applyConfirmed = false
+    private var applyConfirmationExpiry: DispatchWorkItem?
     @Published var typingAnimationEnabled = false
     @Published var typingStatsEnabled = false
-    @Published var showTypingStats = true
     @Published var typingStatus = TypingSyncStatus.off
     @Published var selectionTranslationEnabled = false
     @Published var translationNeedsPermission = false
     var needsKeyboardMonitoring: Bool { typingAnimationEnabled || typingStatsEnabled }
     @Published var customPresets: [CustomPresetInfo] = []
-    @Published var customSelected: String? {
-        didSet { if customSelected != oldValue { clearApplyConfirmation() } }
-    }
+    @Published var customSelected: String?
     /// Purely descriptive; it never reaches the renderer or the pet config.
     @Published var gender: String {
         didSet { UserDefaults.standard.set(gender, forKey: "petGender") }
@@ -200,9 +197,7 @@ final class WorkbenchState: ObservableObject {
     @Published var customMode: CustomAppearanceMode?
     @Published var pixelEditor: PixelEditorModel?
     @Published var editingCustom = false
-    @Published var hasPendingBrush = false {
-        didSet { if hasPendingBrush != oldValue { clearApplyConfirmation() } }
-    }
+    @Published var hasPendingBrush = false
     @Published var catPhotos: [CatPhotoInput?] = [nil, nil, nil]
     @Published var photoStatus = ""
     @Published var generatingPhoto = false
@@ -221,7 +216,6 @@ final class WorkbenchState: ObservableObject {
     var reset: () -> Void = {}
     var setTypingAnimation: (Bool) -> Void = { _ in }
     var setTypingStats: (Bool) -> Void = { _ in }
-    var setShowTypingStats: (Bool) -> Void = { _ in }
     var setSelectionTranslation: (Bool) -> Void = { _ in }
     var openInputSettings: () -> Void = {}
     var openAccessibilitySettings: () -> Void = {}
@@ -258,8 +252,23 @@ final class WorkbenchState: ObservableObject {
         birthDate = stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
     }
 
-    private func clearApplyConfirmation() {
-        if message == "已应用到桌宠" { message = "" }
+    func updateUnappliedAppearance(_ changed: Bool) {
+        if hasUnappliedAppearance != changed { hasUnappliedAppearance = changed }
+        if changed { clearApplyConfirmation() }
+    }
+
+    func confirmApply() {
+        clearApplyConfirmation()
+        message = ""
+        applyConfirmed = true
+        let expiry = DispatchWorkItem { [weak self] in self?.applyConfirmed = false }
+        applyConfirmationExpiry = expiry
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: expiry)
+    }
+
+    func clearApplyConfirmation() {
+        applyConfirmationExpiry?.cancel()
+        if applyConfirmed { applyConfirmed = false }
     }
 
     func update(_ config: [String: Any]) {
@@ -278,7 +287,6 @@ final class WorkbenchState: ObservableObject {
         }
         if !nameDirty { nameText = appearance["name", default: ""] }
         resetUnavailablePreview()
-        refresh()
     }
 
     func furPatchPreset(_ id: String) -> FurPatchPreset? {
@@ -482,7 +490,7 @@ private struct EyeChoiceStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(PixelFont.font(12))
+            .font(WorkbenchTypography.body())
             .foregroundStyle(palette.ink)
             .lineLimit(1)
             .padding(.horizontal, 6)
@@ -522,7 +530,7 @@ private struct PupilColorEditor: View {
                 }
                 .padding(.top, 6)
             }
-            .font(PixelFont.font(12))
+            .font(WorkbenchTypography.body())
             .foregroundStyle(palette.ink)
         }
     }
@@ -538,7 +546,7 @@ private struct PupilColorEditor: View {
         let swatch = WBTheme.swatchColors(naturalSwatches[naturalKey].map { [$0] })
         return HStack(spacing: 10) {
             Text(title)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
             PixelColorSelect(title: title, options: colors, defaultSwatch: swatch, palette: palette,
                              selection: selection, mixedName: "左右不同")
@@ -602,7 +610,7 @@ private struct PixelStatusBadge: View {
         HStack(spacing: 5) {
             Rectangle().fill(color).frame(width: 6, height: 6)
             Text(text)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.ink)
                 .lineLimit(1)
                 .accessibilityIdentifier("workbench-status")
@@ -726,6 +734,23 @@ private struct FurPatchSelection: View {
     }
 }
 
+enum WorkbenchLayout {
+    static let defaultSize = CGSize(width: 880, height: 660)
+    static let minimumSize = CGSize(width: 840, height: 620)
+    static let outerInset: CGFloat = 16
+    static let titlebarInset: CGFloat = 6
+    static let panelGap: CGFloat = 12
+    static let controlGap: CGFloat = 8
+    static let tightGap: CGFloat = 4
+    static let previewWidth: CGFloat = 352
+    static let previewCanvasLimit: CGFloat = 288
+    static let appearanceCardPadding: CGFloat = 4
+    static let appearanceCardSpacing: CGFloat = 3
+    static let breedLabelHeight: CGFloat = 18
+    static let breedThumbnailHeight: CGFloat = 66
+    static let fittedBreedPanelLimit: CGFloat = 520
+}
+
 struct WorkbenchView: View {
     @ObservedObject var state: WorkbenchState
     let preview: WKWebView
@@ -750,6 +775,7 @@ struct WorkbenchView: View {
     @State private var showingFileActions = false
     @State private var showingProfile = false
     @State private var showingDesktopSettings = false
+    @State private var showingTypingSummary = false
     @State private var showingWorkbenchThemes = false
 
     private var palette: PixelPalette { workbenchTheme.palette }
@@ -794,29 +820,32 @@ struct WorkbenchView: View {
         state.refresh()
     }
 
+    private var showsMeetingPage: Bool {
+        meetingPage != nil && state.showsMeetingRecordings
+    }
+
     var body: some View {
         ZStack {
             palette.background.ignoresSafeArea()
             WorkbenchPixelSurface(palette: palette, fill: palette.background, corner: 9)
                 .padding(8)
                 .ignoresSafeArea()
-            VStack(spacing: 14) {
-                header
-                pageNavigation
+            VStack(spacing: WorkbenchLayout.controlGap) {
+                topBar
                 ZStack {
-                    VStack(spacing: 14) {
-                        HStack(alignment: .top, spacing: 16) {
+                    VStack(spacing: WorkbenchLayout.panelGap) {
+                        HStack(alignment: .top, spacing: WorkbenchLayout.panelGap) {
                             previewPanel
                             detailPane
                         }
                         .frame(maxHeight: .infinity)
                         footer
                     }
-                    .opacity(state.showsMeetingRecordings ? 0 : 1)
-                    .allowsHitTesting(!state.showsMeetingRecordings)
-                    .accessibilityHidden(state.showsMeetingRecordings)
+                    .opacity(showsMeetingPage ? 0 : 1)
+                    .allowsHitTesting(!showsMeetingPage)
+                    .accessibilityHidden(showsMeetingPage)
 
-                    if state.showsMeetingRecordings, let meetingPage {
+                    if showsMeetingPage, let meetingPage {
                         PixelPanel(palette: palette, padding: 0) {
                             meetingPage(palette)
                         }
@@ -824,15 +853,16 @@ struct WorkbenchView: View {
                 }
                 .frame(maxHeight: .infinity)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 30)
-            .padding(.bottom, 16)
+            .padding(.horizontal, WorkbenchLayout.outerInset)
+            .padding(.top, WorkbenchLayout.titlebarInset)
+            .padding(.bottom, WorkbenchLayout.panelGap)
         }
-        .frame(minWidth: 860, minHeight: 640)
+        .font(WorkbenchTypography.body())
         .environment(\.workbenchChrome, true)
+        .environment(\.usesWorkbenchWindowTypography, true)
         .sheet(isPresented: $showingGuide) {
             WorkbenchGuideSheet(palette: palette, recordingAvailable: meetingPage != nil,
-                                opensOnRecording: state.showsMeetingRecordings)
+                                opensOnRecording: showsMeetingPage)
         }
         .sheet(isPresented: $showingFeedback) {
             FeedbackSheet(draft: $feedbackDraft, palette: palette)
@@ -841,39 +871,52 @@ struct WorkbenchView: View {
         .preferredColorScheme(.light)
     }
 
+    private var topBar: some View {
+        HStack(spacing: WorkbenchLayout.controlGap) {
+            pageNavigation
+                .fixedSize()
+            Color.clear
+                .frame(minWidth: 32, maxWidth: .infinity)
+                .frame(height: 32)
+                .overlay { WindowDragArea() }
+                .accessibilityHidden(true)
+            headerActions
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
     private var pageNavigation: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: WorkbenchLayout.controlGap) {
+            Button {
+                state.showsMeetingRecordings = false
+            } label: {
+                entryLabel("外观设置", glyph: .workbenchCat, selected: !showsMeetingPage)
+            }
+            .workbenchButton(palette: palette, selected: !showsMeetingPage)
+            .keyboardShortcut("1", modifiers: .command)
+            .help("外观设置（⌘1）")
+            .accessibilityAddTraits(showsMeetingPage ? [] : .isSelected)
+            .accessibilityIdentifier("workbench-page-appearance")
+
             if meetingPage != nil {
-                Button {
-                    state.showsMeetingRecordings = false
-                } label: {
-                    entryLabel("外观设置", glyph: .workbenchCat, selected: !state.showsMeetingRecordings)
-                }
-                .workbenchButton(palette: palette, selected: !state.showsMeetingRecordings)
-                .keyboardShortcut("1", modifiers: .command)
-                .help("外观设置（⌘1）")
-                .accessibilityAddTraits(state.showsMeetingRecordings ? [] : .isSelected)
-                .accessibilityIdentifier("workbench-page-appearance")
                 Button {
                     state.showsMeetingRecordings = true
                 } label: {
-                    entryLabel("会议录音", glyph: .workbenchRecord, selected: state.showsMeetingRecordings)
+                    entryLabel("会议录音", glyph: .workbenchRecord, selected: showsMeetingPage)
                 }
-                .workbenchButton(palette: palette, selected: state.showsMeetingRecordings)
+                .workbenchButton(palette: palette, selected: showsMeetingPage)
                 .keyboardShortcut("2", modifiers: .command)
                 .help("会议录音（⌘2）")
-                .accessibilityAddTraits(state.showsMeetingRecordings ? .isSelected : [])
+                .accessibilityAddTraits(showsMeetingPage ? .isSelected : [])
                 .accessibilityIdentifier("workbench-page-recording")
             }
-            Spacer()
-            workbenchThemeMenu
         }
     }
 
     private func entryLabel(_ title: String, glyph: PixelIconKind, selected: Bool = false) -> some View {
         HStack(spacing: 6) {
             PixelGlyph(kind: glyph, color: selected ? palette.accentDeep : palette.inkSoft, size: 12)
-            Text(title).font(PixelFont.font(13))
+            Text(title)
         }
         .fixedSize()
     }
@@ -926,17 +969,18 @@ struct WorkbenchView: View {
             .accessibilityHidden(true)
     }
 
-    private var header: some View {
+    private var headerActions: some View {
         let hasUpdate = state.availableUpdateVersion != nil
-        return HStack(spacing: 12) {
-            headerTitle
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .overlay(WindowDragArea())
-
+        return HStack(spacing: WorkbenchLayout.controlGap) {
             if let version = state.availableUpdateVersion {
                 Text("发现新版 \(version)")
-                    .font(PixelFont.font(12))
+                    .font(WorkbenchTypography.supporting())
                     .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 110)
+                    .help("发现新版 \(version)")
+                    .accessibilityIdentifier("workbench-available-update")
             }
 
             Button(hasUpdate ? "安装并重启" : "检查更新") {
@@ -952,103 +996,87 @@ struct WorkbenchView: View {
 
             if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
                 Text("v\(version)")
-                    .font(PixelFont.font(12))
+                    .font(WorkbenchTypography.supporting())
                     .foregroundStyle(palette.inkSoft)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 72)
+                    .help("当前版本 v\(version)")
             }
 
-            Button("查看使用说明") { showingGuide = true }
-                .workbenchButton(palette: palette)
+            Menu {
+                Button("查看使用说明") { showingGuide = true }
+                    .accessibilityIdentifier("workbench-open-guide")
+                Button("意见反馈") { showingFeedback = true }
+                    .accessibilityIdentifier("workbench-feedback")
+            } label: {
+                HStack(spacing: 6) {
+                    Text("帮助")
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                }
                 .fixedSize()
-                .accessibilityIdentifier("workbench-open-guide")
-
-            Button("意见反馈") { showingFeedback = true }
-                .workbenchButton(palette: palette)
-                .accessibilityIdentifier("workbench-feedback")
-        }
-    }
-
-    private var headerTitle: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                PixelBox(corner: 3).fill(palette.panel)
-                PixelBox(corner: 3).stroke(palette.border, lineWidth: 3)
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .interpolation(.none)
-                    .frame(width: 38, height: 38)
             }
-            .frame(width: 46, height: 46)
-            .background(PixelBox(corner: 3).fill(palette.shadow).offset(x: 2, y: 2))
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .workbenchButton(palette: palette)
+            .fixedSize()
+            .accessibilityIdentifier("workbench-help")
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("桌宠工作台")
-                    .font(PixelFont.font(24))
-                    .foregroundStyle(palette.ink)
-                Text(state.showsMeetingRecordings ? "录音历史、逐字稿与摘要" : "挑选品种与外观，实时预览后应用到桌面")
-                    .font(PixelFont.font(12))
-                    .foregroundStyle(palette.inkSoft)
-            }
-
+            workbenchThemeMenu
         }
     }
 
     private var previewPanel: some View {
         let canvasInk = previewBackdrop == .dark && !inspectingTransparency ? Color.white :
             inspectingTransparency ? checkerPalette.ink : Color(pixelHex: 0x302A24)
-        return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("预览").font(PixelFont.font(14))
-                    Spacer()
-                    previewBackdropControls
-                }
-                previewStage
+        return VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+            HStack {
+                Text("预览").font(WorkbenchTypography.sectionTitle)
+                Spacer()
+                previewBackdropControls
+            }
+            previewStage
 
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
-                        .font(.system(size: 24, weight: .semibold))
-                        .lineLimit(1)
-                    if let breed = state.catalog?.presets.first(where: { $0.id == state.preset })?.name,
-                       breed != state.appearance["name"] {
-                        Text(breed).font(.system(size: 12)).opacity(0.8)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
+                    .font(WorkbenchTypography.sectionTitle)
+                    .lineLimit(1)
+                if let breed = state.catalog?.presets.first(where: { $0.id == state.preset })?.name,
+                   breed != state.appearance["name"] {
+                    Text(breed).font(WorkbenchTypography.supporting()).lineLimit(1).opacity(0.8)
+                }
+                Spacer()
+                Button("档案") { showingProfile.toggle() }
+                    .workbenchButton(palette: palette)
+                    .accessibilityIdentifier("workbench-profile")
+                    .popover(isPresented: $showingProfile, arrowEdge: .bottom) {
+                        namePanel.frame(width: 340).padding(10)
                     }
-                    Spacer()
-                    Button("档案") { showingProfile.toggle() }
-                        .workbenchButton(palette: palette)
-                        .accessibilityIdentifier("workbench-profile")
-                        .popover(isPresented: $showingProfile, arrowEdge: .bottom) {
-                            namePanel.frame(width: 340).padding(10)
-                        }
-                }
-                .foregroundStyle(canvasInk)
-
-                previewActionControls
-                    .disabled(state.pixelEditor?.isFurOnly == true || (state.hasPhotoResult && state.editingCustom))
-                    .disabled(state.pixelEditor != nil || state.editingCustom || state.applying || state.loadingCustom)
             }
             .foregroundStyle(canvasInk)
-            .padding(15)
-            .background {
-                if inspectingTransparency {
-                    PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 12)
-                } else {
-                    previewBackdrop.color
-                }
-            }
-            .clipShape(PixelBox(corner: 6))
-            .overlay(PixelBox(corner: 6, inset: 0.5).stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
-            if state.showTypingStats {
-                TypingActivitySummary(activity: typingActivity, palette: palette)
+
+            previewActionControls
+                .disabled(state.pixelEditor?.isFurOnly == true || (state.hasPhotoResult && state.editingCustom))
+                .disabled(state.pixelEditor != nil || state.editingCustom || state.applying || state.loadingCustom)
+        }
+        .foregroundStyle(canvasInk)
+        .padding(WorkbenchLayout.panelGap)
+        .background {
+            if inspectingTransparency {
+                PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 12)
+            } else {
+                previewBackdrop.color
             }
         }
-        .frame(width: 410)
+        .clipShape(PixelBox(corner: 6))
+        .overlay(PixelBox(corner: 6, inset: 0.5).stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
+        .frame(width: WorkbenchLayout.previewWidth)
     }
 
     private var previewStage: some View {
         let editing = state.pixelEditor != nil || state.customMode == .patches
         return GeometryReader { geometry in
-            // Let the preview take the space left between its controls and the typing summary.
-            let side = max(1, min(320, geometry.size.width, geometry.size.height))
+            let side = max(1, min(WorkbenchLayout.previewCanvasLimit, geometry.size.width, geometry.size.height))
             SpritePreview(web: preview)
                 .frame(width: side, height: side)
                 .accessibilityLabel("桌宠动作预览")
@@ -1133,12 +1161,7 @@ struct WorkbenchView: View {
     private var previewActionControls: some View {
         let cat = state.appearance["frame"] == "CAT"
         let fileActionTitle = fileActions.first(where: { $0.0 == state.action })?.1
-        return HStack(spacing: 5) {
-            Text("动作")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(palette.inkSoft)
-                .padding(.horizontal, 5)
-                .fixedSize()
+        return HStack(spacing: WorkbenchLayout.tightGap) {
             previewActionButton("待机", action: "sit")
             if cat {
                 previewActionMenu(typingActionTitle, id: "preview-action-typing-mode", selected: typingIsSelected,
@@ -1152,8 +1175,10 @@ struct WorkbenchView: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(5)
+        .padding(WorkbenchLayout.tightGap)
         .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 3))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("预览动作")
     }
 
     private func previewActionMenu(_ title: String, id: String, selected: Bool,
@@ -1209,31 +1234,53 @@ struct WorkbenchView: View {
         }
     }
 
+    private enum DetailAnchor {
+        case customActions, pixelEditor
+    }
+
+    private var fitsBreedPanel: Bool {
+        appearancePage == .breeds && !customExpanded && state.pixelEditor == nil
+            && state.appearance["frame", default: "CAT"] == "CAT" && visiblePresets.count == 12
+    }
+
     @ViewBuilder
     private var detailPane: some View {
         if state.catalog != nil {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
-                    if state.pixelEditor != nil {
-                        PixelPanel(palette: palette) {
-                            pixelEditorControls.frame(maxWidth: .infinity, alignment: .leading)
+            GeometryReader { viewport in
+                let fittedHeight = fitsBreedPanel ? min(viewport.size.height, WorkbenchLayout.fittedBreedPanelLimit) : nil
+                ScrollViewReader { scroll in
+                    ScrollView(.vertical) {
+                        Group {
+                            if state.pixelEditor != nil {
+                                PixelPanel(palette: palette) {
+                                    pixelEditorControls.frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .id(DetailAnchor.pixelEditor)
+                            } else {
+                                appearancePanel(fittedHeight: fittedHeight)
+                            }
                         }
-                    } else {
-                        appearancePanel
-                            .disabled(state.editingCustom || state.loadingCustom)
-                        customPanel
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.bottom, fittedHeight == nil ? 6 : 0)
+                    }
+                    .onChange(of: customExpanded) { expanded in
+                        if expanded { scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom) }
+                    }
+                    .onChange(of: state.pixelEditor != nil) { editing in
+                        if editing {
+                            scroll.scrollTo(DetailAnchor.pixelEditor, anchor: .top)
+                        } else if customExpanded {
+                            scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.bottom, 6)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             PixelPanel(palette: palette) {
                 VStack(spacing: 10) {
                     ProgressView()
                     Text("正在加载形象…")
-                        .font(PixelFont.font(12))
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1350,7 +1397,7 @@ struct WorkbenchView: View {
                             )
                             .accessibilityLabel("桌宠姓名")
                             Text("\(state.nameText.count)/8")
-                                .font(PixelFont.font(11))
+                                .font(WorkbenchTypography.supporting())
                                 .foregroundStyle(state.nameText.count > 8 ? palette.red : palette.inkSoft)
                                 .fixedSize()
                         }
@@ -1381,7 +1428,7 @@ struct WorkbenchView: View {
                                 Spacer(minLength: 0)
                                 if !hasBirthDraft {
                                     Text("未设置，选择年月日即设置")
-                                        .font(PixelFont.font(10))
+                                        .font(WorkbenchTypography.supporting())
                                         .foregroundStyle(palette.inkSoft)
                                 }
                                 if hasBirthDraft {
@@ -1416,31 +1463,31 @@ struct WorkbenchView: View {
                             profileLabel("姓名")
                             Text(state.appearance["name", default: ""].isEmpty
                                  ? "未命名" : state.appearance["name", default: ""])
-                                .font(PixelFont.font(13))
+                                .font(WorkbenchTypography.body())
                                 .foregroundStyle(state.appearance["name", default: ""].isEmpty ? palette.inkSoft : palette.ink)
                                 .lineLimit(1)
                         }
                         HStack(spacing: 8) {
                             profileLabel("性别")
                             Text(genderText)
-                                .font(PixelFont.font(13))
+                                .font(WorkbenchTypography.body())
                                 .foregroundStyle(state.gender == "none" ? palette.inkSoft : palette.ink)
                         }
                         HStack(spacing: 8) {
                             profileLabel("MBTI")
                             Text(state.mbti == "none" ? "未选择" : state.mbti)
-                                .font(PixelFont.font(13))
+                                .font(WorkbenchTypography.body())
                                 .foregroundStyle(state.mbti == "none" ? palette.inkSoft : palette.ink)
                         }
                         HStack(spacing: 8) {
                             profileLabel("出生日期")
                             Text(birthText)
-                                .font(PixelFont.font(13))
+                                .font(WorkbenchTypography.body())
                                 .monospacedDigit()
                                 .foregroundStyle(state.birthDate == nil ? palette.inkSoft : palette.ink)
                             Spacer(minLength: 8)
                             Text("年龄 \(ageText)")
-                                .font(PixelFont.font(11))
+                                .font(WorkbenchTypography.supporting())
                                 .foregroundStyle(palette.inkSoft)
                                 .help("年龄根据出生日期自动计算")
                         }
@@ -1464,7 +1511,7 @@ struct WorkbenchView: View {
 
     private func profileLabel(_ text: String) -> some View {
         Text(text)
-            .font(PixelFont.font(12))
+            .font(WorkbenchTypography.body())
             .foregroundStyle(palette.inkSoft)
             .fixedSize()
     }
@@ -1474,77 +1521,73 @@ struct WorkbenchView: View {
 
     @State private var customExpanded = false
 
-    private var customPanel: some View {
-        PixelPanel(palette: palette, padding: 12) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 8) {
-                    Button {
-                        customExpanded.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: customExpanded ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(palette.inkSoft)
-                                .frame(width: 10)
-                            Text("自定义外观")
-                                .font(PixelFont.font(12))
-                                .foregroundStyle(palette.ink)
-                            if !state.customPresets.isEmpty {
-                                Text("\(state.customPresets.count)")
-                                    .font(PixelFont.font(10))
-                                    .foregroundStyle(palette.inkSoft)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(PixelBox(corner: 1).fill(palette.panelDeep))
-                            }
-                        }
-                        .contentShape(Rectangle())
+    private var customAppearanceSection: some View {
+        let count = state.customPresets.count
+        return VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+            Button {
+                customExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: customExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 10)
+                        .accessibilityHidden(true)
+                    Text("自定义外观")
+                    if count > 0 {
+                        Text(count.formatted())
+                            .font(WorkbenchTypography.supporting())
+                            .monospacedDigit()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(customExpanded ? "收起自定义外观" : "展开自定义外观")
-                    .accessibilityIdentifier("custom-appearance-toggle")
-
-                    Spacer(minLength: 8)
-
-                    if customExpanded {
-                        Button("存为形象") { savingAppearance.toggle() }
-                            .workbenchButton(palette: palette)
-                            .accessibilityIdentifier("save-custom-appearance")
-                        Button("导出 PNG") { state.exportAppearance() }
-                            .workbenchButton(palette: palette)
-                            .accessibilityIdentifier("export-appearance")
-                    }
+                    Spacer(minLength: 0)
                 }
+                .foregroundStyle(palette.inkSoft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .workbenchButton(palette: palette, quiet: true)
+            .accessibilityLabel(customExpanded ? "收起自定义外观" : "展开自定义外观")
+            .accessibilityValue(count > 0 ? "\(count) 个已保存形象" : "")
+            .accessibilityIdentifier("custom-appearance-toggle")
 
-                if customExpanded {
-                    if savingAppearance && (appearancePage != .photo || !state.hasPhotoResult) {
-                        saveAppearanceForm
-                    }
+            if customExpanded {
+                HStack(spacing: WorkbenchLayout.controlGap) {
                     pixelEditorControls
-                    if !state.customPresets.isEmpty || state.customSelected != nil || state.hasPendingBrush {
-                        PixelDivider(palette: palette)
-                        HStack {
-                            Text(!state.customPresets.isEmpty ? "已保存形象" : "当前笔迹")
-                                .font(PixelFont.font(11))
-                                .foregroundStyle(palette.inkSoft)
-                            Spacer()
-                            if state.customSelected != nil || state.hasPendingBrush {
-                                Button("取消笔迹叠加") { state.clearCustom() }
-                                    .workbenchButton(palette: palette)
-                                    .disabled(state.pixelEditor != nil)
-                            }
+                    Spacer(minLength: 0)
+                    Button("存为形象") { savingAppearance.toggle() }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("save-custom-appearance")
+                    Button("导出 PNG") { state.exportAppearance() }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("export-appearance")
+                }
+                .padding(.bottom, WorkbenchLayout.tightGap)
+                .id(DetailAnchor.customActions)
+
+                if savingAppearance && (appearancePage != .photo || !state.hasPhotoResult) {
+                    saveAppearanceForm
+                }
+                if !state.customPresets.isEmpty || state.customSelected != nil || state.hasPendingBrush {
+                    PixelDivider(palette: palette)
+                    HStack {
+                        Text(!state.customPresets.isEmpty ? "已保存形象" : "当前笔迹")
+                            .font(WorkbenchTypography.supporting())
+                            .foregroundStyle(palette.inkSoft)
+                        Spacer()
+                        if state.customSelected != nil || state.hasPendingBrush {
+                            Button("取消笔迹叠加") { state.clearCustom() }
+                                .workbenchButton(palette: palette)
+                                .disabled(state.pixelEditor != nil)
                         }
-                        LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
-                            ForEach(state.customPresets) { preset in
-                                customChip(preset)
-                            }
-                        }
-                        .disabled(state.pixelEditor != nil)
                     }
+                    LazyVGrid(columns: presetColumns, alignment: .leading, spacing: 8) {
+                        ForEach(state.customPresets) { preset in
+                            customChip(preset)
+                        }
+                    }
+                    .disabled(state.pixelEditor != nil)
                 }
             }
-            .disabled(customExpanded && (state.editingCustom || state.loadingCustom || state.applying))
         }
+        .disabled(customExpanded && (state.editingCustom || state.loadingCustom || state.applying))
     }
 
     private var photoGenerator: some View {
@@ -1565,7 +1608,7 @@ struct WorkbenchView: View {
                                 }
                                 Text(slot == 0 ? "首图" : "补图 \(slot)")
                                 Text(state.catPhotos[slot] == nil ? (slot == 0 ? "上传" : "添加") : "更换")
-                                    .font(PixelFont.font(10))
+                                    .font(WorkbenchTypography.supporting())
                             }
                             .frame(minWidth: 65, minHeight: 55)
                         }
@@ -1597,13 +1640,13 @@ struct WorkbenchView: View {
                  ? (CatPhotoClient.recognizesLocally ? "照片在本机识别。" : "点击生成后，照片会发送到云端识别。")
                     + "首图建议用正面照，可加两张同猫补图，拍清被挡住的部位。"
                  : state.photoStatus)
-                .font(PixelFont.font(10))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
                 .accessibilityIdentifier("cat-photo-status")
             if state.hasPhotoResult {
                 PixelDivider(palette: palette)
                 Text("生成结果")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(WorkbenchTypography.sectionTitle)
                     .foregroundStyle(palette.ink)
                 HStack(spacing: 8) {
                     Button("调整花纹与颜色") { appearancePage = .coat }
@@ -1634,7 +1677,7 @@ struct WorkbenchView: View {
                 }
                 .padding(.top, 6)
             }
-            .font(PixelFont.font(12))
+            .font(WorkbenchTypography.body())
             .foregroundStyle(palette.ink)
         }
     }
@@ -1756,7 +1799,7 @@ struct WorkbenchView: View {
                         Spacer(minLength: 8)
                     } else {
                         Text("毛色画笔")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(WorkbenchTypography.sectionTitle)
                             .foregroundStyle(palette.ink)
                         Spacer(minLength: 8)
                     }
@@ -1768,7 +1811,7 @@ struct WorkbenchView: View {
                 Text(editor.isFurOnly
                      ? "点小地图切换部位。画笔只改可见毛发，恢复原毛色可擦掉笔迹。"
                      : "点小地图切换部位，在左侧逐格点绘。完成编辑后可预览动作。")
-                    .font(PixelFont.font(10))
+                    .font(WorkbenchTypography.supporting())
                     .foregroundStyle(palette.inkSoft)
             } else {
                 Button {
@@ -1805,7 +1848,7 @@ struct WorkbenchView: View {
                         .frame(width: 22, height: 22)
                 }
                 Text(preset.name)
-                    .font(PixelFont.font(12))
+                    .font(WorkbenchTypography.body())
                     .foregroundStyle(palette.ink)
                     .lineLimit(1)
                 Spacer(minLength: 2)
@@ -1842,7 +1885,7 @@ struct WorkbenchView: View {
 
 
     @ViewBuilder
-    private var appearancePanel: some View {
+    private func appearancePanel(fittedHeight: CGFloat?) -> some View {
         if let catalog = state.catalog {
             let frame = state.appearance["frame", default: "CAT"]
             let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
@@ -1851,36 +1894,45 @@ struct WorkbenchView: View {
             let canChooseFaceBase = catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"])
 
             PixelPanel(palette: palette, padding: 12) {
-                if frame == "CAT" {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("外观")
-                            .font(PixelFont.font(22))
-                            .foregroundStyle(palette.ink)
-                        appearanceNavigation
-                        Divider()
-                        if appearancePage == .face { faceNavigation }
-                        appearanceContent(fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase)
-                            .disabled(state.choosingBreed && appearancePage != .breeds)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                    }
-                    .onChange(of: state.preset) { _ in
-                        earScope = nil
-                        eyeScope = nil
-                    }
-                    .onChange(of: state.customSelected) { _ in earScope = nil }
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-                            ForEach(dogFields, id: \.0) { key, title in
-                                if let options = fields[key] {
-                                    fieldPicker(title: title, key: key, options: options)
+                VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+                    Group {
+                        if frame == "CAT" {
+                            VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+                                Text("外观")
+                                    .font(WorkbenchTypography.sectionTitle)
+                                    .foregroundStyle(palette.ink)
+                                appearanceNavigation
+                                Divider()
+                                if appearancePage == .face { faceNavigation }
+                                appearanceContent(fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase,
+                                                  fitsBreedGrid: fittedHeight != nil)
+                                    .disabled(state.choosingBreed && appearancePage != .breeds)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                            .onChange(of: state.preset) { _ in
+                                earScope = nil
+                                eyeScope = nil
+                            }
+                            .onChange(of: state.customSelected) { _ in earScope = nil }
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                                    ForEach(dogFields, id: \.0) { key, title in
+                                        if let options = fields[key] {
+                                            fieldPicker(title: title, key: key, options: options)
+                                        }
+                                    }
                                 }
+                                paletteRow(options: fields["palette"] ?? [])
                             }
                         }
-                        paletteRow(options: fields["palette"] ?? [])
                     }
+                    .disabled(state.editingCustom || state.loadingCustom)
+                    PixelDivider(palette: palette)
+                    customAppearanceSection
                 }
             }
+            .frame(height: fittedHeight)
         }
     }
 
@@ -1920,7 +1972,8 @@ struct WorkbenchView: View {
         }
     }
 
-    private var breedGrid: some View {
+    @ViewBuilder
+    private func breedGrid(fillsPanel: Bool) -> some View {
         let presets = visiblePresets
         let preferredRows = [
             ["preset_cat_black", "preset_cat_CC09", "preset_cat_orange", "preset_cat_british_blue"],
@@ -1928,22 +1981,36 @@ struct WorkbenchView: View {
             ["preset_cat_li_hua", "preset_cat_CC10", "preset_cat_calico", "preset_cat_CC12"],
         ]
         let arrangedIDs = Set(preferredRows.joined())
-        let rows = preferredRows.map { row in
+        let rows = (preferredRows.map { row in
             row.compactMap { id in presets.first { $0.id == id } }
-        } + [presets.filter { !arrangedIDs.contains($0.id) }]
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 7), count: 4)
+        } + [presets.filter { !arrangedIDs.contains($0.id) }]).filter { !$0.isEmpty }
 
-        return VStack(spacing: 7) {
+        if fillsPanel {
+            GeometryReader { grid in
+                let rowCount = CGFloat(rows.count)
+                let rowSpacing = WorkbenchLayout.controlGap * (rowCount - 1)
+                let cardChrome = WorkbenchLayout.breedLabelHeight + WorkbenchLayout.appearanceCardSpacing
+                    + WorkbenchLayout.appearanceCardPadding * 2
+                let imageHeight = (grid.size.height - rowSpacing) / rowCount - cardChrome
+                breedRows(rows, imageHeight: max(WorkbenchLayout.breedThumbnailHeight, imageHeight))
+            }
+        } else {
+            breedRows(rows, imageHeight: WorkbenchLayout.breedThumbnailHeight)
+        }
+    }
+
+    private func breedRows(_ rows: [[AppearancePreset]], imageHeight: CGFloat) -> some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: WorkbenchLayout.controlGap), count: 4)
+        return VStack(spacing: WorkbenchLayout.controlGap) {
             ForEach(rows.indices, id: \.self) { index in
-                if !rows[index].isEmpty {
-                    LazyVGrid(columns: columns, spacing: 7) {
-                        ForEach(rows[index], id: \.id) { preset in
-                            appearanceCard(preset.name, image: state.thumbnails?.breeds[preset.id],
-                                           selected: state.preset == preset.id, imageHeight: 84, labelHeight: 17) {
-                                state.choosePreset(preset.id)
-                            }
-                            .accessibilityIdentifier("breed-\(preset.id)")
+                LazyVGrid(columns: columns, spacing: WorkbenchLayout.controlGap) {
+                    ForEach(rows[index], id: \.id) { preset in
+                        appearanceCard(preset.name, image: state.thumbnails?.breeds[preset.id],
+                                       selected: state.preset == preset.id, imageHeight: imageHeight,
+                                       labelHeight: WorkbenchLayout.breedLabelHeight) {
+                            state.choosePreset(preset.id)
                         }
+                        .accessibilityIdentifier("breed-\(preset.id)")
                     }
                 }
             }
@@ -1953,11 +2020,11 @@ struct WorkbenchView: View {
     @ViewBuilder
     private func appearanceContent(
         fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]],
-        canChooseFaceBase: Bool
+        canChooseFaceBase: Bool, fitsBreedGrid: Bool
     ) -> some View {
         switch appearancePage {
         case .breeds:
-            breedGrid
+            breedGrid(fillsPanel: fitsBreedGrid)
         case .face:
             switch facePart {
             case .ears:
@@ -1987,7 +2054,7 @@ struct WorkbenchView: View {
                     markingsControls(fields, markings, canChooseFaceBase: canChooseFaceBase)
                         .padding(.top, 8)
                 }
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.ink)
             }
         case .tail:
@@ -2067,7 +2134,7 @@ struct WorkbenchView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: WorkbenchLayout.appearanceCardSpacing) {
                 ZStack {
                     if let image {
                         Image(nsImage: image)
@@ -2081,13 +2148,13 @@ struct WorkbenchView: View {
                 .clipped()
                 .accessibilityHidden(true)
                 Text(title)
-                    .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    .font(WorkbenchTypography.supporting(selected ? .semibold : .regular))
                     .foregroundStyle(palette.ink)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .frame(height: labelHeight)
             }
-            .padding(4)
+            .padding(WorkbenchLayout.appearanceCardPadding)
             .frame(maxWidth: .infinity)
             .overlay(alignment: .topTrailing) {
                 if selected {
@@ -2192,7 +2259,7 @@ struct WorkbenchView: View {
                     get: { patch.height }, set: { height in editFurPatch(patch) { $0.height = height } }),
                         in: catalog.furPatchDimensions.range)
             }
-            .font(PixelFont.font(11))
+            .font(WorkbenchTypography.supporting())
             HStack(spacing: 7) {
                 Button("翻转") { editFurPatch(patch) { $0.flipped.toggle() } }
                 Button("镜像复制") { state.mirrorFurPatch(patch) }
@@ -2203,7 +2270,7 @@ struct WorkbenchView: View {
             }
             .workbenchButton(palette: palette, selected: false)
             Text(state.action == "sit" ? "拖选框移动，拖方块调宽高。" : "切回待机可继续在预览上拖动。")
-                .font(PixelFont.font(10))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
         }
     }
@@ -2243,10 +2310,10 @@ struct WorkbenchView: View {
     private func staticField(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
             Text(value)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
@@ -2269,7 +2336,7 @@ struct WorkbenchView: View {
         }
         return VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
             Group {
                 if let defaultSwatch {
@@ -2373,11 +2440,11 @@ struct WorkbenchView: View {
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("毛色")
-                    .font(PixelFont.font(12))
+                    .font(WorkbenchTypography.body())
                     .foregroundStyle(palette.inkSoft)
                 if let selected = options.first(where: { $0.id == state.appearance["palette"] }) {
                     Text(selected.name)
-                        .font(PixelFont.font(12))
+                        .font(WorkbenchTypography.body())
                         .foregroundStyle(palette.inkSoft.opacity(0.8))
                 }
             }
@@ -2412,40 +2479,49 @@ struct WorkbenchView: View {
 
 
     private var footer: some View {
-        PixelPanel(palette: palette, padding: 10) {
-            HStack(spacing: 12) {
+        PixelPanel(palette: palette, padding: WorkbenchLayout.controlGap) {
+            HStack(spacing: WorkbenchLayout.controlGap) {
                 Button {
                     if !showingDesktopSettings { userAddressDraft = savedUserAddress }
                     showingDesktopSettings.toggle()
                 } label: {
-                    entryLabel("桌宠设置", glyph: .workbenchSettings)
+                    entryLabel("桌面设置", glyph: .workbenchSettings)
                 }
                     .workbenchButton(palette: palette)
                     .accessibilityIdentifier("workbench-desktop-settings")
                     .popover(isPresented: $showingDesktopSettings, arrowEdge: .top) {
-                        desktopSettings.padding(15).frame(width: 260)
+                        desktopSettings.padding(WorkbenchLayout.panelGap).frame(width: 290)
                             .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, framed: true))
                     }
-                    .onChange(of: showingDesktopSettings) { if !$0 { saveUserAddress() } }
-                Text("桌宠大小").font(.system(size: 12)).foregroundStyle(palette.inkSoft)
+                    .onChange(of: showingDesktopSettings) { open in
+                        if !open {
+                            showingTypingSummary = false
+                            saveUserAddress()
+                        }
+                    }
+                Text("桌宠大小").font(WorkbenchTypography.supporting()).foregroundStyle(palette.inkSoft)
                 Slider(value: $state.petSize, in: 120...320)
                     .frame(width: 115)
                     .tint(palette.accentDeep)
                     .accessibilityLabel("桌宠大小")
                     .onChange(of: state.petSize) { state.setSize($0) }
                 Text("\(Int(state.petSize)) px")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(WorkbenchTypography.supporting()).monospacedDigit()
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize()
                 Spacer(minLength: 8)
-                applyStatus
+                if let editor = state.pixelEditor {
+                    WorkbenchBrushStatus(editor: editor) { applyStatus(brushChanged: $0) }
+                } else {
+                    applyStatus(brushChanged: false)
+                }
                 applyButton
             }
         }
     }
 
     private var desktopSettings: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
             userAddressField
             Divider()
             Toggle("显示桌宠", isOn: Binding(get: { state.petIsVisible }, set: state.setVisibility))
@@ -2459,11 +2535,18 @@ struct WorkbenchView: View {
             Toggle("本地打字统计", isOn: Binding(get: { state.typingStatsEnabled }, set: state.setTypingStats))
                 .help("在本机记录活跃打字时长和按键次数，需要输入监控")
                 .accessibilityIdentifier("typing-stats-toggle")
-            Toggle("显示打字统计", isOn: Binding(get: { state.showTypingStats }, set: state.setShowTypingStats))
-                .help("在预览下方显示今日数据，统计由本地打字统计开关控制")
-                .accessibilityIdentifier("typing-stats-display-toggle")
+            DisclosureGroup(isExpanded: $showingTypingSummary) {
+                TypingActivitySummary(activity: typingActivity, palette: palette)
+                    .padding(.top, WorkbenchLayout.tightGap)
+            } label: {
+                Text("今日打字统计")
+            }
+            .accessibilityIdentifier("typing-stats-disclosure")
+            .onChange(of: showingTypingSummary) { expanded in
+                if expanded { typingActivity.refreshToday() }
+            }
             Text(state.typingStatus.text)
-                .font(.system(size: 11))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
             Toggle("划词翻译", isOn: Binding(get: { state.selectionTranslationEnabled }, set: state.setSelectionTranslation))
                 .disabled(!TranslationEngine.isAvailable)
@@ -2484,7 +2567,7 @@ struct WorkbenchView: View {
         }
         .toggleStyle(.checkbox)
         .tint(palette.accent)
-        .font(.system(size: 12))
+        .font(WorkbenchTypography.body())
     }
 
     private var userAddressField: some View {
@@ -2504,7 +2587,7 @@ struct WorkbenchView: View {
                     .accessibilityIdentifier("pet-user-address-save")
             }
             Text(verbatim: "专注完成时 · " + PetUserAddress.focusFinishedMessage(address: address))
-                .font(.system(size: 11))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2524,30 +2607,41 @@ struct WorkbenchView: View {
         if userAddressDraft != address { userAddressDraft = address }
     }
 
-    private var applyStatus: some View {
-        let message: String
-        if state.applying {
-            message = "正在应用当前外观…"
+    @ViewBuilder
+    private func applyStatus(brushChanged: Bool) -> some View {
+        let error = state.applyError ?? (state.message.contains("无法") || state.message.contains("失败")
+            || state.message.hasPrefix("请输入") ? state.message : nil)
+        let pending = brushChanged || state.hasUnappliedAppearance
+        let applied = state.applyConfirmed && !pending && error == nil && !state.applying && !state.loadingCustom
+        let message = if state.applying {
+            "正在应用当前外观…"
         } else if state.loadingCustom {
-            message = "正在载入自定义形象…"
+            "正在载入自定义形象…"
+        } else if let error {
+            error
+        } else if pending {
+            "有改动待应用"
+        } else if applied {
+            "已应用"
         } else {
-            message = state.message.isEmpty ? "将当前外观显示到桌面" : state.message
+            state.message
         }
 
-        let applied = message == "已应用到桌宠"
-        let failed = message.contains("无法") || message.contains("失败")
-        return HStack(spacing: 5) {
-            if applied || failed {
-                Image(systemName: applied ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(applied ? palette.green : palette.red)
-                    .accessibilityHidden(true)
+        if !message.isEmpty {
+            let failed = message == error
+            HStack(spacing: 5) {
+                if applied || failed {
+                    Image(systemName: applied ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundStyle(applied ? palette.green : palette.red)
+                        .accessibilityHidden(true)
+                }
+                Text(message)
+                    .font(WorkbenchTypography.supporting(applied || failed ? .semibold : .regular))
+                    .foregroundStyle(applied || failed ? palette.ink : palette.inkSoft)
+                    .lineLimit(1)
+                    .help(message)
+                    .accessibilityIdentifier("workbench-apply-status")
             }
-            Text(message)
-                .font(.system(size: 12, weight: applied || failed ? .semibold : .regular))
-                .foregroundStyle(applied || failed ? palette.ink : palette.inkSoft)
-                .lineLimit(1)
-                .help(message)
-                .accessibilityIdentifier("workbench-apply-status")
         }
     }
 
@@ -2558,12 +2652,11 @@ struct WorkbenchView: View {
         } label: {
             HStack(spacing: 5) {
                 if state.applying {
-                    ProgressView().controlSize(.mini).accessibilityHidden(true)
+                    ProgressView().controlSize(.mini).frame(width: 12, height: 12).accessibilityHidden(true)
                 } else {
                     PixelGlyph(kind: .workbenchApply, color: disabled ? palette.inkSoft : Color(pixelHex: 0xFFF9EC), size: 12)
                 }
-                Text(state.applying ? "正在应用…" : "应用到桌宠")
-                    .font(PixelFont.font(13))
+                Text("应用到桌宠")
             }
             .fixedSize()
         }
@@ -2594,8 +2687,8 @@ private struct TypingActivitySummary: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            metric("今日活跃打字时长", value: duration)
+        HStack(spacing: WorkbenchLayout.controlGap) {
+            metric("今日活跃时长", value: duration)
             Rectangle()
                 .fill(palette.borderSoft)
                 .frame(width: 1, height: 26)
@@ -2611,13 +2704,20 @@ private struct TypingActivitySummary: View {
     private func metric(_ label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
             Text(value)
-                .font(PixelFont.font(16))
+                .font(WorkbenchTypography.body(.semibold)).monospacedDigit()
                 .foregroundStyle(palette.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
+}
+
+private struct WorkbenchBrushStatus<Content: View>: View {
+    @ObservedObject var editor: PixelEditorModel
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View { content(editor.hasChanges) }
 }

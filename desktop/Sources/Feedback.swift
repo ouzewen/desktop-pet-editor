@@ -16,7 +16,7 @@ private enum FeedbackType: String, CaseIterable {
         switch self {
         case .problem: "你当时在做什么？发生了什么？可以补充复现步骤。"
         case .improvement: "哪里不顺手？你希望它怎么操作？"
-        case .featureRequest: "你想完成什么？希望桌宠在什么时候帮你？"
+        case .featureRequest: "你想完成什么？希望「\(PetBrand.name)」在什么时候帮你？"
         }
     }
 }
@@ -114,7 +114,7 @@ struct FeedbackSheet: View {
 
     private let featureAreas = [
         ("appearance", "外观与像素编辑"), ("motion_typing", "动作与打字"),
-        ("desktop_interaction", "桌面交互"), ("productivity", "提醒与效率工具"),
+        ("desktop_interaction", "桌面交互"), ("productivity", "待办与效率工具"),
         ("install_updates", "安装与更新"), ("other", "其他／不确定"),
     ]
 

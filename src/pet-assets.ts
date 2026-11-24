@@ -495,6 +495,7 @@ export const standingEarPath = 'cat/standing-ears-v25/';
 export const frontPawSolesPath = 'cat/front-paw-soles-v26/';
 export const frontPawSoleGuide = frontPawSolesPath + 'guide';
 export const updatedRestingCatPath = 'cat/resting-v30/';
+export const siameseCleanBodyPath = 'cat/siamese-clean-body/torso';
 export const catComponentRecipePath = 'cat/component-recipes-v40/';
 export const catChestWhitePath = 'cat/component-chest-v42/';
 export const catForeheadLockPath = 'cat/component-forehead-v43/';
@@ -549,6 +550,8 @@ export const assetGroups: readonly AssetGroup[] = [
   }], {
     ...cat, sources: approvedRestingCatIds.map(id => 'art/cat-pixel80/component-recipes84/' + id + '.aseprite'),
   }),
+  scriptGroup('cat.component-recipes.siamese-body', 'current', 'art/cat-pixel80/siamese-clean-body.aseprite',
+    'export-cat-siamese-clean-body', 'cat/siamese-clean-body/', pngs([siameseCleanBodyPath], 80)),
   group('cat.component-recipes.chest-white', 'current',
     pngs(withPrefix(catChestWhitePath, ['calico', 'CC12']), 80), [{
       source: 'art/cat-pixel80/component-recipes84/shared.aseprite',

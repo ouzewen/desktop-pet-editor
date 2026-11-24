@@ -302,9 +302,9 @@ struct PixelChecker: View {
 // MARK: - Glyphs
 
 enum PixelIconKind {
-    case bell, plus, close, check, paw, eye, keyboard, chevron, arrowLeft, arrowRight, pin, cloud, note, clip, microphone, timer
+    case bell, plus, close, check, paw, eye, keyboard, chevron, chevronUp, arrowLeft, arrowRight, pin, cloud, note, clip, microphone, timer
     case workbenchCat, workbenchRecord, workbenchBrush, workbenchApply, workbenchSettings
-    case pencil, trash, file
+    case pencil, trash, file, grip, todo, checkbox
 }
 
 struct PixelGlyph: View {
@@ -337,6 +337,17 @@ struct PixelGlyph: View {
 
     private static func pattern(_ kind: PixelIconKind) -> [String] {
         switch kind {
+        case .checkbox:
+            return ["11111111", "1......1", "1......1", "1......1",
+                    "1......1", "1......1", "1......1", "11111111"]
+        case .todo:
+            return [
+                "............", "....1.......", "...11.11111.", "1.11........",
+                ".11.........", "............", "............", ".111........",
+                ".1.1..11111.", ".111........", "............", "............",
+            ]
+        case .grip:
+            return ["11.11", "11.11", ".....", "11.11", "11.11", ".....", "11.11", "11.11"]
         case .file:
             return [
                 "11111...", "1...11..", "1...111.", "1.....1.",
@@ -523,8 +534,8 @@ struct PixelGlyph: View {
                 "11111111",
                 "........",
             ]
-        case .chevron:
-            return [
+        case .chevron, .chevronUp:
+            let rows = [
                 "........",
                 "11....11",
                 ".11..11.",
@@ -534,6 +545,7 @@ struct PixelGlyph: View {
                 "........",
                 "........",
             ]
+            return kind == .chevronUp ? Array(rows.reversed()) : rows
         case .arrowLeft:
             return [
                 "........",
@@ -631,17 +643,43 @@ extension EnvironmentValues {
     }
 }
 
+enum WorkbenchTypography {
+    static let pageTitle = PixelFont.font(22)
+    static let sectionTitle = PixelFont.font(18)
+    static let bodySize: CGFloat = 14
+
+    static func body(_ weight: Font.Weight = .regular) -> Font {
+        .system(size: bodySize, weight: weight)
+    }
+
+    static func supporting(_ weight: Font.Weight = .regular) -> Font {
+        .system(size: 10, weight: weight)
+    }
+}
+
+private struct WorkbenchWindowTypographyKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var usesWorkbenchWindowTypography: Bool {
+        get { self[WorkbenchWindowTypographyKey.self] }
+        set { self[WorkbenchWindowTypographyKey.self] = newValue }
+    }
+}
+
 struct WorkbenchButtonStyle: ButtonStyle {
     let palette: PixelPalette
     var selected = false
     var prominent = false
     var card = false
+    var quiet = false
     var keyboardFocused = false
     var tint: Color?
 
     func makeBody(configuration: Configuration) -> some View {
         WorkbenchButtonFace(label: configuration.label, palette: palette, selected: selected,
-                            prominent: prominent, card: card, pressed: configuration.isPressed,
+                            prominent: prominent, card: card, quiet: quiet, pressed: configuration.isPressed,
                             keyboardFocused: keyboardFocused, tint: tint)
     }
 }
@@ -651,11 +689,12 @@ private struct WorkbenchButtonChrome: ViewModifier {
     let selected: Bool
     let prominent: Bool
     let card: Bool
+    let quiet: Bool
     let tint: Color?
     @FocusState private var focused: Bool
 
     private var style: WorkbenchButtonStyle {
-        WorkbenchButtonStyle(palette: palette, selected: selected, prominent: prominent, card: card,
+        WorkbenchButtonStyle(palette: palette, selected: selected, prominent: prominent, card: card, quiet: quiet,
                             keyboardFocused: focused, tint: tint)
     }
 
@@ -670,8 +709,9 @@ private struct WorkbenchButtonChrome: ViewModifier {
 
 extension View {
     func workbenchButton(palette: PixelPalette, selected: Bool = false, prominent: Bool = false, card: Bool = false,
-                         tint: Color? = nil) -> some View {
-        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent, card: card, tint: tint))
+                         quiet: Bool = false, tint: Color? = nil) -> some View {
+        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent, card: card,
+                                       quiet: quiet, tint: tint))
     }
 }
 
@@ -681,9 +721,11 @@ private struct WorkbenchButtonFace<Label: View>: View {
     let selected: Bool
     let prominent: Bool
     let card: Bool
+    let quiet: Bool
     let pressed: Bool
     let keyboardFocused: Bool
     let tint: Color?
+    @Environment(\.usesWorkbenchWindowTypography) private var useWindowTypography
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.workbenchTheme) private var workbenchTheme
@@ -693,6 +735,7 @@ private struct WorkbenchButtonFace<Label: View>: View {
 
     private var feedback: Bool { enabled && (hovered || pressed || focused || keyboardFocused) }
     private var fill: Color {
+        if quiet && !selected && !feedback { return .clear }
         if !enabled { return prominent ? palette.panelDeep : palette.panelAlt }
         if let tint, prominent { return pressed ? tint.opacity(0.85) : tint }
         if prominent && workbenchTheme != nil {
@@ -714,9 +757,14 @@ private struct WorkbenchButtonFace<Label: View>: View {
         return Color(pixelHex: colorScheme == .dark ? 0x4D3019 : 0xF4D39D)
     }
 
+    private var labelFont: Font {
+        let weight: Font.Weight = selected || prominent ? .semibold : .medium
+        return useWindowTypography ? WorkbenchTypography.body(weight) : .system(size: 12, weight: weight)
+    }
+
     var body: some View {
         label
-            .font(.system(size: 12, weight: selected || prominent ? .semibold : .medium))
+            .font(labelFont)
             .foregroundStyle(foreground)
             .padding(.horizontal, card ? 0 : 9)
             .padding(.vertical, card ? 0 : 6)
@@ -961,6 +1009,7 @@ struct PixelSelect: View {
 
 struct PixelTextField: View {
     @Environment(\.workbenchChrome) private var workbenchChrome
+    @Environment(\.usesWorkbenchWindowTypography) private var useWindowTypography
     @Environment(\.isFocused) private var focused
     @Binding var text: String
     let placeholder: String
@@ -969,7 +1018,7 @@ struct PixelTextField: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
-            .font(PixelFont.font(12))
+            .font(useWindowTypography ? WorkbenchTypography.body() : PixelFont.font(12))
             .foregroundStyle(palette.ink)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

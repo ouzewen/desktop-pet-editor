@@ -9,11 +9,11 @@ struct WorkbenchGuideSheet: View {
         case files = "文件操作"
         case updates = "更新与反馈"
 
-        func instructions(recordingAvailable: Bool) -> [(title: String, body: String)] {
+        var instructions: [(title: String, body: String)] {
             switch self {
             case .start:
                 return [
-                    ("打开工作台", "点击菜单栏的桌宠图标，或右键小猫，选择「打开工作台」。"),
+                    ("打开工作台", "点击菜单栏的「\(PetBrand.name)」图标，或右键小猫，选择「打开工作台」。"),
                     ("移动小猫", "按住小猫拖动到合适的位置。鼠标停在小猫身上时，快捷按钮会出现。"),
                     ("隐藏和归位", "在外观设置底部可以开关「显示桌宠」、调整大小。找不到小猫时，点击「归位」即可把它移回屏幕。"),
                 ]
@@ -24,19 +24,16 @@ struct WorkbenchGuideSheet: View {
                     ("保存自己的形象", "展开「自定义外观」，可用像素画笔微调。完成后可「存为形象」方便下次使用，也可以「导出 PNG」。"),
                 ]
             case .recording:
-                guard recordingAvailable else {
-                    return [("系统要求", "会议录音需要 macOS 26 或更新版本。符合系统要求后，工作台会显示「会议录音」页。")]
-                }
                 return [
                     ("选好音源", "进入「会议录音」，勾选「系统声音」录下电脑播放的声音，或勾选「麦克风」录下现场声音。两项可同时开启，转写语言也在这里选择。"),
-                    ("开始和结束录音", "在工作台点击「开始录音」和「结束录音」，也可以用小猫的悬停快捷按钮「录音」和「停止」。录音中会显示计时，小猫右上角会亮起红点。"),
+                    ("开始和结束录音", "在工作台点击「开始录音」和「结束录音」。录音中会显示计时，小猫右上角会亮起红点。"),
                     ("查阅文稿和音频", "结束后由 macOS 自动转写，纪要从逐字稿提取重点、决定和待办。左侧按日期选择记录，右侧切换「会议纪要」和「逐字稿」，可一键复制。用「更多」在 Finder 中查看原音频。录音和转写期间也能查阅旧记录。"),
                     ("首次使用", "按系统提示授权所选音源。首次转写可能需要下载语言模型，录音与文稿保存在本机。"),
                 ]
             case .productivity:
                 return [
-                    ("专注、提醒和剪贴板", "悬停在小猫身上可打开「专注」和「剪贴板」。右键小猫可选择专注时长或「添加重要提醒」。剪贴板展示最近复制的文字，退出 App 后清空。"),
-                    ("打字动画与统计", "在外观设置底部可分别开启「打字动画」和「本地打字统计」，并按提示授予输入监控权限。「显示打字统计」只控制工作台显示，本地统计开启时会继续记录打字时长和按键次数。"),
+                    ("专注、待办提醒和剪贴板", "悬停在小猫身上可打开「待办」「剪贴板」和「专注」。待办右侧可勾选完成，点击文字可编辑。展开「今日已完成」可恢复当天的条目。剪贴板展示最近复制的文字，退出 App 后清空。"),
+                    ("打字动画与统计", "在「外观设置 → 桌面设置」可分别开启「打字动画」和「本地打字统计」，并按提示授予输入监控权限。展开「今日打字统计」可查看今日活跃时长和按键次数。收起后仍会按本地统计开关记录。"),
                     ("划词翻译", "在底部开启「划词翻译」并授权辅助功能后，选中英文，点击出现的「翻译」。此功能需要 macOS 15 或更新版本。"),
                 ]
             case .files:
@@ -46,7 +43,7 @@ struct WorkbenchGuideSheet: View {
             case .updates:
                 return [
                     ("检查更新", "在工作台右上角点击「检查更新」。发现新版后，先保存手头的编辑，再点击「安装并重启」。"),
-                    ("提交反馈", "点击工作台右上角的「意见反馈」，选择问题类别并描述遇到的情况。反馈会附上 App 版本，便于定位问题。"),
+                    ("提交反馈", "在工作台右上角选择「帮助 → 意见反馈」，选择问题类别并描述遇到的情况。反馈会附上 App 版本，便于定位问题。"),
                 ]
             }
         }
@@ -72,7 +69,7 @@ struct WorkbenchGuideSheet: View {
                         .foregroundStyle(palette.ink)
                         .accessibilityAddTraits(.isHeader)
                     if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
-                        Text("桌宠 v\(version)")
+                        Text("\(PetBrand.name) v\(version)")
                             .font(PixelFont.font(12))
                             .foregroundStyle(palette.inkSoft)
                             .accessibilityIdentifier("workbench-guide-version")
@@ -87,7 +84,7 @@ struct WorkbenchGuideSheet: View {
 
             HStack(spacing: 0) {
                 VStack(spacing: 5) {
-                    ForEach(Topic.allCases, id: \.self) { item in
+                    ForEach(Topic.allCases.filter { recordingAvailable || $0 != .recording }, id: \.self) { item in
                         topicButton(item)
                     }
                     Spacer(minLength: 0)
@@ -108,7 +105,7 @@ struct WorkbenchGuideSheet: View {
                             .font(.system(size: 18, weight: .semibold))
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("workbench-guide-topic")
-                        ForEach(topic.instructions(recordingAvailable: recordingAvailable), id: \.title) { section in
+                        ForEach(topic.instructions, id: \.title) { section in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(section.title)
                                     .font(.system(size: 13, weight: .semibold))

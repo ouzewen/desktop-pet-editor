@@ -31,7 +31,7 @@ import { liHuaFur, liHuaPigments, liHuaReferenceFur, toneLiHuaFur, type LiHuaSty
 import { irisColors, palettes, type Config } from './model';
 
 import {
-  calicoBodyIndex, approvedRestingCatIds, approvedRestingCatPath, standingEarPath, catComponentRecipePath, catChestWhitePath, catForeheadLockPath, assetFiles, assetsFor, atlasNoseTips, catPhotoEarSides, catPhotoPartPath, catPhotoParts, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
+  calicoBodyIndex, approvedRestingCatIds, approvedRestingCatPath, standingEarPath, siameseCleanBodyPath, catComponentRecipePath, catChestWhitePath, catForeheadLockPath, assetFiles, assetsFor, atlasNoseTips, catPhotoEarSides, catPhotoPartPath, catPhotoParts, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
   sharedTabbyCheekPath, orangeForeheadPatch, liHuaCrownTone, goldenFlankTone, goldenChinTone,
   bodyPatternPath, calicoBodyOutlinePath, calicoCrownPath, calicoFaceFinishPath, catEarRetouchPath, breedArt, breedBodyOutlinePath, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catBreedDetailsPath, catBreedDetailPresets, catFaceEdgesPath, catHeadCleanupPath, catFileActions, catFrontEars, catListening, catPetLove, honeyGoldPath, liHuaCoatPath, liHuaLibTVCoatPath, liHuaReferenceCheekAsset, liHuaSampledPath, liHuaFrenzyFurAsset, restingSmilePath, reviewedRestingSmilePath, frontPawSoleGuide, frontPawSolesPath, combinedRestingCatPath, updatedRestingCatPath, orangeStripeRestingAsset, frontGloveGuide, chinShadeMask, diluteEarMarkPatch, diluteEarMarkStock, sharedRestingOutlinePath,
   catFurSlots, catMarkings, catMouthPath, historicalConvexMouthPath, historicalConvexLiHuaBacking, catNosePath, centeredNosePath, centeredNoseTips, catWalkBodies, catWalkFrames, earMaskPath, facePartsPath, faceTiles,
@@ -80,8 +80,10 @@ const independentEarArtVersion = 'pixel80-v43';
 const centeredNoseArtVersion = 'pixel80-v44';
 const historicalConvexMouthArtVersion = 'pixel80-v45';
 // v42–v45 are independent earlier candidates; v46 combines their features.
-export const currentCatArtVersion = 'pixel80-v46';
-export const catArtVersions = ['pixel80', 'pixel80-v2', 'pixel80-v3', 'pixel80-v4', 'pixel80-v5', 'pixel80-v6', 'pixel80-v7', 'pixel80-v8', 'pixel80-v9', 'pixel80-v10', 'pixel80-v11', 'pixel80-v12', 'pixel80-v13', 'pixel80-v14', 'pixel80-v15', 'pixel80-v16', 'pixel80-v17', 'pixel80-v18', 'pixel80-v19', 'pixel80-v20', 'pixel80-v21', 'pixel80-v22', coatSmileArtVersion, rearPawArtVersion, standingEarArtVersion, frontPawArtVersion, diluteEarMarkArtVersion, combinedRestingArtVersion, refinedRestingArtVersion, orangeStripeArtVersion, alignedTypingArtVersion, frontGloveArtVersion, sharedCheekArtVersion, orangeForeheadArtVersion, liHuaCrownArtVersion, goldenFlankArtVersion, goldenChinArtVersion, build84CatArtVersion, componentCatArtVersion, coatRecipeArtVersion, whiteChestArtVersion, independentEarArtVersion, centeredNoseArtVersion, historicalConvexMouthArtVersion, currentCatArtVersion] as const;
+const combinedFeatureArtVersion = 'pixel80-v46';
+const siameseCleanBodyArtVersion = 'pixel80-v47';
+export const currentCatArtVersion = siameseCleanBodyArtVersion;
+export const catArtVersions = ['pixel80', 'pixel80-v2', 'pixel80-v3', 'pixel80-v4', 'pixel80-v5', 'pixel80-v6', 'pixel80-v7', 'pixel80-v8', 'pixel80-v9', 'pixel80-v10', 'pixel80-v11', 'pixel80-v12', 'pixel80-v13', 'pixel80-v14', 'pixel80-v15', 'pixel80-v16', 'pixel80-v17', 'pixel80-v18', 'pixel80-v19', 'pixel80-v20', 'pixel80-v21', 'pixel80-v22', coatSmileArtVersion, rearPawArtVersion, standingEarArtVersion, frontPawArtVersion, diluteEarMarkArtVersion, combinedRestingArtVersion, refinedRestingArtVersion, orangeStripeArtVersion, alignedTypingArtVersion, frontGloveArtVersion, sharedCheekArtVersion, orangeForeheadArtVersion, liHuaCrownArtVersion, goldenFlankArtVersion, goldenChinArtVersion, build84CatArtVersion, componentCatArtVersion, coatRecipeArtVersion, whiteChestArtVersion, independentEarArtVersion, centeredNoseArtVersion, historicalConvexMouthArtVersion, combinedFeatureArtVersion, currentCatArtVersion] as const;
 export type CatArtVersion = typeof catArtVersions[number];
 const liHuaCoatAssets = {
   'pixel80-v13': { head: liHuaCoatPath + 'head', body: liHuaCoatPath + 'body' },
@@ -1272,7 +1274,7 @@ const standingEarSwatches = new Map<string, readonly number[]>();
 const componentStockColors = new Map<string, Uint8ClampedArray>();
 
 function usesArtFeature(version: CatArtVersion | undefined, feature: CatArtVersion) {
-  return version === feature || version === currentCatArtVersion;
+  return version === feature || version === combinedFeatureArtVersion || version === currentCatArtVersion;
 }
 
 export function hasCuratedCoatRecipes(version?: CatArtVersion) {
@@ -1299,8 +1301,40 @@ function withWhiteChest(source: CatLayer, id: string | undefined, version?: CatA
   return canvas;
 }
 
+const siameseCleanBodyLayers = new WeakMap<CatLayer, Map<string, CatLayer>>();
+const siameseCleanBodyCoats = new Map<string, CatLayer>();
+
+function withSiameseCleanBody(source: CatLayer, coat: 'native' | 'siameseWarm' | 'siameseCool', version?: CatArtVersion) {
+  if (version !== siameseCleanBodyArtVersion || !pixel80Keys.has(siameseCleanBodyPath)) return source;
+  let versions = siameseCleanBodyLayers.get(source);
+  if (!versions) siameseCleanBodyLayers.set(source, versions = new Map());
+  const cached = versions.get(coat);
+  if (cached) return cached;
+  const asset = imageFor(siameseCleanBodyPath);
+  let patch: CatLayer = asset;
+  if (coat !== 'native') {
+    let colored = siameseCleanBodyCoats.get(coat);
+    if (!colored) {
+      const pixels = restingOutlinePixels(asset);
+      paintRecipeCoat(pixels, undefined, 'siamese', coat);
+      const tile = makeLayer(80);
+      tile.ctx.putImageData(pixels, 0, 0);
+      siameseCleanBodyCoats.set(coat, colored = tile.canvas);
+    }
+    patch = colored;
+  }
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  ctx.drawImage(source, 0, 0, CAT_SIZE, CAT_SIZE);
+  ctx.drawImage(patch, 0, 0, CAT_SIZE, CAT_SIZE);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(source, 0, 0, CAT_SIZE, CAT_SIZE);
+  versions.set(coat, canvas);
+  return canvas;
+}
+
 function componentRecipeStock(id: string, version?: CatArtVersion) {
-  return withWhiteChest(imageFor(catComponentRecipePath + id + '-stock'), id, version);
+  const source = withWhiteChest(imageFor(catComponentRecipePath + id + '-stock'), id, version);
+  return id === 'siamese' ? withSiameseCleanBody(source, 'native', version) : source;
 }
 
 function standingEarMask(side: CatPhotoEarSide, recipe: boolean) {
@@ -3244,7 +3278,10 @@ function frontCatLayers(config: CatRenderConfig, typing: boolean, frame: number,
   const gloves = seated ? withFrontGloves(patchedForeleg, config, pose) : patchedForeleg;
   const chestId = seated && config.bodyPattern === 'native' && config.bodyBase !== 'solid' && hasNativeFrontGloves(config)
     ? standingEarPresets.get(config.palette + '/' + config.coat) : undefined;
-  const body = withWhiteChest(gloves, chestId, pose.artVersion);
+  const chest = withWhiteChest(gloves, chestId, pose.artVersion);
+  const siameseCoat = config.coat === 'native' || config.coat === 'siameseWarm' || config.coat === 'siameseCool' ? config.coat : undefined;
+  const body = seated && config.palette === 'CC04' && siameseCoat && config.bodyPattern === 'native' && config.bodyBase !== 'solid'
+    ? withSiameseCleanBody(chest, siameseCoat, pose.artVersion) : chest;
   const frenzyPaws = usesFallingTyping(animation) && mode === 'frenzy';
   const frontPaws = typing && isFrontTyping(animation) ? frontTypingPaws(frame, frenzyPaws) : undefined;
   const pawPigment = frontPaws && catKeepsBreedPigment(config) && usesBodyPattern(config)

@@ -159,7 +159,7 @@ sparkle = "{" + namespace + "}"
 tree = ET.parse(old_path)
 channel = tree.getroot().find("channel")
 item = ET.Element("item")
-ET.SubElement(item, "title").text = f"桌宠 {version}"
+ET.SubElement(item, "title").text = f"陪着你 {version}"
 ET.SubElement(item, sparkle + "version").text = build
 ET.SubElement(item, sparkle + "shortVersionString").text = version
 ET.SubElement(item, sparkle + "minimumSystemVersion").text = "13.0.0"
@@ -175,7 +175,7 @@ xmllint --noout "$new_feed"
 
 if [[ -n "$publish" ]]; then
   gh release create "$tag" "$zip" --repo "$repo" --target "$source_commit" --prerelease \
-    --title "桌宠 $version 测试版" --notes "用于验证桌宠应用内自动更新。"
+    --title "陪着你 $version 测试版" --notes "用于验证「陪着你」的应用内自动更新。"
   curl --fail --silent --show-error --location --max-time 120 "$release_url" -o "$output/download.zip"
   cmp "$zip" "$output/download.zip" || die 'The public Release asset differs from the signed ZIP.'
   base64 -i "$new_feed" | tr -d '\n' > "$output/appcast.base64"

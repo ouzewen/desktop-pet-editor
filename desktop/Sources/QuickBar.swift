@@ -3,26 +3,20 @@ import SwiftUI
 
 /// The three buttons that appear when the pointer rests on the pet.
 struct QuickBar: View {
-    let isRecording: Bool
-    let recordingUnavailableReason: String?
-    let onRecording: () -> Void
+    let onTodo: () -> Void
     let onClipboard: () -> Void
     let onFocus: () -> Void
 
     @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
 
     private var palette: PixelPalette { workbenchTheme.palette }
-    private var recordingAction: String { isRecording ? "结束录音" : "开始录音" }
 
     var body: some View {
         PixelPanel(palette: palette, padding: 5) {
             HStack(spacing: 4) {
-                button(.workbenchRecord, isRecording ? "停止" : "录音", color: isRecording ? palette.red : palette.ink, onRecording)
-                    .disabled(recordingUnavailableReason != nil)
-                    .opacity(recordingUnavailableReason == nil ? 1 : 0.6)
-                    .help(recordingUnavailableReason ?? recordingAction)
-                    .accessibilityLabel(recordingAction)
-                    .accessibilityIdentifier("quick-bar-recording")
+                button(.todo, "待办", onTodo)
+                    .help("打开待办提醒")
+                    .accessibilityIdentifier("quick-bar-todo")
                 button(.clip, "剪贴板", onClipboard)
                     .help("打开剪贴板记录")
                     .accessibilityIdentifier("quick-bar-clipboard")
@@ -35,13 +29,13 @@ struct QuickBar: View {
         .fixedSize()
     }
 
-    private func button(_ kind: PixelIconKind, _ title: String, color: Color? = nil, _ action: @escaping () -> Void) -> some View {
+    private func button(_ kind: PixelIconKind, _ title: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                PixelGlyph(kind: kind, color: color ?? palette.ink, size: 12)
+                PixelGlyph(kind: kind, color: palette.ink, size: 12)
                     .accessibilityHidden(true)
                 Text(title)
-                    .foregroundStyle(color ?? palette.ink)
+                    .foregroundStyle(palette.ink)
             }
         }
         .workbenchButton(palette: palette)

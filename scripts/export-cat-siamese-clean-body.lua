@@ -1,0 +1,6 @@
+local sprite = assert(app.activeSprite)
+assert(sprite.width == 80 and sprite.height == 80 and #sprite.frames == 1)
+local output = assert(app.params.output)
+local pixels = Image(sprite.spec)
+pixels:drawSprite(sprite, 1, Point(0, 0))
+assert(pixels:saveAs(output .. "/torso.png"))

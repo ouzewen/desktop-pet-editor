@@ -6,6 +6,11 @@ import ServiceManagement
 import SwiftUI
 import WebKit
 
+enum PetBrand {
+    static let name = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String ?? "陪着你"
+    static let quitTitle = "退出\(name)"
+}
+
 final class PetPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -261,6 +266,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var previewReady = false
     private var appliedConfig: [String: Any]?
     private var draftTemplate: [String: Any] = [:]
+    private var appearancePreviewRevision = 0
     private struct CustomSelection {
         let id: String
         let url: URL
@@ -334,8 +340,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var singleDropURL: URL? { dropChoiceURLs.count == 1 ? dropChoiceURLs.first : nil }
     private var dropChoiceMonitor: Any?
     private var dropChoiceLocalMonitor: Any?
+    // Recording is paused. Keep its preferences and history available for re-enabling.
+    private static let meetingRecordingEnabled = false
+
     @available(macOS 26, *)
-    private var meetingRecorder: MeetingRecorder {
+    private var meetingRecorder: MeetingRecorder? {
+        guard Self.meetingRecordingEnabled else { return nil }
         if let live = meetingRecorderStorage as? MeetingRecorder { return live }
         let recorder = MeetingRecorder { [weak self] recording in
             self?.meetingStateChanged(recording: recording)
@@ -428,7 +438,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.eyeFollow = eyeFollow
         workbenchState.typingAnimationEnabled = prefs.bool(forKey: "typingAnimationEnabled")
         workbenchState.typingStatsEnabled = prefs.bool(forKey: "typingStatsEnabled")
-        workbenchState.showTypingStats = prefs.object(forKey: "showTypingStats") as? Bool ?? true
         workbenchState.selectionTranslationEnabled = TranslationEngine.isAvailable && prefs.bool(forKey: "selectionTranslationEnabled")
         loadReminders()
         workbenchState.visible = prefs.object(forKey: "shibaVisible") as? Bool ?? (prefs.string(forKey: "shibaConfig") != nil)
@@ -465,8 +474,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         status.button?.title = ""
         status.button?.image = makeStatusIcon()
         status.button?.imagePosition = .imageOnly
-        status.button?.toolTip = "桌宠"
-        status.button?.setAccessibilityLabel("桌宠")
+        status.button?.toolTip = PetBrand.name
+        status.button?.setAccessibilityLabel(PetBrand.name)
         status.menu = makeMenu()
         if CommandLine.arguments.contains("--self-test") {
             guard verifyMenuStructure() else {
@@ -592,6 +601,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.refresh = { [weak self] in self?.refreshPreview() }
         workbenchState.apply = { [weak self] in
             guard let self else { return }
+            self.workbenchState.applyError = nil
             self.stageBrush(nextMode: nil) { staged in
                 if staged { self.applyDraft() }
             }
@@ -599,11 +609,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.reset = { [weak self] in self?.resetPosition() }
         workbenchState.setTypingAnimation = { [weak self] enabled in self?.setTypingAnimation(enabled) }
         workbenchState.setTypingStats = { [weak self] enabled in self?.setTypingStats(enabled) }
-        workbenchState.setShowTypingStats = { [weak self] visible in
-            self?.workbenchState.showTypingStats = visible
-            UserDefaults.standard.set(visible, forKey: "showTypingStats")
-            if visible { self?.typingActivity.refreshToday() }
-        }
         workbenchState.setSelectionTranslation = { [weak self] enabled in self?.setSelectionTranslation(enabled) }
         workbenchState.openInputSettings = { [weak self] in self?.openInputMonitoringSettings() }
         workbenchState.openAccessibilitySettings = { [weak self] in self?.openAccessibilitySettings() }
@@ -615,26 +620,30 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func createWorkbench() {
         guard workbenchWindow == nil else { return }
         let meetingPage: ((PixelPalette) -> AnyView)?
-        if #available(macOS 26, *) {
-            let recorder = meetingRecorder
+        if #available(macOS 26, *), let recorder = meetingRecorder {
             meetingPage = { palette in AnyView(MeetingWorkbenchView(model: recorder, palette: palette)) }
         } else {
             meetingPage = nil
         }
-        let host = NSHostingController(rootView: WorkbenchView(
-            state: workbenchState, preview: preview, typingActivity: typingActivity, meetingPage: meetingPage
-        ))
-        let window = NSWindow(contentViewController: host)
-        window.title = DesktopPetStorage.pixel80Preview ? "桌宠工作台 · 80 像素测试版" : "桌宠工作台"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: WorkbenchLayout.defaultSize),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        window.title = DesktopPetStorage.pixel80Preview ? "\(PetBrand.name)工作台 · 80 像素测试版" : "\(PetBrand.name)工作台"
+        // SwiftUI measures the layout area, while AppKit adds the titlebar to its window limit.
+        let titlebarHeight = window.frame.height - window.contentLayoutRect.height
+        let view = WorkbenchView(state: workbenchState, preview: preview, typingActivity: typingActivity,
+                                 meetingPage: meetingPage)
+            .frame(minWidth: WorkbenchLayout.minimumSize.width,
+                   minHeight: WorkbenchLayout.minimumSize.height - titlebarHeight)
+        window.contentViewController = NSHostingController(rootView: view)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.acceptsMouseMovedEvents = true
         // Background dragging swallows SwiftUI drag gestures (the size slider);
         // the header carries an explicit WindowDragArea instead.
         window.isMovableByWindowBackground = false
-        window.setContentSize(NSSize(width: 960, height: 760))
-        window.contentMinSize = NSSize(width: 900, height: 700)
+        window.setContentSize(WorkbenchLayout.defaultSize)
+        window.minSize = WorkbenchLayout.minimumSize
         window.center()
         window.isReleasedWhenClosed = false
         workbenchWindow = window
@@ -650,12 +659,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func installApplicationMenu() {
         let menu = NSMenu()
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "桌宠")
+        let appMenu = NSMenu(title: PetBrand.name)
         let open = appMenu.addItem(withTitle: "打开工作台", action: #selector(openWorkbench), keyEquivalent: "0")
         open.target = self
         addUpdateItem(to: appMenu)
         appMenu.addItem(.separator())
-        let quitItem = appMenu.addItem(withTitle: "退出桌宠", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = appMenu.addItem(withTitle: PetBrand.quitTitle, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.target = NSApp
         appItem.submenu = appMenu
         menu.addItem(appItem)
@@ -702,8 +711,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             }
             self.workbenchState.catalog = decoded
             self.workbenchState.preset = self.matchingPreset(config)
-            self.setDraft(config)
             self.appliedConfig = config
+            self.setDraft(config)
             self.configurePet(config)
             self.restoreCustomOverlay()
             self.loadAppearanceThumbnails()
@@ -811,7 +820,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     checkAction('zip', 2040, 28, 13);
                     checkAction('convert', 2490, 28, 15);
                     const saved = window.pet.checkPixel80PreviewFrame(2500);
-                    if (saved.source?.artVersion !== 'pixel80-v46' || saved.source?.action !== 'sit') {
+                    if (saved.source?.artVersion !== 'pixel80-v47' || saved.source?.action !== 'sit') {
                         throw Error('80×80 自定义存档缺少原稿版本');
                     }
                     return JSON.stringify(await window.pet.checkPixel80Review());
@@ -1085,27 +1094,27 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     #selector(toggleLoginLaunch), #selector(openLoginItemSettings),
                     #selector(resetPosition), #selector(AppUpdates.checkForUpdates(_:))
                   ] else { return false }
-            if #available(macOS 26, *) {
+            if #available(macOS 26, *), let recorder = meetingRecorder {
                 guard let meetings = menu.item(withTitle: "会议录音")?.submenu,
                       meetings.items.map(\.action) == [#selector(toggleMeetingRecording), #selector(openMeetingRecordings)],
-                      meetings.items.first?.isEnabled == meetingRecorder.canStart else { return false }
+                      meetings.items.first?.isEnabled == recorder.canStart else { return false }
             } else if menu.item(withTitle: "会议录音") != nil {
                 return false
             }
         }
 
-        let savedReminders = reminderList.items
-        defer { reminderList.items = savedReminders }
-        reminderList.items = []
-        guard makeMenu().item(withTitle: "提醒")?.submenu?.items.map(\.action) == [#selector(addReminder)] else {
+        let savedReminders = reminderList.entries
+        defer { reminderList.entries = savedReminders }
+        reminderList.entries = []
+        guard makeMenu().item(withTitle: "待办提醒")?.submenu?.items.map(\.action) == [#selector(addReminder)] else {
             return false
         }
-        reminderList.items = ["菜单自检提醒"]
-        guard makeMenu().item(withTitle: "提醒")?.submenu?.items.map(\.action) == [#selector(addReminder), #selector(clearReminders)] else {
+        reminderList.entries = [TodoEntry(text: "菜单自检提醒")]
+        guard makeMenu().item(withTitle: "待办提醒")?.submenu?.items.map(\.action) == [#selector(addReminder), #selector(clearReminders)] else {
             return false
         }
 
-        if #available(macOS 26, *) {
+        if #available(macOS 26, *), meetingRecorder != nil {
             let stop = activeMeetingMenuItem(for: .recording(Date()))
             guard activeMeetingMenuItem(for: .idle) == nil, stop?.action == #selector(toggleMeetingRecording),
                   stop?.title == "结束会议录音", stop?.isEnabled == true else { return false }
@@ -1168,17 +1177,20 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func verifyReminderPanel() -> Bool {
-        let savedItems = reminderList.items
+        let savedItems = reminderList.entries
         let savedAdding = reminderList.isAdding
         let savedDraft = reminderList.draft
-        reminderList.items = ["自检提醒 A", "自检提醒 B"]
+        let savedCollapsed = reminderList.isCollapsed
+        reminderList.isCollapsed = false
+        reminderList.entries = ["自检提醒 A", "自检提醒 B"].map { TodoEntry(text: $0) }
         showReminders()
         defer {
             hideReminderInput()
             hideReminders()
-            reminderList.items = savedItems
+            reminderList.entries = savedItems
             reminderList.isAdding = savedAdding
             reminderList.draft = savedDraft
+            reminderList.isCollapsed = savedCollapsed
             if !savedItems.isEmpty { showReminders() }
         }
         guard let list = reminderWindow, list.frame.minY >= panel.frame.maxY - 1, list.frame.height >= 60 else {
@@ -1235,7 +1247,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func verifyPixelEditor(snapshot: PixelEditSnapshot) -> Bool {
         let reference = snapshot.source.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21", "pixel80-v22", "pixel80-v23", "pixel80-v24", "pixel80-v25", "pixel80-v26", "pixel80-v27", "pixel80-v29", "pixel80-v30", "pixel80-v31", "pixel80-v32", "pixel80-v33", "pixel80-v34", "pixel80-v35", "pixel80-v36", "pixel80-v37", "pixel80-v38", "pixel80-v39", "pixel80-v40", "pixel80-v41", "pixel80-v42", "pixel80-v43", "pixel80-v44", "pixel80-v45", "pixel80-v46"].contains($0) } ?? false
+        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21", "pixel80-v22", "pixel80-v23", "pixel80-v24", "pixel80-v25", "pixel80-v26", "pixel80-v27", "pixel80-v29", "pixel80-v30", "pixel80-v31", "pixel80-v32", "pixel80-v33", "pixel80-v34", "pixel80-v35", "pixel80-v36", "pixel80-v37", "pixel80-v38", "pixel80-v39", "pixel80-v40", "pixel80-v41", "pixel80-v42", "pixel80-v43", "pixel80-v44", "pixel80-v45", "pixel80-v46", "pixel80-v47"].contains($0) } ?? false
         let side = modernArt ? PixelEditorModel.artSide : PixelEditorModel.legacySide
         guard let model = PixelEditorModel(previewPNG: snapshot.png), model.side == side,
               let firstPainted = model.cells.firstIndex(where: { $0 != 0 }),
@@ -1826,9 +1838,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             hideFocusMinutesInput()
         } else if window === reminderInputWindow {
             hideReminderInput()
-        } else if window === reminderWindow, reminderList.isAdding {
-            reminderList.isAdding = false
-            reminderList.draft = ""
+        } else if window === reminderWindow {
+            cancelReminderInput()
         }
     }
 
@@ -1836,72 +1847,130 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if let input = reminderInputWindow, input.isVisible, !input.frame.contains(point) {
             hideReminderInput()
         }
-        if reminderList.isAdding, let card = reminderWindow, card.isVisible, !card.frame.contains(point) {
-            reminderList.isAdding = false
-            reminderList.draft = ""
+        if let card = reminderWindow, card.isVisible, !card.frame.contains(point) {
+            cancelReminderInput()
         }
     }
 
+    private func cancelReminderInput() {
+        if reminderList.isAdding {
+            reminderList.isAdding = false
+            reminderList.draft = ""
+        }
+        if reminderList.editingID != nil { reminderList.cancelEditing() }
+    }
+
+    private static let todoStorageKey = "shibaTodoEntries"
+
     private func loadReminders() {
         let defaults = UserDefaults.standard
-        if let stored = defaults.stringArray(forKey: "shibaReminders") {
-            reminderList.items = stored
+        reminderList.isCollapsed = defaults.bool(forKey: "shibaRemindersCollapsed")
+        if let data = defaults.data(forKey: Self.todoStorageKey),
+           let entries = try? JSONDecoder().decode([TodoEntry].self, from: data) {
+            reminderList.entries = entries
+        } else if let stored = defaults.stringArray(forKey: "shibaReminders") {
+            reminderList.entries = stored.map { TodoEntry(text: $0) }
         } else if let legacy = defaults.string(forKey: "shibaReminder"), !legacy.isEmpty {
-            reminderList.items = [legacy]
-            defaults.removeObject(forKey: "shibaReminder")
+            reminderList.entries = [TodoEntry(text: legacy)]
             saveReminders()
+            defaults.removeObject(forKey: "shibaReminder")
         }
     }
 
     private func saveReminders() {
-        UserDefaults.standard.set(reminderList.items, forKey: "shibaReminders")
+        let defaults = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(reminderList.entries) {
+            defaults.set(data, forKey: Self.todoStorageKey)
+        }
+        defaults.set(reminderList.pending.map(\.text), forKey: "shibaReminders")
         status.menu = makeMenu()
     }
 
     @objc private func addReminder() {
-        if reminderList.items.isEmpty {
+        updateCurrentReminderDay()
+        if reminderList.hasContent {
+            beginInlineAdd()
+        } else {
             reminderInput.text = ""
             showReminderInput()
-        } else {
-            beginInlineAdd()
         }
     }
 
     @objc private func clearReminders() {
-        guard !reminderList.items.isEmpty else { return }
-        reminderList.items.removeAll()
-        reminderList.isAdding = false
-        reminderList.draft = ""
+        guard !reminderList.pending.isEmpty else { return }
+        reminderList.entries.removeAll { $0.completedAt == nil }
+        cancelReminderInput()
         saveReminders()
         hideReminderInput()
-        hideReminders()
+        showReminders()
     }
 
     private func appendReminder(_ text: String) {
-        let value = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+        let value = ReminderListModel.validatedText(text)
         guard !value.isEmpty else { return }
-        reminderList.items.append(value)
+        reminderList.entries.append(TodoEntry(text: value))
         saveReminders()
         showReminders()
     }
 
     private func submitReminder() {
-        let value = reminderInput.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = ReminderListModel.validatedText(reminderInput.text)
         guard !value.isEmpty else { return }
         hideReminderInput()
         appendReminder(value)
     }
 
-    private func closeReminder(at index: Int) {
-        guard reminderList.items.indices.contains(index) else { return }
-        reminderList.items.remove(at: index)
+    private func deleteReminder(_ id: UUID) {
+        guard let index = reminderList.entries.firstIndex(where: { $0.id == id && $0.completedAt == nil }) else { return }
+        if reminderList.editingID == id { reminderList.cancelEditing() }
+        reminderList.entries.remove(at: index)
+        if !reminderList.hasContent { cancelReminderInput() }
         saveReminders()
-        if reminderList.items.isEmpty {
-            reminderList.isAdding = false
-            hideReminders()
-        } else {
-            showReminders()
+        showReminders()
+    }
+
+    private func completeReminder(_ id: UUID) {
+        guard let index = reminderList.entries.firstIndex(where: { $0.id == id && $0.completedAt == nil }) else { return }
+        if reminderList.editingID == id { reminderList.cancelEditing() }
+        let completedAt = Date()
+        reminderList.currentDay = completedAt
+        reminderList.entries[index].completedAt = completedAt
+        reminderList.undoID = id
+        saveReminders()
+        let reminderList = self.reminderList
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak reminderList] in
+            guard let reminderList, reminderList.undoID == id,
+                  reminderList.entries.contains(where: { $0.id == id && $0.completedAt == completedAt }) else { return }
+            reminderList.undoID = nil
         }
+    }
+
+    private func restoreReminder(_ id: UUID) {
+        guard let index = reminderList.entries.firstIndex(where: { $0.id == id && $0.completedAt != nil }) else { return }
+        reminderList.entries[index].completedAt = nil
+        if reminderList.undoID == id { reminderList.undoID = nil }
+        saveReminders()
+    }
+
+    private func beginReminderEdit(_ entry: TodoEntry) {
+        guard !reminderList.isAdding else { return }
+        reminderList.editDraft = entry.text
+        reminderList.editingID = entry.id
+        activateForPetUI()
+        reminderWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func saveReminderEdit(_ id: UUID, text: String) {
+        let value = ReminderListModel.validatedText(text)
+        guard !value.isEmpty, reminderList.editingID == id,
+              let index = reminderList.entries.firstIndex(where: { $0.id == id && $0.completedAt == nil }) else { return }
+        reminderList.entries[index].text = value
+        reminderList.cancelEditing()
+        saveReminders()
+    }
+
+    private func moveReminder(from source: Int, to destination: Int) {
+        if reminderList.movePending(from: source, to: destination) { saveReminders() }
     }
 
     private func activateForPetUI() {
@@ -1923,19 +1992,27 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func beginInlineAdd() {
-        guard !reminderList.items.isEmpty else {
+        guard reminderList.hasContent else {
             reminderInput.text = ""
             showReminderInput()
             return
         }
-        showReminders()
+        reminderList.cancelEditing()
         reminderList.isAdding = true
+        showReminders()
         activateForPetUI()
         reminderWindow?.makeKeyAndOrderFront(nil)
     }
 
+    private func setReminderCollapsed(_ collapsed: Bool) {
+        if collapsed { cancelReminderInput() }
+        reminderList.isCollapsed = collapsed
+        UserDefaults.standard.set(collapsed, forKey: "shibaRemindersCollapsed")
+    }
+
     private func showReminders() {
-        guard !reminderList.items.isEmpty else {
+        updateCurrentReminderDay()
+        guard reminderList.hasContent else {
             hideReminders()
             return
         }
@@ -1946,11 +2023,21 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             let created = ReminderHostingView(rootView: ReminderListCard(
                 model: reminderList,
                 onAdd: { [weak self] text in self?.appendReminder(text) },
-                onClose: { [weak self] index in self?.closeReminder(at: index) },
+                onComplete: { [weak self] id in self?.completeReminder(id) },
+                onRestore: { [weak self] id in self?.restoreReminder(id) },
+                onRemove: { [weak self] id in self?.deleteReminder(id) },
+                onBeginEdit: { [weak self] entry in self?.beginReminderEdit(entry) },
+                onSaveEdit: { [weak self] id, text in self?.saveReminderEdit(id, text: text) },
+                onDayChange: { [weak self] in self?.refreshReminderDay() },
+                onMove: { [weak self] source, destination in self?.moveReminder(from: source, to: destination) },
                 onBeginAdd: { [weak self] in self?.beginInlineAdd() },
-                onHeightChange: { [weak self] height in self?.resizeReminderList(height: height) }
+                onSetCollapsed: { [weak self] collapsed in self?.setReminderCollapsed(collapsed) },
+                onSizeChange: { [weak self] size in self?.resizeReminderList(to: size) }
             ))
-            fitCardHost(created, fallback: NSSize(width: 240, height: 64))
+            let initialSize = reminderList.showsCompactCard
+                ? ReminderListCard.compactSize
+                : CGSize(width: ReminderListCard.expandedWidth, height: 64)
+            fitCardHost(created, fallback: initialSize)
             reminderListHost = created
             host = created
         }
@@ -1964,10 +2051,23 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         layoutReminder()
     }
 
-    private func resizeReminderList(height: CGFloat) {
-        guard let panel = reminderWindow, height > 1 else { return }
-        guard abs(panel.frame.height - height) > 0.5 else { return }
-        panel.setContentSize(NSSize(width: 240, height: height))
+    private func updateCurrentReminderDay() {
+        let now = Date()
+        guard !Calendar.current.isDate(now, inSameDayAs: reminderList.currentDay) else { return }
+        reminderList.currentDay = now
+        reminderList.undoID = nil
+    }
+
+    private func refreshReminderDay() {
+        updateCurrentReminderDay()
+        if reminderWindow?.isVisible == true { showReminders() }
+    }
+
+    private func resizeReminderList(to size: CGSize) {
+        guard let panel = reminderWindow, size.width > 1, size.height > 1 else { return }
+        let current = panel.contentRect(forFrameRect: panel.frame).size
+        guard abs(current.width - size.width) > 0.5 || abs(current.height - size.height) > 0.5 else { return }
+        panel.setContentSize(size)
         layoutReminder()
     }
 
@@ -2040,12 +2140,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard let card = focusWindow,
               let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
         let size = card.frame.size
-        let stackTop = (reminderWindow?.isVisible ?? false)
-            ? (reminderWindow?.frame.maxY ?? panel.frame.maxY)
-            : panel.frame.maxY
-        var origin = NSPoint(x: panel.frame.midX - size.width / 2, y: stackTop + 8)
+        let pet = panel.frame
+        let reminder = reminderWindow.flatMap { $0.isVisible ? $0.frame : nil }
+        let stackTop = max(pet.maxY, reminder?.maxY ?? pet.maxY)
+        let stackBottom = min(pet.minY, reminder?.minY ?? pet.minY)
+        var origin = NSPoint(x: pet.midX - size.width / 2, y: stackTop + 8)
         if origin.y + size.height > screen.maxY {
-            origin.y = panel.frame.minY - size.height - 8
+            origin.y = stackBottom - size.height - 8
         }
         origin.x = min(max(origin.x, screen.minX + 8), screen.maxX - size.width - 8)
         origin.y = min(max(origin.y, screen.minY + 8), screen.maxY - size.height - 8)
@@ -2312,6 +2413,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 self.pendingBrush = PixelEditSnapshot(png: snapshot.png, source: Data(source.utf8))
                 self.workbenchState.hasPendingBrush = true
                 self.finishBrushEditing(nextMode)
+                self.refreshPreview()
                 completion(true)
             }
         }
@@ -2379,6 +2481,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         savedCustomAppearances[id] = draftConfig().merging(["breed": workbenchState.preset]) { _, new in new }
         clearPendingBrush()
         reloadCustomPresets()
+        refreshPreview()
         workbenchState.message = "已保存形象「\(name)」"
         return true
     }
@@ -2420,6 +2523,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             if ready { applyCustomOverlay(nil, in: web) }
         }
         reloadCustomPresets()
+        refreshPreview()
     }
 
     private func previewCustomPreset(_ preset: CustomPresetInfo) {
@@ -2464,13 +2568,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.workbenchState.hasPhotoResult = resolved.isPhotoFur
             self.workbenchState.photoStatus = resolved.isPhotoFur ? "已打开保存的照片形象。" : ""
             self.workbenchState.preset = breed
-            self.setDraft(config)
             if restoring {
                 self.appliedCustom = chosen
                 self.appliedConfig = config
                 self.configurePet(config)
                 if self.ready { self.applyCustomOverlay(resolved, in: self.web) }
             }
+            self.setDraft(config)
             if let label { self.workbenchState.message = "正在预览：\(label)" }
         }
     }
@@ -2520,6 +2624,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.customSelected = nil
         workbenchState.loadingCustom = false
         if previewReady { applyCustomOverlay(nil, in: preview) }
+        refreshPreview()
         workbenchState.message = "已取消预览叠加"
     }
 
@@ -2582,19 +2687,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         }
     }
 
-    private var quickBarRecordingUnavailableReason: String? {
-        guard #available(macOS 26, *) else { return "录音需要 macOS 26 或更新版本" }
-        let recorder = meetingRecorder
-        if recorder.phase.isRecording || recorder.canStart { return nil }
-        if recorder.phase == .idle { return "请在工作台开启至少一个录音音源" }
-        return "正在准备或处理录音"
-    }
-
     private func showQuickBar() {
         let host = ReminderHostingView(rootView: QuickBar(
-            isRecording: !meetingRecordingDot.isHidden,
-            recordingUnavailableReason: quickBarRecordingUnavailableReason,
-            onRecording: { [weak self] in self?.toggleMeetingRecording() },
+            onTodo: { [weak self] in self?.openTodoFromQuickBar() },
             onClipboard: { [weak self] in
                 self?.hideQuickBar()
                 self?.showClipboard()
@@ -3154,29 +3249,37 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         card.setFrameOrigin(origin)
     }
 
-    @objc private func toggleMeetingRecording() {
-        if #available(macOS 26, *) {
-            hideQuickBar()
-            if meetingRecorder.phase.isRecording { meetingRecorder.stop() }
-            else { meetingRecorder.start() }
+    private func openTodoFromQuickBar() {
+        hideQuickBar()
+        updateCurrentReminderDay()
+        if !reminderList.hasContent {
+            addReminder()
+            return
         }
+        if reminderList.isCollapsed { setReminderCollapsed(false) }
+        showReminders()
+    }
+
+    @objc private func toggleMeetingRecording() {
+        guard #available(macOS 26, *), let recorder = meetingRecorder else { return }
+        hideQuickBar()
+        if recorder.phase.isRecording { recorder.stop() }
+        else { recorder.start() }
     }
 
     @objc private func openMeetingRecordings() {
-        if #available(macOS 26, *) {
-            hideQuickBar()
-            workbenchState.showsMeetingRecordings = true
-            openWorkbench()
-        }
+        guard #available(macOS 26, *), meetingRecorder != nil else { return }
+        hideQuickBar()
+        workbenchState.showsMeetingRecordings = true
+        openWorkbench()
     }
 
     private func meetingStateChanged(recording: Bool) {
         meetingRecordingDot.isHidden = !recording
-        let label = recording ? "桌宠 · 会议录音中" : "桌宠"
+        let label = recording ? "\(PetBrand.name) · 会议录音中" : PetBrand.name
         status.button?.toolTip = label
         status.button?.setAccessibilityLabel(label)
         status.menu = makeMenu()
-        if quickBarWindow?.isVisible == true { showQuickBar() }
     }
 
     @objc private func openClipboard() {
@@ -3610,6 +3713,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         } else if let previousName, !previousName.isEmpty {
             workbenchState.nameText = previousName
         }
+        refreshPreview()
     }
 
     private func draftConfig() -> [String: Any] {
@@ -3630,14 +3734,37 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         return draft
     }
 
+    private var draftCustomSelection: CustomSelection? {
+        pendingBrush.map { CustomSelection(id: activeBrushID, url: activeBrushURL, snapshot: $0) } ?? previewCustom
+    }
+
+    private func hasCustomOverlayChanges(_ selection: CustomSelection?) -> Bool {
+        selection?.id != appliedCustom?.id
+            || selection?.snapshot.png != appliedCustom?.snapshot.png
+            || selection?.snapshot.source != appliedCustom?.snapshot.source
+    }
+
     private func refreshPreview() {
-        guard previewReady, !draftTemplate.isEmpty else { return }
-        var config = draftConfig()
-        // Name validation belongs to Apply; appearance stays live while editing it.
-        config["name"] = "预览"
-        preview.callAsyncJavaScript("window.pet.preview(config, action, freeze)",
-            arguments: ["config": config, "action": workbenchState.action,
-                        "freeze": workbenchState.selectedFurPatchID != nil], in: nil, in: .page)
+        guard previewReady, !draftTemplate.isEmpty, let appliedConfig else { return }
+        appearancePreviewRevision += 1
+        let revision = appearancePreviewRevision
+        let overlayChanged = hasCustomOverlayChanges(draftCustomSelection)
+        preview.callAsyncJavaScript(
+            """
+            const draft = window.pet.normalize(config);
+            const baseline = window.pet.normalize(applied);
+            window.pet.preview({...config, name: "预览"}, action, freeze);
+            return [draft, baseline];
+            """,
+            arguments: ["config": draftConfig(), "applied": appliedConfig, "action": workbenchState.action,
+                        "freeze": workbenchState.selectedFurPatchID != nil], in: nil, in: .page
+        ) { [weak self] result in
+            guard let self, revision == self.appearancePreviewRevision,
+                  case .success(let value) = result, let configs = value as? [[String: Any]],
+                  configs.count == 2 else { return }
+            let changed = !NSDictionary(dictionary: configs[0]).isEqual(to: configs[1])
+            self.workbenchState.updateUnappliedAppearance(changed || overlayChanged)
+        }
     }
 
     private func applyDraft(completion: @escaping (Bool) -> Void = { _ in }) {
@@ -3646,13 +3773,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         var draft = draftConfig()
         draft["breed"] = workbenchState.preset
         let hasDraftBrush = pendingBrush != nil
-        let selection = pendingBrush.map { CustomSelection(id: activeBrushID, url: activeBrushURL, snapshot: $0) } ?? previewCustom
+        let selection = draftCustomSelection
         let snapshot = selection?.snapshot
-        let updateOverlay = selection?.id != appliedCustom?.id
-            || snapshot?.png != appliedCustom?.snapshot.png
-            || snapshot?.source != appliedCustom?.snapshot.source
+        let updateOverlay = hasCustomOverlayChanges(selection)
         let png = snapshot.map { "data:image/png;base64,\($0.png.base64EncodedString())" }
         let source = snapshot?.source.flatMap { String(data: $0, encoding: .utf8) }
+        workbenchState.clearApplyConfirmation()
+        workbenchState.applyError = nil
         workbenchState.applying = true
         web.cancelPointerInteraction()
         web.callAsyncJavaScript(
@@ -3675,7 +3802,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             self.workbenchState.applying = false
             switch result {
             case .success(let value):
-                guard var config = value as? [String: Any] else { completion(false); return }
+                guard var config = value as? [String: Any] else {
+                    self.workbenchState.applyError = "无法应用配置"
+                    completion(false)
+                    return
+                }
                 if updateOverlay {
                     do {
                         if let selection, !self.isTest {
@@ -3684,7 +3815,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     } catch {
                         if let previous = self.appliedConfig { self.configurePet(previous) }
                         self.applyCustomOverlay(self.appliedCustom?.snapshot, in: self.web)
-                        self.workbenchState.message = "保存自定义形象失败"
+                        self.workbenchState.applyError = "保存自定义形象失败"
                         completion(false)
                         return
                     }
@@ -3698,10 +3829,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 config["breed"] = draft["breed"]
                 self.storeAppliedAppearance(config, customID: selection?.id)
                 if !self.isTest { self.showPet(true) }
-                self.workbenchState.message = "已应用到桌宠"
+                self.workbenchState.updateUnappliedAppearance(false)
+                self.refreshPreview()
+                self.workbenchState.confirmApply()
                 completion(true)
             case .failure(let error):
-                self.workbenchState.message = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? "无法应用配置"
+                self.workbenchState.applyError = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? "无法应用配置"
                 completion(false)
             }
         }
@@ -4119,7 +4252,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if workbenchState.petIsVisible {
             guard ready else { return }
             panel.orderFrontRegardless()
-            if !reminderList.items.isEmpty { showReminders() }
+            showReminders()
             if focus.showsCard { showFocusCard() }
         } else {
             web.cancelPointerInteraction()
@@ -4245,7 +4378,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func refreshInputFeatures() {
-        if workbenchState.showTypingStats { typingActivity.refreshToday() }
+        typingActivity.refreshToday()
         refreshTypingListener()
         refreshSelectionWatcher()
     }
@@ -4303,23 +4436,20 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let visibilityItem = menuItem(petVisibilityMenuTitle, #selector(toggleTemporaryPetVisibility))
         if recallFirst { menu.addItem(visibilityItem) }
         menu.addItem(menuItem("打开工作台", #selector(openWorkbench)))
-        if #available(macOS 26, *) {
-            let recorder = meetingRecorder
-            if let activeItem = activeMeetingMenuItem(for: recorder.phase) {
-                menu.addItem(activeItem)
-            }
+        if #available(macOS 26, *), let recorder = meetingRecorder,
+           let activeItem = activeMeetingMenuItem(for: recorder.phase) {
+            menu.addItem(activeItem)
         }
         addFocusItems(to: menu)
         if !recallFirst { menu.addItem(visibilityItem) }
 
         menu.addItem(.separator())
-        let reminders = addSubmenu("提醒", to: menu)
-        reminders.addItem(menuItem("添加重要提醒…", #selector(addReminder)))
-        if !reminderList.items.isEmpty {
-            reminders.addItem(menuItem("清除全部提醒", #selector(clearReminders)))
+        let reminders = addSubmenu("待办提醒", to: menu)
+        reminders.addItem(menuItem("添加待办…", #selector(addReminder)))
+        if !reminderList.pending.isEmpty {
+            reminders.addItem(menuItem("清除全部待办", #selector(clearReminders)))
         }
-        if #available(macOS 26, *) {
-            let recorder = meetingRecorder
+        if #available(macOS 26, *), let recorder = meetingRecorder {
             let meetings = addSubmenu("会议录音", to: menu)
             if recorder.phase == .idle {
                 let start = menuItem("开始会议录音", #selector(toggleMeetingRecording))
@@ -4345,7 +4475,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         settings.addItem(approval)
         settings.addItem(menuItem("将桌宠移回屏幕", #selector(resetPosition)))
         addUpdateItem(to: settings)
-        menu.addItem(menuItem("退出桌宠", #selector(quit)))
+        menu.addItem(menuItem(PetBrand.quitTitle, #selector(quit)))
         return menu
     }
 
