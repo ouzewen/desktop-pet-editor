@@ -67,7 +67,8 @@ struct ReminderListCard: View {
     }
 
     static let expandedWidth: CGFloat = 240
-    static let compactSize = CGSize(width: 68, height: 28)
+    private static let compactCloseWidth: CGFloat = 26
+    static let compactSize = CGSize(width: 88, height: 28)
 
     @ObservedObject var model: ReminderListModel
     let onAdd: (String) -> Void
@@ -80,6 +81,7 @@ struct ReminderListCard: View {
     let onMove: (Int, Int) -> Void
     let onBeginAdd: () -> Void
     let onSetCollapsed: (Bool) -> Void
+    let onHide: () -> Void
     let onSizeChange: (CGSize) -> Void
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
@@ -145,23 +147,40 @@ struct ReminderListCard: View {
     }
 
     private var compactCard: some View {
-        Button {
-            onSetCollapsed(false)
-        } label: {
-            HStack(spacing: 5) {
-                PixelGlyph(kind: .bell, color: palette.accentDeep, size: 11)
-                Text("\(model.pending.count)")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(palette.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 8)
+        HStack(spacing: 0) {
+            Button {
+                onSetCollapsed(false)
+            } label: {
+                HStack(spacing: 5) {
+                    PixelGlyph(kind: .bell, color: palette.accentDeep, size: 11)
+                    Text("\(model.pending.count)")
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(palette.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    PixelGlyph(kind: .chevron, color: palette.inkSoft, size: 8)
+                }
+                .frame(width: Self.compactSize.width - Self.compactCloseWidth, height: Self.compactSize.height)
             }
-            .frame(width: Self.compactSize.width, height: Self.compactSize.height)
+            .workbenchButton(palette: palette, card: true, quiet: true)
+            .accessibilityLabel("展开待办提醒，\(model.pending.count) 条")
+            .help("展开待办提醒")
+
+            Button(action: onHide) {
+                PixelGlyph(kind: .close, color: palette.inkSoft, size: 9)
+                    .frame(width: Self.compactCloseWidth, height: Self.compactSize.height)
+            }
+            .workbenchButton(palette: palette, card: true, quiet: true)
+            .accessibilityLabel("隐藏待办提醒")
+            .help("隐藏待办提醒")
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(palette.borderSoft)
+                    .frame(width: 1, height: 12)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+            }
         }
-        .workbenchButton(palette: palette, card: true)
-        .accessibilityLabel("展开待办提醒，\(model.pending.count) 条")
-        .help("展开待办提醒")
     }
 
     private var expandedCard: some View {
@@ -176,6 +195,7 @@ struct ReminderListCard: View {
                 WorkbenchCardIconButton(glyph: .chevronUp, title: "收起待办提醒", palette: palette) {
                     onSetCollapsed(true)
                 }
+                WorkbenchCardIconButton(glyph: .close, title: "隐藏待办提醒", palette: palette, action: onHide)
             }
 
             if model.pending.isEmpty && !model.isAdding {

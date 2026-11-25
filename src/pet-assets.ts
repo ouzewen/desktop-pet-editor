@@ -206,11 +206,38 @@ export const foreheadParts = Object.keys(catAssetOptions.pattern).filter(id => i
 export const faceTiles = { left: 128, top: 119, width: 48, height: 44 } as const;
 const faceExportArgs = { ...faceTiles, columns: Object.keys(atlasNoseTips).length };
 
+const catPixelAccessoryParts = ['A10', 'A11', 'A13', 'A14', 'A15', 'A16'] as const;
+export function isPixelCatAccessory(id: string) {
+  return catPixelAccessoryParts.some(part => part === id);
+}
+export const catPixelAccessoryPath = 'cat/accessories/';
+export const strawHatEarStowPath = catPixelAccessoryPath + 'A10-ear-stow';
+
 const sharedCatAccessories = {
-  A00: '无配饰', A01: '红蝴蝶结', A02: '蓝色小鱼帽', A03: '黄色星星发卡',
+  A00: ['无', null],
+  A10: ['草帽', 'hat'],
+  A13: ['燕麦针织帽', 'hat'],
+  A02: ['蓝色小鱼帽', 'hat'],
+  A01: ['红蝴蝶结', 'hair'],
+  A03: ['黄色星星发卡', 'hair'],
+  A16: ['樱桃发夹', 'hair'],
 } as const;
-export const catAccessoryOptions = { ...sharedCatAccessories, A07: '蓝色鸭舌帽' } as const;
-export const orangeAccessoryOptions = { ...sharedCatAccessories, A00: '无', A06: '蓝色鸭舌帽' } as const;
+const blueCap = ['蓝色鸭舌帽', 'hat'] as const;
+export const catHeadAccessories = { ...sharedCatAccessories, A06: blueCap, A07: blueCap } as const;
+export const catAccessoryOptions = labels({ ...sharedCatAccessories, A07: blueCap });
+export const orangeAccessoryOptions = labels({ ...sharedCatAccessories, A06: blueCap });
+export const catEyeAccessoryOptions = {
+  A00: '无', A11: '海盗眼罩', A14: '细圆框眼镜', A15: '琥珀墨镜',
+} as const;
+
+export type CatAccessorySide = 'left' | 'right';
+const catAccessoryOriginalSides: Readonly<Partial<Record<string, CatAccessorySide>>> = {
+  A01: 'left', A03: 'right', A11: 'right', A16: 'right',
+};
+export function catAccessoryOriginalSide(id: string): CatAccessorySide | undefined {
+  return catAccessoryOriginalSides[id];
+}
+
 export const catExtraEyes = { Y05: '大圆眼', Y06: '半闭眼', Y07: '星星眼' } as const;
 
 export const orangePath = 'cat/new_/CAT_';
@@ -238,6 +265,7 @@ export const calicoFaceFinishPath = calicoCrownPath + 'eye-mask-orange-left-fini
 export const calicoBodyOutlinePath = 'cat/hd/breeds/CC03/body_outline';
 export const honeyGoldPath = 'cat/hd/breeds/CC11/';
 const honeyGoldParts = ['crown', 'cheeks', 'body', 'tail'] as const;
+export const calicoCrownContinuityPath = 'cat/head-fur/high-cap-';
 export const calicoCrownLayouts = ['eye-streak', 'eye-mask', 'high-cap'] as const;
 export const earMaskPath = 'cat/hd/ear-masks/';
 export const tailPath = 'cat/hd/tails/';
@@ -594,8 +622,13 @@ export const assetGroups: readonly AssetGroup[] = [
     pngs([catEarRetouchPath + shape]), { shape })),
   ...earShapes.map(shape => layerGroup('cat.ear.' + shape, 'current',
     'art/orange-cat/ears/' + shape + '.aseprite', 'ears', orangePath + 'ear_' + shape)),
-  ...Object.keys(orangeAccessoryOptions).filter(id => id !== 'A00').map(id =>
+  ...Object.keys(orangeAccessoryOptions).filter(id => id !== 'A00' && !isPixelCatAccessory(id)).map(id =>
     layerGroup('cat.accessory.' + id, 'current', 'art/orange-cat/accessory/' + id + '.aseprite', 'accessory', orangePath + 'accessory_' + id)),
+  ...catPixelAccessoryParts.map(id => scriptGroup('cat.accessory.' + id, 'current',
+    `art/cat-pixel80/accessories/${id}.aseprite`, 'export-cat-resting-30', catPixelAccessoryPath,
+    pngs([catPixelAccessoryPath + id], 80), { id })),
+  layerGroup('cat.accessory.straw-ear-stow', 'current', 'art/cat-pixel80/accessories/A10.aseprite',
+    '耳尖遮挡（隐藏）', strawHatEarStowPath, cat, 80),
   ...frontFaceMarkings.map(name => layerGroup('cat.orange.' + name, 'compatibility',
     'art/orange-cat/face/' + name.slice(5) + '.aseprite', 'face', orangePath + name)),
   ...oldModes.map(mode => scriptGroup('cat.orange.typing.' + mode, 'compatibility',
@@ -628,6 +661,10 @@ export const assetGroups: readonly AssetGroup[] = [
   scriptGroup('cat.calico-crown', 'current', 'art/cat-shared/calico-crown.aseprite', 'export-calico-crown',
     calicoCrownPath, pngs(withPrefix(calicoCrownPath, ['head', 'ears', ...calicoCrownLayouts.flatMap(layout =>
       ['orange-left', 'orange-right'].flatMap(side => ['head', 'ears'].map(part => `${layout}-${side}-${part}`)))]))),
+  group('cat.calico-crown.continuity', 'current', pngs(withPrefix(calicoCrownContinuityPath, ['orange-left', 'orange-right']), 80),
+    ([['orange-left', '橘左'], ['orange-right', '橘右']] as const).map(([side, layer]) => ({
+      source: 'art/cat-pixel80/head-fur/calico-high-cap.aseprite', layer: '高额帽・' + layer, output: calicoCrownContinuityPath + side,
+    })), cat),
   scriptGroup('cat.face-fur', 'current', 'art/cat-shared/face-fur-patterns.aseprite', 'export-cat-head-patterns',
     headPatternPath, pngs(withPrefix(headPatternPath, ['forehead_region', 'face_region', 'face_patterns']))),
   ...[...foreheadParts, ...Object.keys(retiredForeheadDesigns)].map(id =>

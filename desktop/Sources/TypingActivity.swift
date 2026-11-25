@@ -63,6 +63,10 @@ final class TypingActivity: ObservableObject {
         if today != current { today = current }
     }
 
+    func dayTotals(at date: Date) -> TypingDayTotals {
+        totals(for: dayKey(for: date))
+    }
+
     func pauseRecording() {
         lastKeyAt = nil
         flush()

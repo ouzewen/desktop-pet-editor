@@ -1,7 +1,7 @@
 import { checkPhotoFurEditing, checkPhotoSplitEars } from './desktop-photo-fur-check';
 import { checkDragArtwork, checkPixel80Review } from './desktop-pixel80-check';
 import { catPhotoEarPigments } from './cat-photo-request';
-import { catPhotoEarSides, catPhotoParts } from './pet-assets';
+import { catAccessoryOriginalSide, catHeadAccessories, catPhotoEarSides, catPhotoParts } from './pet-assets';
 import { appearanceFromCatPhoto, appearanceFromCatPhotoViews } from './cat-photo';
 import { furPatchBounds, furPatchDimensions, furPatchLimit, furPatchPresets } from './cat-fur-patches';
 import { prepareCatAssets as prepareLegacyCatAssets } from './cat-legacy-render';
@@ -35,15 +35,15 @@ const desktopReady = Promise.all([assetsReady, prepareCatAssets()]);
 const pixel80Art = Boolean(import.meta.env.VITE_PET_PIXEL80_KEYS);
 let paintDesktopFrame: ((now: number) => void) | undefined;
 
+// The canvas fills the pet panel, including the transparent pixels around its silhouette.
+function hasVisiblePixelAt([x, y]: [number, number]) {
+  if (!(x >= 0 && x < 1 && y >= 0 && y < 1)) return false;
+  const context = canvas.getContext('2d');
+  return Boolean(context?.getImageData(Math.floor(x * canvas.width), Math.floor(y * canvas.height), 1, 1).data[3]);
+}
+
 function canPlayPetLoveAt(first: [number, number], second: [number, number]) {
-  if (preview || !motion.canPlayPetLove()) return false;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return false;
-  // The canvas fills the pet panel, including the transparent pixels around its silhouette.
-  return [first, second].every(([x, y]) => {
-    if (!(x >= 0 && x < 1 && y >= 0 && y < 1)) return false;
-    return ctx.getImageData(Math.floor(x * canvas.width), Math.floor(y * canvas.height), 1, 1).data[3]! > 0;
-  });
+  return !preview && motion.canPlayPetLove() && hasVisiblePixelAt(first) && hasVisiblePixelAt(second);
 }
 
 function checkPetLoveMotion() {
@@ -129,6 +129,17 @@ function renderAppearanceThumbnails() {
 }
 
 let appearanceThumbnails: ReturnType<typeof renderAppearanceThumbnails> | undefined;
+function renderAccessoryThumbnails() {
+  const thumbnail = thumbnailRenderer();
+  const orange = catPresets.preset_cat_orange;
+  const slots = ['accessory', 'eyeAccessory'] as const;
+  return Object.fromEntries(slots.flatMap(slot => Object.keys(orangeCatOptions[slot])
+    .filter(id => id !== 'A00')
+    .map(id => [id, thumbnail(readDesktopAppearance({ ...orange, [slot]: id }), portraitCrop, undefined, true)])));
+}
+
+let accessoryThumbnails: ReturnType<typeof renderAccessoryThumbnails> | undefined;
+
 
 function setGaze(next: Gaze) {
   if (gaze.x === next.x && gaze.y === next.y && gaze.space === next.space) return;
@@ -146,6 +157,11 @@ const fields = (choices: typeof options | typeof catOptions | typeof orangeCatOp
       : key === 'headphoneColor'
         ? Object.entries(catHeadphoneColors).map(([id, { name, shades }]) => ({ id, name, colors: [shades[2]] }))
       : Object.entries(values).map(([id, name]) => {
+        if (key === 'accessory' && Object.hasOwn(catHeadAccessories, id)) {
+          return { id, name, accessoryCategory: catHeadAccessories[id as keyof typeof catHeadAccessories][1],
+            accessorySide: catAccessoryOriginalSide(id) };
+        }
+        if (key === 'eyeAccessory') return { id, name, accessorySide: catAccessoryOriginalSide(id) };
         if (choices !== options && key === 'palette') return { id, name, colors: catPaletteColors(id as CatConfig['palette']) };
         if (choices !== options && key === 'eyeColor' && Object.hasOwn(catIrisColors, id)) {
           return { id, name, colors: [catIrisColors[id as CatIrisColor]] };
@@ -198,6 +214,10 @@ Object.assign(window, {
     appearanceThumbnails: async () => {
       await desktopReady;
       return appearanceThumbnails ??= renderAppearanceThumbnails();
+    },
+    accessoryThumbnails: async () => {
+      await desktopReady;
+      return accessoryThumbnails ??= renderAccessoryThumbnails();
     },
     coatThumbnails: async (config: unknown) => {
       await desktopReady;
@@ -335,6 +355,7 @@ Object.assign(window, {
     release: () => motion.release(),
     setListening: (active: boolean) => motion.setListening(active),
     canPlayPetLoveAt,
+    hasVisiblePixelAt,
     playPetLoveAt: (first: [number, number], second: [number, number]) =>
       canPlayPetLoveAt(first, second) ? motion.playPetLove() : 0,
     playPetLove: () => preview ? 0 : motion.playPetLove(),

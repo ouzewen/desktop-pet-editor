@@ -99,6 +99,7 @@ cp -R "$build_dir/assets-pixel80" "$app/Contents/Resources/"
 cp -R "$build_dir/assets-pixel80-v1" "$app/Contents/Resources/"
 cp "$build_dir/pet.js" desktop/Resources/pet.html "$app/Contents/Resources/"
 cp desktop/Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+cp desktop/Resources/CatLetterEnvelope.png "$app/Contents/Resources/"
 cp desktop/Resources/ArkPixel12.ttf "$app/Contents/Resources/ArkPixel12.ttf"
 cp desktop/Resources/ArkPixel-OFL.txt "$app/Contents/Resources/ArkPixel-OFL.txt"
 # Finder uses the localized display name when the base name matches the on-disk bundle name.
@@ -152,8 +153,11 @@ swiftc -target "$(uname -m)-apple-macosx13.0" \
   desktop/Sources/PetEdge.swift \
   desktop/Sources/PetSurface.swift \
   desktop/Sources/Workbench.swift \
+  desktop/Sources/AccessoryShop.swift \
   desktop/Sources/WorkbenchGuide.swift \
   desktop/Sources/Feedback.swift \
+  desktop/Sources/CatLetterDiary.swift \
+  desktop/Sources/CatLetter.swift \
   desktop/Sources/TypingActivity.swift \
   desktop/Sources/Reminder.swift \
   desktop/Sources/Focus.swift \

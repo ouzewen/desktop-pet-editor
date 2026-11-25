@@ -7,8 +7,18 @@ import SwiftUI
 import WebKit
 
 enum PetBrand {
-    static let name = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String ?? "陪着你"
+    static let name = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String ?? "陪你喵"
     static let quitTitle = "退出\(name)"
+}
+
+enum DesktopPetSize {
+    static let range: ClosedRange<Double> = 80...320
+    static let defaultValue: Double = 240
+
+    static func clamped(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultValue }
+        return min(range.upperBound, max(range.lowerBound, value))
+    }
 }
 
 final class PetPanel: NSPanel {
@@ -89,6 +99,7 @@ final class PetView: WKWebView {
     var onMove: () -> Void = {}
     var onDragStart: (NSPoint) -> Void = { _ in }
     var onDragEnd: (NSPoint) -> Void = { _ in }
+    var onClick: ([Double], NSPoint) -> Void = { _, _ in }
     var onDoubleClick: ([Double], [Double]) -> Void = { _, _ in }
     /// True while the focus card is pinned: the pet stays put when dragged.
     var isLocked: () -> Bool = { false }
@@ -209,6 +220,7 @@ final class PetView: WKWebView {
         let location = [Double((point.x - bounds.minX) / bounds.width), Double(y / bounds.height)]
         if event.clickCount == 1 {
             firstClick = location
+            onClick(location, releasedAt)
         } else {
             let first = firstClick
             firstClick = nil
@@ -241,7 +253,7 @@ enum DesktopPetStorage {
 
 final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSWindowDelegate, NSMenuDelegate {
     private let panel = PetPanel(
-        contentRect: NSRect(x: 0, y: 0, width: 240, height: 240),
+        contentRect: NSRect(x: 0, y: 0, width: DesktopPetSize.defaultValue, height: DesktopPetSize.defaultValue),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
     )
     private var edgePlacement: PetEdgePlacement?
@@ -262,6 +274,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }()
     private let workbenchState = WorkbenchState()
     private let typingActivity = TypingActivity()
+    private let catLetterLaunch = Date()
+    private lazy var catLetter = CatLetterObserver(directory: PixelPresetStore.folder.deletingLastPathComponent())
+    private var catLetterEnvelope: ReminderPanel?
+    private var catLetterCard: ReminderPanel?
+    private var presentedCatLetterDay: String?
+    private var catLetterMenuDay: String?
     private var workbenchWindow: NSWindow?
     private var previewReady = false
     private var appliedConfig: [String: Any]?
@@ -297,6 +315,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private var petGaze: (x: Int, y: Int)?
     private var previewGaze: (x: Int, y: Int)?
     private let reminderList = ReminderListModel()
+    private var reminderHiddenByUser = false
     private var reminderListHost: ReminderHostingView<ReminderListCard>?
     private var reminderWindow: ReminderPanel?
     private var reminderInputWindow: ReminderPanel?
@@ -430,6 +449,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         web.onMove = { [weak self] in self?.layoutReminder() }
         web.onDragStart = { [weak self] in self?.beginPetDrag(at: $0) }
         web.onDragEnd = { [weak self] in self?.finishPetDrag(at: $0) }
+        web.onClick = { [weak self] point, screenPoint in self?.openExposedCatLetter(at: point, screenPoint: screenPoint) }
         web.onDoubleClick = { [weak self] first, second in self?.playPetLove(first: first, second: second) }
         web.isLocked = { [weak self] in self?.focus.pinned ?? false }
         configureWorkbench()
@@ -441,8 +461,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.selectionTranslationEnabled = TranslationEngine.isAvailable && prefs.bool(forKey: "selectionTranslationEnabled")
         loadReminders()
         workbenchState.visible = prefs.object(forKey: "shibaVisible") as? Bool ?? (prefs.string(forKey: "shibaConfig") != nil)
-        let savedSize = prefs.object(forKey: "shibaSize") as? Double ?? 240
-        workbenchState.petSize = min(320, max(120, savedSize))
+        let savedSize = prefs.object(forKey: "shibaSize") as? Double ?? DesktopPetSize.defaultValue
+        workbenchState.petSize = DesktopPetSize.clamped(savedSize)
         panel.setContentSize(NSSize(width: workbenchState.petSize, height: workbenchState.petSize))
         if !isTest, let data = prefs.data(forKey: "petRestingPlacement"),
            let saved = try? JSONDecoder().decode(PetPlacement.self, from: data) {
@@ -507,7 +527,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if !isTest {
             setupInputFeatures()
             startGazeTimer()
+            catLetter.onSample = { [weak self] date in self?.catLetterSample(at: date) }
+            catLetter.start(launch: catLetterLaunch)
         }
+    }
+
+    func applicationProtectedDataWillBecomeUnavailable(_ notification: Notification) {
+        catLetter.protectedDataChanged(available: false)
+    }
+
+    func applicationProtectedDataDidBecomeAvailable(_ notification: Notification) {
+        catLetter.protectedDataChanged(available: true)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -573,6 +603,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         workbenchState.renderCoatThumbnails = { [weak self] in
             await self?.renderCoatThumbnails() ?? [:]
         }
+        workbenchState.renderAccessoryThumbnails = { [weak self] in
+            await self?.renderAccessoryThumbnails() ?? [:]
+        }
         workbenchState.changeCustomMode = { [weak self] mode in self?.changeCustomMode(mode) }
         workbenchState.chooseCatPhoto = { [weak self] slot in self?.chooseCatPhoto(slot: slot) }
         workbenchState.generateFromCatPhoto = { [weak self] in self?.generateFromCatPhoto() }
@@ -580,13 +613,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             guard let self else { done(false); return }
             self.saveCustomAppearance(name, completion: done)
         }
-        workbenchState.exportAppearance = { [weak self] in
-            guard let self, self.previewReady else { return }
-            let mode = self.workbenchState.customMode
-            self.stageBrush(nextMode: mode == .brush ? nil : mode) { [weak self] staged in
-                if staged { self?.exportAppearancePNG() }
-            }
-        }
+        workbenchState.exportAppearance = { [weak self] in self?.exportAppearancePNG() }
         workbenchState.chooseCustom = { [weak self] preset in self?.previewCustomPreset(preset) }
         workbenchState.clearCustom = { [weak self] in self?.clearCustomPreview() }
         workbenchState.deleteCustom = { [weak self] preset in self?.confirmDeleteCustom(preset) }
@@ -688,7 +715,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     const normalized = window.pet.normalize(parsed);
                     // 当前只保留猫形象：旧的犬配置回落到默认猫预设。
                     if (normalized.frame === fallback.frame) {
-                        config = {...normalized, breed: parsed.breed};
+                        config = {...normalized, breed: parsed.breed, profileNameWasSet: parsed.profileNameWasSet};
                     }
                 }
             } catch {}
@@ -710,11 +737,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 return
             }
             self.workbenchState.catalog = decoded
+            self.workbenchState.recognizeLegacyAccessories([config] + Array(self.savedCustomAppearances.values))
             self.workbenchState.preset = self.matchingPreset(config)
             self.appliedConfig = config
+            self.status.menu = self.makeMenu()
             self.setDraft(config)
             self.configurePet(config)
             self.restoreCustomOverlay()
+            self.catLetter.tick()
             self.loadAppearanceThumbnails()
             self.runSelfTestIfReady()
         }
@@ -753,6 +783,28 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             return pngs.compactMapValues(NSImage.init(data:))
         } catch {
             NSLog("Could not load workbench coat thumbnails: %@", error.localizedDescription)
+            return [:]
+        }
+    }
+
+    @MainActor
+    private func renderAccessoryThumbnails() async -> [String: NSImage] {
+        guard previewReady else { return [:] }
+        do {
+            let value: Any = try await withCheckedThrowingContinuation { continuation in
+                preview.callAsyncJavaScript(
+                    """
+                    if (typeof window.pet.accessoryThumbnails !== 'function') return '{}';
+                    return JSON.stringify(await window.pet.accessoryThumbnails());
+                    """,
+                    arguments: [:], in: nil, in: .page
+                ) { continuation.resume(with: $0) }
+            }
+            guard let json = value as? String else { return [:] }
+            let pngs = try JSONDecoder().decode([String: Data].self, from: Data(json.utf8))
+            return pngs.compactMapValues(NSImage.init(data:))
+        } catch {
+            NSLog("Could not load workbench accessory thumbnails: %@", error.localizedDescription)
             return [:]
         }
     }
@@ -820,7 +872,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     checkAction('zip', 2040, 28, 13);
                     checkAction('convert', 2490, 28, 15);
                     const saved = window.pet.checkPixel80PreviewFrame(2500);
-                    if (saved.source?.artVersion !== 'pixel80-v47' || saved.source?.action !== 'sit') {
+                    if (saved.source?.artVersion !== 'pixel80-v48' || saved.source?.action !== 'sit') {
                         throw Error('80×80 自定义存档缺少原稿版本');
                     }
                     return JSON.stringify(await window.pet.checkPixel80Review());
@@ -1181,6 +1233,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         let savedAdding = reminderList.isAdding
         let savedDraft = reminderList.draft
         let savedCollapsed = reminderList.isCollapsed
+        let savedHidden = reminderHiddenByUser
+        reminderHiddenByUser = false
         reminderList.isCollapsed = false
         reminderList.entries = ["自检提醒 A", "自检提醒 B"].map { TodoEntry(text: $0) }
         showReminders()
@@ -1191,6 +1245,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             reminderList.isAdding = savedAdding
             reminderList.draft = savedDraft
             reminderList.isCollapsed = savedCollapsed
+            reminderHiddenByUser = savedHidden
             if !savedItems.isEmpty { showReminders() }
         }
         guard let list = reminderWindow, list.frame.minY >= panel.frame.maxY - 1, list.frame.height >= 60 else {
@@ -1247,7 +1302,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func verifyPixelEditor(snapshot: PixelEditSnapshot) -> Bool {
         let reference = snapshot.source.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21", "pixel80-v22", "pixel80-v23", "pixel80-v24", "pixel80-v25", "pixel80-v26", "pixel80-v27", "pixel80-v29", "pixel80-v30", "pixel80-v31", "pixel80-v32", "pixel80-v33", "pixel80-v34", "pixel80-v35", "pixel80-v36", "pixel80-v37", "pixel80-v38", "pixel80-v39", "pixel80-v40", "pixel80-v41", "pixel80-v42", "pixel80-v43", "pixel80-v44", "pixel80-v45", "pixel80-v46", "pixel80-v47"].contains($0) } ?? false
+        let modernArt = (reference?["artVersion"] as? String).map { ["pixel80", "pixel80-v2", "pixel80-v3", "pixel80-v4", "pixel80-v5", "pixel80-v6", "pixel80-v7", "pixel80-v8", "pixel80-v9", "pixel80-v10", "pixel80-v11", "pixel80-v12", "pixel80-v13", "pixel80-v14", "pixel80-v15", "pixel80-v16", "pixel80-v17", "pixel80-v18", "pixel80-v19", "pixel80-v20", "pixel80-v21", "pixel80-v22", "pixel80-v23", "pixel80-v24", "pixel80-v25", "pixel80-v26", "pixel80-v27", "pixel80-v29", "pixel80-v30", "pixel80-v31", "pixel80-v32", "pixel80-v33", "pixel80-v34", "pixel80-v35", "pixel80-v36", "pixel80-v37", "pixel80-v38", "pixel80-v39", "pixel80-v40", "pixel80-v41", "pixel80-v42", "pixel80-v43", "pixel80-v44", "pixel80-v45", "pixel80-v46", "pixel80-v47", "pixel80-v48"].contains($0) } ?? false
         let side = modernArt ? PixelEditorModel.artSide : PixelEditorModel.legacySide
         guard let model = PixelEditorModel(previewPNG: snapshot.png), model.side == side,
               let firstPainted = model.cells.firstIndex(where: { $0 != 0 }),
@@ -1861,10 +1916,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private static let todoStorageKey = "shibaTodoEntries"
+    private static let todoHiddenKey = "shibaRemindersHidden"
 
     private func loadReminders() {
         let defaults = UserDefaults.standard
         reminderList.isCollapsed = defaults.bool(forKey: "shibaRemindersCollapsed")
+        reminderHiddenByUser = defaults.bool(forKey: Self.todoHiddenKey)
         if let data = defaults.data(forKey: Self.todoStorageKey),
            let entries = try? JSONDecoder().decode([TodoEntry].self, from: data) {
             reminderList.entries = entries
@@ -1887,6 +1944,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     @objc private func addReminder() {
+        if reminderHiddenByUser {
+            setReminderHiddenByUser(false)
+            setReminderCollapsed(false)
+        }
         updateCurrentReminderDay()
         if reminderList.hasContent {
             beginInlineAdd()
@@ -2012,7 +2073,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func showReminders() {
         updateCurrentReminderDay()
-        guard reminderList.hasContent else {
+        guard !reminderHiddenByUser, reminderList.hasContent else {
             hideReminders()
             return
         }
@@ -2032,6 +2093,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 onMove: { [weak self] source, destination in self?.moveReminder(from: source, to: destination) },
                 onBeginAdd: { [weak self] in self?.beginInlineAdd() },
                 onSetCollapsed: { [weak self] collapsed in self?.setReminderCollapsed(collapsed) },
+                onHide: { [weak self] in self?.hideReminderCardByUser() },
                 onSizeChange: { [weak self] size in self?.resizeReminderList(to: size) }
             ))
             let initialSize = reminderList.showsCompactCard
@@ -2071,6 +2133,17 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         layoutReminder()
     }
 
+    private func setReminderHiddenByUser(_ hidden: Bool) {
+        reminderHiddenByUser = hidden
+        UserDefaults.standard.set(hidden, forKey: Self.todoHiddenKey)
+    }
+
+    private func hideReminderCardByUser() {
+        setReminderHiddenByUser(true)
+        cancelReminderInput()
+        hideReminders()
+    }
+
     private func hideReminders() {
         reminderWindow?.orderOut(nil)
         layoutFocusCard()
@@ -2079,6 +2152,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     // MARK: Focus session
 
     private func focusSessionChanged() {
+        catLetter.tick()
         if let edit = focusRemainingEdit,
            focus.phase != .focusing || !focus.showsCard || edit.session != focus.sessionID {
             hideFocusMinutesInput()
@@ -2269,24 +2343,45 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     /// Saves the current workbench preview at its artwork resolution.
     private func exportAppearancePNG() {
-        let js = "return await window.pet.exportPreviewPNG();"
-        preview.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { [weak self] result in
-            guard let self, case .success(let value) = result, let dataURL = value as? String,
-                  let comma = dataURL.firstIndex(of: ","),
-                  let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else {
-                self?.workbenchState.message = "导出失败：无法读取预览"
+        guard previewReady, workbenchState.canExportAppearance,
+              let window = workbenchWindow, window.isVisible, window.attachedSheet == nil else { return }
+        let name = workbenchState.appearance["name", default: ""]
+        let fallbackName = workbenchState.catalog?.presets.first { $0.id == workbenchState.preset }?.name ?? "桌宠"
+        let mode = workbenchState.customMode
+        workbenchState.exportingAppearance = true
+        stageBrush(nextMode: mode == .brush ? nil : mode) { [weak self, weak window] staged in
+            guard let self else { return }
+            guard staged else {
+                self.workbenchState.exportingAppearance = false
                 return
             }
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.png]
-            let name = self.workbenchState.appearance["name", default: ""]
-            panel.nameFieldStringValue = (name.isEmpty ? "桌宠" : name) + ".png"
-            if panel.runModal() == .OK, let url = panel.url {
-                do {
-                    try data.write(to: url)
-                    self.workbenchState.message = "已导出 PNG"
-                } catch {
-                    self.workbenchState.message = "导出失败"
+            self.preview.callAsyncJavaScript("return await window.pet.exportPreviewPNG();",
+                                            arguments: [:], in: nil, in: .page) { [weak self, weak window] result in
+                guard let self else { return }
+                guard let window, window.isVisible, window.attachedSheet == nil else {
+                    self.workbenchState.exportingAppearance = false
+                    return
+                }
+                let prefix = "data:image/png;base64,"
+                guard case .success(let value) = result, let dataURL = value as? String,
+                      dataURL.hasPrefix(prefix), let data = Data(base64Encoded: String(dataURL.dropFirst(prefix.count))) else {
+                    self.workbenchState.exportingAppearance = false
+                    self.workbenchState.message = "导出失败：无法读取预览"
+                    return
+                }
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.png]
+                panel.nameFieldStringValue = (name.isEmpty ? fallbackName : name) + ".png"
+                panel.beginSheetModal(for: window) { [weak self] response in
+                    guard let self else { return }
+                    defer { self.workbenchState.exportingAppearance = false }
+                    guard response == .OK, let url = panel.url else { return }
+                    do {
+                        try data.write(to: url, options: .atomic)
+                        self.workbenchState.message = "已导出 PNG"
+                    } catch {
+                        self.workbenchState.message = "导出失败：无法写入文件"
+                    }
                 }
             }
         }
@@ -2553,6 +2648,15 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                 return
             }
             let resolved = PixelEditSnapshot(png: snapshot.png, source: Data(reference.utf8))
+            var legacyConfigs = [config]
+            if let saved {
+                legacyConfigs.append(saved)
+            } else if let source = snapshot.source,
+                      let metadata = try? JSONSerialization.jsonObject(with: source) as? [String: Any],
+                      let original = metadata["config"] as? [String: Any] {
+                legacyConfigs.append(original)
+            }
+            self.workbenchState.recognizeLegacyAccessories(legacyConfigs)
             if saved == nil,
                let legacy = UserDefaults.standard.dictionary(forKey: "customSpriteEyeColors")?[id] as? String {
                 config["eyeColor"] = legacy
@@ -2561,6 +2665,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             let breed = self.matchingPreset(config)
             config["breed"] = breed
             config["name"] = self.appliedConfig?["name"] ?? config["name"]
+            config["profileNameWasSet"] = self.appliedConfig?["profileNameWasSet"]
             let chosen = CustomSelection(id: id, url: url, snapshot: resolved)
             self.previewCustom = chosen
             self.clearPendingBrush()
@@ -3256,6 +3361,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             addReminder()
             return
         }
+        if reminderHiddenByUser { setReminderHiddenByUser(false) }
         if reminderList.isCollapsed { setReminderCollapsed(false) }
         showReminders()
     }
@@ -3276,6 +3382,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
 
     private func meetingStateChanged(recording: Bool) {
         meetingRecordingDot.isHidden = !recording
+        catLetter.tick()
         let label = recording ? "\(PetBrand.name) · 会议录音中" : PetBrand.name
         status.button?.toolTip = label
         status.button?.setAccessibilityLabel(label)
@@ -3289,6 +3396,142 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     @objc private func toggleMusicWatch() {
         music.enabled.toggle()
         status.menu = makeMenu()
+    }
+
+    // MARK: Cat letters
+
+    private var catLetterSender: CatLetterSender {
+        CatLetterSender(profileName: appliedConfig?["name"] as? String,
+                        explicitlyNamed: appliedConfig?["profileNameWasSet"] as? Bool,
+                        presetNames: workbenchState.catalog?.presets.map(\.name) ?? [])
+    }
+
+    private func catLetterSample(at date: Date) {
+        let diary = catLetter.diary
+        let typingEnabled = UserDefaults.standard.bool(forKey: "typingStatsEnabled")
+        if typingEnabled {
+            for reportDay in [date, diary.calendar.date(byAdding: .day, value: -1, to: date)].compactMap({ $0 }) {
+                let totals = typingActivity.dayTotals(at: reportDay)
+                diary.captureTyping(for: reportDay, seconds: totals.activeSeconds, keys: totals.keyCount)
+            }
+        }
+        let day = diary.dayKey(date)
+        if let presentedCatLetterDay, presentedCatLetterDay != day { hideCatLetter() }
+        if catLetterMenuDay != day {
+            catLetterMenuDay = day
+            status.menu = makeMenu()
+        }
+        let recording: Bool
+        if #available(macOS 26, *) {
+            recording = (meetingRecorderStorage as? MeetingRecorder)?.phase.isCapturing == true
+        } else {
+            recording = false
+        }
+        guard let letter = diary.due(at: date, focusing: focus.isActive, recording: recording,
+                                    petVisible: ready && appliedConfig != nil && workbenchState.petIsVisible && panel.isVisible,
+                                    typingEnabled: typingEnabled),
+              catLetter.deliver(letter) else { return }
+        showCatLetterEnvelope(letter)
+        status.menu = makeMenu()
+    }
+
+    @objc private func toggleCatLetter() {
+        catLetter.setEnabled(!catLetter.enabled, launch: catLetterLaunch)
+        if !catLetter.enabled { hideCatLetter() }
+        status.menu = makeMenu()
+    }
+
+    @objc private func reopenCatLetter() {
+        guard catLetter.enabled, let letter = catLetter.diary.deliveredToday(at: Date()) else { return }
+        showCatLetterCard(letter)
+    }
+
+    private func showCatLetterEnvelope(_ letter: CatLetterReceipt) {
+        let host = ReminderHostingView(rootView: CatLetterEnvelope(sender: catLetterSender) { [weak self] in
+            self?.showCatLetterCard(letter)
+        })
+        fitCardHost(host, fallback: CatLetterEnvelope.size)
+        let window = catLetterEnvelope ?? makeReminderPanel()
+        window.becomesKeyOnlyIfNeeded = true
+        window.setContentSize(host.frame.size)
+        window.contentView = host
+        catLetterEnvelope = window
+        presentedCatLetterDay = letter.day
+        layoutCatLetter()
+        window.order(.below, relativeTo: panel.windowNumber)
+    }
+
+    private func openExposedCatLetter(at point: [Double], screenPoint: NSPoint) {
+        guard let envelope = catLetterEnvelope, envelope.isVisible,
+              envelope.frame.insetBy(dx: CatLetterEnvelope.padding.width, dy: CatLetterEnvelope.padding.height).contains(screenPoint) else { return }
+        let frame = envelope.frame
+        web.callAsyncJavaScript("return window.pet.hasVisiblePixelAt(point)",
+                                arguments: ["point": point], in: nil, in: .page) { [weak self, weak envelope] result in
+            guard case .success(let pixels) = result, pixels as? Bool == false,
+                  let self, let envelope, envelope.isVisible, envelope.frame == frame,
+                  !self.web.isDragging, let letter = self.catLetter.diary.deliveredToday(at: Date()) else { return }
+            self.showCatLetterCard(letter)
+        }
+    }
+
+    private func showCatLetterCard(_ letter: CatLetterReceipt) {
+        catLetterEnvelope?.orderOut(nil)
+        let rawAddress = UserDefaults.standard.string(forKey: PetUserAddress.defaultsKey) ?? ""
+        let host = ReminderHostingView(rootView: CatLetterCard(
+            sender: catLetterSender, message: letter.message, address: PetUserAddress.normalized(rawAddress),
+            close: { [weak self] in self?.hideCatLetter() }
+        ))
+        fitCardHost(host, fallback: NSSize(width: 363, height: 250))
+        let window = catLetterCard ?? makeReminderPanel()
+        window.becomesKeyOnlyIfNeeded = true
+        window.setContentSize(host.frame.size)
+        window.contentView = host
+        catLetterCard = window
+        presentedCatLetterDay = letter.day
+        layoutCatLetter()
+        window.orderFrontRegardless()
+    }
+
+    private func hideCatLetter() {
+        catLetterEnvelope?.orderOut(nil)
+        catLetterCard?.orderOut(nil)
+        presentedCatLetterDay = nil
+    }
+
+    private func layoutCatLetter() {
+        guard let screen = (panel.isVisible ? panel.screen : nil)?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+        let pet = panel.frame
+        if let envelope = catLetterEnvelope, panel.isVisible {
+            let size = envelope.frame.size
+            // At a 160 pt pet size the envelope starts 114 pt from the left and 4 pt from the top.
+            // Anchor the overlap to the ear as the pet resizes.
+            let x = pet.minX + (122.0 / 160) * pet.width - 12
+            let y = pet.maxY - (10.0 / 160) * pet.height + 12
+            let right = NSPoint(x: x.rounded(), y: y.rounded() - size.height)
+            let left = NSPoint(x: (pet.maxX - (x - pet.minX) - size.width).rounded(), y: right.y)
+            let proposed = right.x + size.width <= screen.maxX - 6 ? right : left
+            positionCatLetter(envelope, at: proposed, within: screen)
+        }
+        if let card = catLetterCard {
+            let size = card.frame.size
+            let proposed: NSPoint
+            if !panel.isVisible {
+                proposed = NSPoint(x: screen.maxX - size.width - 18, y: screen.maxY - size.height - 12)
+            } else if pet.maxX + size.width + 8 < screen.maxX {
+                proposed = NSPoint(x: pet.maxX + 8, y: pet.midY + 18 - size.height / 2)
+            } else if pet.minX - size.width - 8 > screen.minX {
+                proposed = NSPoint(x: pet.minX - size.width - 8, y: pet.midY + 18 - size.height / 2)
+            } else {
+                proposed = NSPoint(x: pet.midX - size.width / 2, y: pet.maxY + 8)
+            }
+            positionCatLetter(card, at: proposed, within: screen)
+        }
+    }
+
+    private func positionCatLetter(_ window: NSWindow, at origin: NSPoint, within visibleFrame: NSRect) {
+        let size = window.frame.size
+        window.setFrameOrigin(NSPoint(x: max(visibleFrame.minX + 6, min(origin.x, visibleFrame.maxX - size.width - 6)),
+                                      y: max(visibleFrame.minY + 6, min(origin.y, visibleFrame.maxY - size.height - 6))))
     }
 
     // MARK: Weather
@@ -3637,6 +3880,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func layoutReminder() {
+        layoutCatLetter()
         guard let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
         if let reminder = reminderWindow {
             let size = reminder.frame.size
@@ -3747,6 +3991,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func refreshPreview() {
         guard previewReady, !draftTemplate.isEmpty, let appliedConfig else { return }
         appearancePreviewRevision += 1
+        if !workbenchState.renderingPreview { workbenchState.renderingPreview = true }
         let revision = appearancePreviewRevision
         let overlayChanged = hasCustomOverlayChanges(draftCustomSelection)
         preview.callAsyncJavaScript(
@@ -3759,11 +4004,12 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             arguments: ["config": draftConfig(), "applied": appliedConfig, "action": workbenchState.action,
                         "freeze": workbenchState.selectedFurPatchID != nil], in: nil, in: .page
         ) { [weak self] result in
-            guard let self, revision == self.appearancePreviewRevision,
-                  case .success(let value) = result, let configs = value as? [[String: Any]],
+            guard let self, revision == self.appearancePreviewRevision else { return }
+            self.workbenchState.renderingPreview = false
+            guard case .success(let value) = result, let configs = value as? [[String: Any]],
                   configs.count == 2 else { return }
             let changed = !NSDictionary(dictionary: configs[0]).isEqual(to: configs[1])
-            self.workbenchState.updateUnappliedAppearance(changed || overlayChanged)
+            self.workbenchState.updateUnappliedAppearance(changed || overlayChanged || self.workbenchState.committedNameEdit)
         }
     }
 
@@ -3771,6 +4017,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         guard ready, !workbenchState.applying, !workbenchState.loadingCustom, !workbenchState.choosingBreed
         else { completion(false); return }
         var draft = draftConfig()
+        let committedNameEdit = workbenchState.committedNameEdit
         draft["breed"] = workbenchState.preset
         let hasDraftBrush = pendingBrush != nil
         let selection = draftCustomSelection
@@ -3827,6 +4074,14 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
                     self.clearPendingBrush()
                 }
                 config["breed"] = draft["breed"]
+                if committedNameEdit {
+                    config["profileNameWasSet"] = true
+                    if self.workbenchState.appearance["name"] == draft["name"] as? String {
+                        self.workbenchState.committedNameEdit = false
+                    }
+                } else {
+                    config["profileNameWasSet"] = self.appliedConfig?["profileNameWasSet"]
+                }
                 self.storeAppliedAppearance(config, customID: selection?.id)
                 if !self.isTest { self.showPet(true) }
                 self.workbenchState.updateUnappliedAppearance(false)
@@ -3909,6 +4164,13 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
               target(frame.minX + 10, frame.minY + 14, neighbors: [nextToLeft]) == .bottom,
               target(frame.minX + 10, frame.minY + 6, neighbors: [below]) == .left
         else { return false }
+
+        let minimum = DesktopPetSize.range.lowerBound
+        guard target(left.x, left.y, petSize: minimum) == .left,
+              target(right.x, right.y, petSize: minimum) == .right,
+              target(physicalBottom.x, physicalBottom.y, petSize: minimum) == .bottom,
+              target(frame.midX, frame.minY + 17, petSize: minimum) == nil,
+              target(desktopBottom.x, desktopBottom.y, petSize: minimum) == nil else { return false }
 
         let sideDock = PetDisplay(id: display.id, frame: frame,
                                   visible: NSRect(x: frame.minX + 88, y: frame.minY, width: 1352, height: 868))
@@ -4252,6 +4514,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         if workbenchState.petIsVisible {
             guard ready else { return }
             panel.orderFrontRegardless()
+            catLetter.tick()
             showReminders()
             if focus.showsCard { showFocusCard() }
         } else {
@@ -4267,10 +4530,16 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             hideDropChoice()
             hideTrashToast()
             hideWeatherCard()
+            hideCatLetter()
         }
     }
 
-    private func resizePet(_ size: Double) {
+    private func resizePet(_ requestedSize: Double) {
+        let size = DesktopPetSize.clamped(requestedSize)
+        if workbenchState.petSize != size {
+            workbenchState.petSize = size
+            return
+        }
         UserDefaults.standard.set(size, forKey: "shibaSize")
         hideQuickBar()
         hideReminderInput()
@@ -4296,6 +4565,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     func applicationWillTerminate(_ notification: Notification) {
         inputRefreshTimer?.invalidate()
         typingActivity.flush()
+        catLetter.stop()
         gazeTimer?.invalidate()
         weatherTimer?.invalidate()
         music.stop()
@@ -4460,6 +4730,11 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             meetings.addItem(menuItem("查看会议录音…", #selector(openMeetingRecordings)))
         }
         addWeatherItems(to: menu)
+        let letters = addSubmenu(catLetterSender.title, to: menu)
+        letters.addItem(menuItem(catLetter.enabled ? "关闭来信" : "开启来信", #selector(toggleCatLetter)))
+        if catLetter.enabled, catLetter.diary.deliveredToday(at: Date()) != nil {
+            letters.addItem(menuItem("查看今日来信…", #selector(reopenCatLetter)))
+        }
         let listeningTitle = music.activeApp.map { "听歌状态（\($0) 播放中）" } ?? "听歌状态"
         let listening = menuItem(listeningTitle, #selector(toggleMusicWatch))
         listening.state = music.enabled ? .on : .off

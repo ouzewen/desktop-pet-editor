@@ -1,7 +1,7 @@
 import { readCatPhotoEarColors, readCatPhotoParts, type CatPhotoEarColors, type CatPhotoPartId } from './cat-photo-parts';
 import { readFurPatches, type FurPatch } from './cat-fur-patches';
 import { irisColors, nameLength, options, readConfig, type Config } from './model';
-import { calicoCrownLayouts, catAccessoryOptions, catAssetOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles } from './pet-assets';
+import { calicoCrownLayouts, catAccessoryOptions, catAccessoryOriginalSide, catAssetOptions, catEyeAccessoryOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles, type CatAccessorySide } from './pet-assets';
 import { colorCatBreed, colorCatBreeds, type CatArtPalette, type CatFurColors, type ColorCatBreedId } from './cat-breeds';
 
 export const catIrisColors = {
@@ -104,7 +104,7 @@ export const nativeCatFur = {
 } as const satisfies Record<CatArtPalette, CatFurColors>;
 
 const standardCat = {
-  version: 1, frame: 'CAT', accessory: 'A00', headphoneColor: 'natural', ear: 'CE01', earColor: 'natural',
+  version: 1, frame: 'CAT', accessory: 'A00', eyeAccessory: 'A00', headphoneColor: 'natural', ear: 'CE01', earColor: 'natural',
   nose: 'NO05', noseColor: 'natural', mouth: 'CN08', tail: 'CT05',
   eye: 'Y01', innerPupil: 'round', innerEyeColor: 'natural', coat: 'native', bodyPattern: 'native',
 } as const;
@@ -191,6 +191,7 @@ export const catOptions = {
   coat: Object.fromEntries(Object.entries(catCoatSchemes).map(([id, scheme]) => [id, scheme.name])) as Record<CatCoatScheme, string>,
   palette: paletteOptions,
   accessory: catAccessoryOptions,
+  eyeAccessory: catEyeAccessoryOptions,
   headphoneColor: headphoneColorOptions,
 } as const;
 
@@ -224,6 +225,7 @@ export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail'> & CatPupilOver
   photoCoatParts?: CatPhotoPartId[];
   photoEarColors?: CatPhotoEarColors;
   leftEar?: CatEar; rightEar?: CatEar;
+  accessorySide?: CatAccessorySide; eyeAccessorySide?: CatAccessorySide;
   eyeRim?: 'none'; mouthContrast?: 'light';
   calicoCrown?: 'orange-left' | 'orange-right';
   calicoCrownLayout?: typeof calicoCrownLayouts[number];
@@ -389,12 +391,17 @@ export function readPetConfig(input: unknown, {
   const colorBreed = typeof data.palette === 'string' ? colorCatBreed(data.palette as ColorCatBreedId) : undefined;
   const defaultsToSinglePupil = orange || (colorBreed && (colorBreed.template ?? 'CC01') === 'CC01');
   let accessory = data.accessory ?? 'A00';
+  // Existing combined IDs are expanded only when reading a saved appearance.
+  const legacyEyeAccessory = accessory === 'A11' || accessory === 'A12' ? 'A11' : 'A00';
+  if (accessory === 'A11') accessory = 'A00';
+  else if (accessory === 'A12') accessory = 'A10';
   // A06 identified the typing pose on other coats and the cap on orange.
   if (accessory === 'A04' || accessory === 'A05' || (!orange && accessory === 'A06')) accessory = 'A00';
   if (orange && accessory === 'A07') accessory = 'A06';
   const choices: Record<string, unknown> = {
     ...data,
     accessory,
+    eyeAccessory: data.eyeAccessory ?? legacyEyeAccessory,
     headphoneColor: data.headphoneColor ?? 'natural',
     earColor: data.earColor ?? 'natural',
     tail: data.tail ?? (preserveLegacyTail ? 'CT01' : 'CT05'),
@@ -455,6 +462,14 @@ export function readPetConfig(input: unknown, {
     if (typeof value !== 'string' || !Object.hasOwn(catalog.ear, value)) throw Error(`${field} 编号无效`);
     earOverrides[field] = value as CatEar;
   }
+  const accessorySides: Partial<Pick<CatConfig, 'accessorySide' | 'eyeAccessorySide'>> = {};
+  for (const slot of ['accessory', 'eyeAccessory'] as const) {
+    const field = `${slot}Side` as const;
+    const original = catAccessoryOriginalSide(choices[slot] as string);
+    const side = data[field];
+    // Older outfits already use the authored side. Only store an override for its mirror.
+    if (original && (side === 'left' || side === 'right') && side !== original) accessorySides[field] = side;
+  }
   const furPatches = readFurPatches(data.furPatches);
   const photoCoatParts = readCatPhotoParts(data.photoCoatParts, data.palette);
   const photoEarColors = readCatPhotoEarColors(data.photoEarColors, photoCoatParts);
@@ -482,6 +497,7 @@ export function readPetConfig(input: unknown, {
     ...markings,
     ...pupilOverrides,
     ...earOverrides,
+    ...accessorySides,
     version: 1, name: data.name.trim(), frame: 'CAT',
   } as CatConfig;
 }

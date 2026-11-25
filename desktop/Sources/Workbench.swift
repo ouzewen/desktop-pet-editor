@@ -6,6 +6,8 @@ struct AppearanceOption: Decodable {
     let id: String
     let name: String
     let colors: [String]?
+    var accessoryCategory: String? = nil
+    var accessorySide: String? = nil
 }
 
 struct AppearancePreset: Decodable {
@@ -145,6 +147,45 @@ enum CustomAppearanceMode: String {
 final class WorkbenchState: ObservableObject {
     @Published var catalog: AppearanceCatalog?
     @Published var thumbnails: AppearanceThumbnails?
+    @Published private var accessoryOwnership = AccessoryOwnership.load()
+    @Published private(set) var accessoryThumbnails: [String: NSImage] = [:]
+
+    var accessoryDirectory: [AccessoryShopItem] {
+        catalog.map(AccessoryShopItem.directory(from:)) ?? []
+    }
+
+    func ownsAccessory(_ id: String) -> Bool {
+        accessoryOwnership.ids.contains(AccessoryShopItem.ownershipID(id))
+    }
+
+    func acquireAccessory(_ id: String) {
+        guard accessoryDirectory.contains(where: { $0.id == id }) else { return }
+        grantAccessories([id])
+    }
+
+    func recognizeLegacyAccessories(_ configs: [[String: Any]]) {
+        let compatible = configs.reduce(into: Set<String>()) { ids, config in
+            ids.formUnion(AccessoryShopItem.legacyOwnership(in: config))
+        }
+        grantAccessories(compatible.intersection(accessoryDirectory.map(\.id)))
+    }
+
+    private func grantAccessories(_ ids: Set<String>) {
+        guard !ids.isSubset(of: accessoryOwnership.ids) else { return }
+        accessoryOwnership.ids.formUnion(ids)
+        accessoryOwnership.save()
+    }
+
+    @MainActor
+    func loadAccessoryThumbnails() async {
+        guard accessoryDirectory.contains(where: { accessoryThumbnails[$0.id] == nil }) else { return }
+        let images = await renderAccessoryThumbnails()
+        for item in accessoryDirectory {
+            if let image = images[item.id] ?? (item.id == "A07" ? images["A06"] : nil) {
+                accessoryThumbnails[item.id] = image
+            }
+        }
+    }
     @Published var coatOverlayRevision = 0
     @Published var appearance: [String: String] = [:]
     @Published private(set) var furPatches: [FurPatch] = []
@@ -156,7 +197,7 @@ final class WorkbenchState: ObservableObject {
     @Published var preset = "preset_cat_orange"
     @Published var choosingBreed = false
     @Published var action = "sit"
-    @Published var petSize: Double = 240
+    @Published var petSize = DesktopPetSize.defaultValue
     @Published var visible = true
     @Published var temporarilyHidden = false
     var petIsVisible: Bool { visible && !temporarilyHidden }
@@ -211,6 +252,7 @@ final class WorkbenchState: ObservableObject {
     var installUpdate: () -> Void = {}
     var choosePreset: (String) -> Void = { _ in }
     var renderCoatThumbnails: () async -> [String: NSImage] = { [:] }
+    var renderAccessoryThumbnails: () async -> [String: NSImage] = { [:] }
     var refresh: () -> Void = {}
     var apply: () -> Void = {}
     var reset: () -> Void = {}
@@ -222,6 +264,14 @@ final class WorkbenchState: ObservableObject {
     var setSize: (Double) -> Void = { _ in }
     var setVisibility: (Bool) -> Void = { _ in }
     var setEyeFollow: (Bool) -> Void = { _ in }
+    @Published var renderingPreview = false
+    @Published var exportingAppearance = false
+
+    var canExportAppearance: Bool {
+        catalog != nil && !renderingPreview && !exportingAppearance &&
+            !choosingBreed && !loadingCustom && !editingCustom && !applying
+    }
+
     var exportAppearance: () -> Void = {}
     var changeCustomMode: (CustomAppearanceMode?) -> Void = { _ in }
     var chooseCatPhoto: (Int) -> Void = { _ in }
@@ -233,6 +283,7 @@ final class WorkbenchState: ObservableObject {
 
     /// Draft of the name field; only 确认修改 writes it into the appearance.
     @Published var nameText: String = ""
+    var committedNameEdit = false
     var nameDirty = false
 
     static let genders = ["none", "♂", "♀"]
@@ -349,6 +400,7 @@ final class WorkbenchState: ObservableObject {
         let trimmed = String(nameText.prefix(8))
         nameText = trimmed
         appearance["name"] = trimmed
+        if nameDirty { committedNameEdit = true }
         nameDirty = false
         refresh()
     }
@@ -759,13 +811,14 @@ struct WorkbenchView: View {
     @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
     @AppStorage(PetUserAddress.defaultsKey) private var savedUserAddress = ""
     @State private var userAddressDraft = ""
-    @FocusState private var editingUserAddress: Bool
+    @State private var isEditingUserAddress = false
     @State private var appearancePage = AppearancePage.breeds
     @State private var facePart = FacePart.ears
     @State private var earScope: EarEditScope?
     @State private var eyeScope: EyeEditScope?
     @State private var coatThumbnails: (key: CoatThumbnailKey, images: [String: NSImage])?
     @State private var showingGuide = false
+    @State private var showingAccessoryShop = false
     @State private var showingFeedback = false
     @State private var feedbackDraft = FeedbackDraft()
     @State private var previewBackdrop = PreviewBackdrop.warm
@@ -864,6 +917,9 @@ struct WorkbenchView: View {
             WorkbenchGuideSheet(palette: palette, recordingAvailable: meetingPage != nil,
                                 opensOnRecording: showsMeetingPage)
         }
+        .sheet(isPresented: $showingAccessoryShop) {
+            AccessoryShopSheet(state: state, theme: workbenchTheme)
+        }
         .sheet(isPresented: $showingFeedback) {
             FeedbackSheet(draft: $feedbackDraft, palette: palette)
         }
@@ -873,8 +929,15 @@ struct WorkbenchView: View {
 
     private var topBar: some View {
         HStack(spacing: WorkbenchLayout.controlGap) {
-            pageNavigation
-                .fixedSize()
+            helpMenu
+            Button("商店") { showingAccessoryShop = true }
+                .workbenchButton(palette: palette)
+                .disabled(state.catalog == nil)
+                .help("打开配饰商店")
+                .accessibilityIdentifier("workbench-accessory-shop")
+            if meetingPage != nil {
+                pageNavigation.fixedSize()
+            }
             Color.clear
                 .frame(minWidth: 32, maxWidth: .infinity)
                 .frame(height: 32)
@@ -898,18 +961,16 @@ struct WorkbenchView: View {
             .accessibilityAddTraits(showsMeetingPage ? [] : .isSelected)
             .accessibilityIdentifier("workbench-page-appearance")
 
-            if meetingPage != nil {
-                Button {
-                    state.showsMeetingRecordings = true
-                } label: {
-                    entryLabel("会议录音", glyph: .workbenchRecord, selected: showsMeetingPage)
-                }
-                .workbenchButton(palette: palette, selected: showsMeetingPage)
-                .keyboardShortcut("2", modifiers: .command)
-                .help("会议录音（⌘2）")
-                .accessibilityAddTraits(showsMeetingPage ? .isSelected : [])
-                .accessibilityIdentifier("workbench-page-recording")
+            Button {
+                state.showsMeetingRecordings = true
+            } label: {
+                entryLabel("会议录音", glyph: .workbenchRecord, selected: showsMeetingPage)
             }
+            .workbenchButton(palette: palette, selected: showsMeetingPage)
+            .keyboardShortcut("2", modifiers: .command)
+            .help("会议录音（⌘2）")
+            .accessibilityAddTraits(showsMeetingPage ? .isSelected : [])
+            .accessibilityIdentifier("workbench-page-recording")
         }
     }
 
@@ -1004,26 +1065,28 @@ struct WorkbenchView: View {
                     .help("当前版本 v\(version)")
             }
 
-            Menu {
-                Button("查看使用说明") { showingGuide = true }
-                    .accessibilityIdentifier("workbench-open-guide")
-                Button("意见反馈") { showingFeedback = true }
-                    .accessibilityIdentifier("workbench-feedback")
-            } label: {
-                HStack(spacing: 6) {
-                    Text("帮助")
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
-                }
-                .fixedSize()
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .workbenchButton(palette: palette)
-            .fixedSize()
-            .accessibilityIdentifier("workbench-help")
-
             workbenchThemeMenu
         }
+    }
+
+    private var helpMenu: some View {
+        Menu {
+            Button("查看使用说明") { showingGuide = true }
+                .accessibilityIdentifier("workbench-open-guide")
+            Button("意见反馈") { showingFeedback = true }
+                .accessibilityIdentifier("workbench-feedback")
+        } label: {
+            HStack(spacing: 6) {
+                Text("帮助")
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+            .fixedSize()
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .workbenchButton(palette: palette)
+        .fixedSize()
+        .accessibilityIdentifier("workbench-help")
     }
 
     private var previewPanel: some View {
@@ -1033,6 +1096,7 @@ struct WorkbenchView: View {
             HStack {
                 Text("预览").font(WorkbenchTypography.sectionTitle)
                 Spacer()
+                exportPNGButton(id: "preview-export-png")
                 previewBackdropControls
             }
             previewStage
@@ -1093,6 +1157,16 @@ struct WorkbenchView: View {
                 .allowsHitTesting(editing)
                 .disabled(state.editingCustom || state.applying)
         }
+    }
+
+    private func exportPNGButton(id: String) -> some View {
+        Button("导出 PNG") { state.exportAppearance() }
+            .workbenchButton(palette: palette)
+            .disabled(!state.canExportAppearance)
+            .help("将当前预览画面导出为透明 PNG")
+            .accessibilityLabel("导出 PNG")
+            .accessibilityHint("将当前预览画面导出为透明 PNG")
+            .accessibilityIdentifier(id)
     }
 
     private var previewBackdropControls: some View {
@@ -1555,9 +1629,7 @@ struct WorkbenchView: View {
                     Button("存为形象") { savingAppearance.toggle() }
                         .workbenchButton(palette: palette)
                         .accessibilityIdentifier("save-custom-appearance")
-                    Button("导出 PNG") { state.exportAppearance() }
-                        .workbenchButton(palette: palette)
-                        .accessibilityIdentifier("export-appearance")
+                    exportPNGButton(id: "export-appearance")
                 }
                 .padding(.bottom, WorkbenchLayout.tightGap)
                 .id(DetailAnchor.customActions)
@@ -1898,9 +1970,15 @@ struct WorkbenchView: View {
                     Group {
                         if frame == "CAT" {
                             VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
-                                Text("外观")
-                                    .font(WorkbenchTypography.sectionTitle)
-                                    .foregroundStyle(palette.ink)
+                                HStack(alignment: .center, spacing: 6) {
+                                    PixelGlyph(kind: .workbenchCat, color: palette.accentDeep, size: 12)
+                                    Text("外观")
+                                        .font(WorkbenchTypography.sectionTitle)
+                                        .foregroundStyle(palette.ink)
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityAddTraits(.isHeader)
+                                .accessibilityIdentifier("workbench-appearance-heading")
                                 appearanceNavigation
                                 Divider()
                                 if appearancePage == .face { faceNavigation }
@@ -2061,9 +2139,24 @@ struct WorkbenchView: View {
             if let options = fields["tail"] { partChoices("尾形", key: "tail", options: options, imageHeight: 88) }
         case .accessories:
             VStack(alignment: .leading, spacing: 11) {
-                if let options = fields["accessory"] { accessoryRow(options) }
+                if let headAccessories = fields["accessory"] {
+                    HStack(alignment: .top, spacing: 10) {
+                        headAccessoryPicker(title: "帽子", category: "hat", options: headAccessories)
+                        headAccessoryPicker(title: "发饰", category: "hair", options: headAccessories)
+                    }
+                    Text("帽子和发饰共用一个佩戴位置，只能选一件。")
+                        .font(WorkbenchTypography.body())
+                        .foregroundStyle(palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let eyeAccessories = fields["eyeAccessory"] {
+                    HStack(alignment: .top, spacing: 10) {
+                        accessoryPicker(title: "眼部配饰", key: "eyeAccessory", options: eyeAccessories)
+                        accessorySidePicker(key: "eyeAccessory", title: "眼罩位置", part: "眼", options: eyeAccessories)
+                    }
+                }
                 if let colors = fields["headphoneColor"] {
-                    fieldPicker(title: "耳机颜色", key: "headphoneColor", options: colors, defaultSwatch: [])
+                    fieldPicker(title: "听歌耳机颜色", key: "headphoneColor", options: colors, defaultSwatch: [])
                 }
             }
         case .photo:
@@ -2300,13 +2393,6 @@ struct WorkbenchView: View {
         }
     }
 
-    private func accessoryRow(_ options: [AppearanceOption]) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            fieldPicker(title: "头顶配饰", key: "accessory", options: options)
-            staticField(title: "服装配饰", value: "无")
-        }
-    }
-
     private func staticField(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
@@ -2324,9 +2410,62 @@ struct WorkbenchView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func fieldPicker(
-        title: String, key: String, options: [AppearanceOption], defaultSwatch: [Color]? = nil
+    private func headAccessoryPicker(title: String, category: String, options: [AppearanceOption]) -> some View {
+        let categoryOptions = options.filter { $0.id == "A00" || $0.accessoryCategory == category }
+        return VStack(alignment: .leading, spacing: 8) {
+            accessoryPicker(title: title, key: "accessory", options: categoryOptions,
+                            controlID: "\(category)-accessory-picker")
+            accessorySidePicker(key: "accessory", title: "\(title)位置", part: "耳", options: categoryOptions)
+        }
+    }
+
+    private func accessoryPicker(
+        title: String, key: String, options: [AppearanceOption], controlID: String? = nil
     ) -> some View {
+        let choices = options.filter { $0.id == "A00" || state.ownsAccessory($0.id) }
+        let selection = Binding(
+            get: {
+                let worn = state.appearance[key, default: "A00"]
+                return choices.contains { $0.id == worn } ? worn : "A00"
+            },
+            set: { value in
+                // Clearing a hat must not take off an item worn in the hair category (or vice versa).
+                let worn = state.appearance[key, default: "A00"]
+                guard value != worn, value != "A00" || options.contains(where: { $0.id == worn }) else { return }
+                var appearance = state.appearance
+                appearance[key] = value
+                appearance.removeValue(forKey: "\(key)Side")
+                state.appearance = appearance
+                state.refresh()
+            }
+        )
+        return fieldPicker(title: title, key: key, options: choices, selection: selection, controlID: controlID)
+    }
+
+    @ViewBuilder
+    private func accessorySidePicker(key: String, title: String, part: String, options: [AppearanceOption]) -> some View {
+        let worn = state.appearance[key, default: "A00"]
+        if let original = options.first(where: { $0.id == worn })?.accessorySide, state.ownsAccessory(worn) {
+            let sideKey = "\(key)Side"
+            let selection = Binding(
+                get: { state.appearance[sideKey, default: original] },
+                set: { side in
+                    state.appearance[sideKey] = side == original ? nil : side
+                    state.refresh()
+                }
+            )
+            fieldPicker(title: title, key: sideKey, options: [
+                AppearanceOption(id: "left", name: "画面左\(part)", colors: nil),
+                AppearanceOption(id: "right", name: "画面右\(part)", colors: nil),
+            ], selection: selection)
+        }
+    }
+
+    private func fieldPicker(
+        title: String, key: String, options: [AppearanceOption], defaultSwatch: [Color]? = nil,
+        selection: Binding<String>? = nil, controlID: String? = nil
+    ) -> some View {
+        let binding = selection ?? appearanceBinding(key)
         let accessibilityID = switch key {
         case "eyeColor": "eye-color-picker"
         case "earColor": "ear-color-picker"
@@ -2341,14 +2480,14 @@ struct WorkbenchView: View {
             Group {
                 if let defaultSwatch {
                     PixelColorSelect(title: title, options: options, defaultSwatch: defaultSwatch,
-                                     palette: palette, selection: appearanceBinding(key))
+                                     palette: palette, selection: binding)
                 } else {
                     PixelSelect(options: options.map { (id: $0.id, name: $0.name) },
-                                selection: appearanceBinding(key), palette: palette)
+                                selection: binding, palette: palette)
                         .accessibilityLabel(title)
                 }
             }
-            .accessibilityIdentifier(accessibilityID)
+            .accessibilityIdentifier(controlID ?? accessibilityID)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -2482,7 +2621,6 @@ struct WorkbenchView: View {
         PixelPanel(palette: palette, padding: WorkbenchLayout.controlGap) {
             HStack(spacing: WorkbenchLayout.controlGap) {
                 Button {
-                    if !showingDesktopSettings { userAddressDraft = savedUserAddress }
                     showingDesktopSettings.toggle()
                 } label: {
                     entryLabel("桌面设置", glyph: .workbenchSettings)
@@ -2496,11 +2634,11 @@ struct WorkbenchView: View {
                     .onChange(of: showingDesktopSettings) { open in
                         if !open {
                             showingTypingSummary = false
-                            saveUserAddress()
+                            discardUserAddressEdit()
                         }
                     }
                 Text("桌宠大小").font(WorkbenchTypography.supporting()).foregroundStyle(palette.inkSoft)
-                Slider(value: $state.petSize, in: 120...320)
+                Slider(value: $state.petSize, in: DesktopPetSize.range)
                     .frame(width: 115)
                     .tint(palette.accentDeep)
                     .accessibilityLabel("桌宠大小")
@@ -2571,20 +2709,26 @@ struct WorkbenchView: View {
     }
 
     private var userAddressField: some View {
-        let address = PetUserAddress.normalized(userAddressDraft)
+        let address = isEditingUserAddress ? PetUserAddress.normalized(userAddressDraft) : savedUserAddress
         return VStack(alignment: .leading, spacing: 5) {
             Text("小猫怎么称呼你")
                 .foregroundStyle(palette.ink)
             HStack(spacing: 8) {
-                PixelTextField(text: $userAddressDraft, placeholder: "例如：阿澄", palette: palette)
-                    .focused($editingUserAddress)
-                    .accessibilityLabel("小猫怎么称呼你")
-                    .accessibilityIdentifier("pet-user-address")
-                    .onSubmit(commitUserAddress)
-                Button("保存", action: commitUserAddress)
-                    .workbenchButton(palette: palette)
-                    .disabled(address == savedUserAddress)
-                    .accessibilityIdentifier("pet-user-address-save")
+                if isEditingUserAddress {
+                    UserAddressInput(text: $userAddressDraft, palette: palette, onSubmit: commitUserAddress)
+                    Button("保存", action: commitUserAddress)
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("pet-user-address-save")
+                } else {
+                    Text(verbatim: address.isEmpty ? "未设置" : address)
+                        .foregroundStyle(address.isEmpty ? palette.inkSoft : palette.ink)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("pet-user-address-value")
+                    Button("编辑", action: beginUserAddressEdit)
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("pet-user-address-edit")
+                }
             }
             Text(verbatim: "专注完成时 · " + PetUserAddress.focusFinishedMessage(address: address))
                 .font(WorkbenchTypography.supporting())
@@ -2593,18 +2737,41 @@ struct WorkbenchView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pet-user-address-example")
         }
-        .onChange(of: editingUserAddress) { if !$0 { saveUserAddress() } }
+    }
+
+    private struct UserAddressInput: View {
+        @Binding var text: String
+        let palette: PixelPalette
+        let onSubmit: () -> Void
+        @FocusState private var focused: Bool
+
+        var body: some View {
+            PixelTextField(text: $text, placeholder: "例如：阿澄", palette: palette)
+                .focused($focused)
+                .accessibilityLabel("小猫怎么称呼你")
+                .accessibilityIdentifier("pet-user-address")
+                .onSubmit(onSubmit)
+                .onAppear {
+                    DispatchQueue.main.async { focused = true }
+                }
+        }
+    }
+
+    private func beginUserAddressEdit() {
+        userAddressDraft = savedUserAddress
+        isEditingUserAddress = true
     }
 
     private func commitUserAddress() {
-        saveUserAddress()
-        editingUserAddress = false
-    }
-
-    private func saveUserAddress() {
+        guard isEditingUserAddress else { return }
         let address = PetUserAddress.normalized(userAddressDraft)
         if savedUserAddress != address { savedUserAddress = address }
-        if userAddressDraft != address { userAddressDraft = address }
+        discardUserAddressEdit()
+    }
+
+    private func discardUserAddressEdit() {
+        isEditingUserAddress = false
+        userAddressDraft = ""
     }
 
     @ViewBuilder
