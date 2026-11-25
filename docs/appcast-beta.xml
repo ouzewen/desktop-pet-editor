@@ -6,6 +6,16 @@
     <description>桌宠 macOS 公开内测频道</description>
     <language>zh-CN</language>
     <item>
+      <title>陪你喵 0.11.25（构建 140）</title>
+      <link>https://github.com/ouzewen/desktop-pet-editor/releases/tag/v2026-11-25</link>
+      <pubDate>Wed, 25 Nov 2026 14:02:03 GMT</pubDate>
+      <sparkle:version>140</sparkle:version>
+      <sparkle:shortVersionString>0.11.25</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<p>小猫称呼现在可以显式编辑和保存。工作台新增配饰商店和佩戴换侧，预览支持透明 PNG，待办可完全收起。</p>]]></description>
+      <enclosure url="https://github.com/ouzewen/desktop-pet-editor/releases/download/v2026-11-25/DesktopPet-v0.11.25-build140-macos-arm64.zip" sparkle:edSignature="WjcQWPp4/VsowxV0MLAcCK/cBSjKPaA4lF4yQhCnu1Gi/+zJqnodLnPBZfQFB5sqHTNcS0veZrHtp2IqhfEkDQ==" length="12290854" type="application/octet-stream" />
+    </item>
+    <item>
       <title>陪着你 0.11.24（构建 114）</title>
       <link>https://github.com/ouzewen/desktop-pet-editor/releases/tag/v2026-11-24</link>
       <pubDate>Tue, 24 Nov 2026 13:57:27 GMT</pubDate>
