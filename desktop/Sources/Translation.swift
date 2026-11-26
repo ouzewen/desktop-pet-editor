@@ -204,7 +204,7 @@ struct TranslationButtonCard: View {
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         Button(action: onTap) {
@@ -238,7 +238,7 @@ struct TranslationCard: View {
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @State private var copied = false
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {

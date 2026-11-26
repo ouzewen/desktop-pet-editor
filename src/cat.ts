@@ -1,7 +1,7 @@
 import { readCatPhotoEarColors, readCatPhotoParts, type CatPhotoEarColors, type CatPhotoPartId } from './cat-photo-parts';
 import { readFurPatches, type FurPatch } from './cat-fur-patches';
 import { irisColors, nameLength, options, readConfig, type Config } from './model';
-import { calicoCrownLayouts, catAccessoryOptions, catAccessoryOriginalSide, catAssetOptions, catEyeAccessoryOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles, type CatAccessorySide } from './pet-assets';
+import { calicoCrownLayouts, catAccessoryOptions, catClothingOptions, type CatClothing, catAccessoryOriginalSide, catAssetOptions, catEyeAccessoryOptions, catExtraEyes, orangeAccessoryOptions, retiredForeheadDesigns, retiredMouthStyles, retiredNoseStyles, retiredTailStyles, type CatAccessorySide } from './pet-assets';
 import { colorCatBreed, colorCatBreeds, type CatArtPalette, type CatFurColors, type ColorCatBreedId } from './cat-breeds';
 
 export const catIrisColors = {
@@ -192,6 +192,7 @@ export const catOptions = {
   palette: paletteOptions,
   accessory: catAccessoryOptions,
   eyeAccessory: catEyeAccessoryOptions,
+  clothing: catClothingOptions,
   headphoneColor: headphoneColorOptions,
 } as const;
 
@@ -220,12 +221,13 @@ type CatPupilOverrides = Partial<{
   [Field in keyof CatPupilStyle as `${EyeSide}${Capitalize<Field>}`]: CatPupilStyle[Field];
 }>;
 export type CatEar = CatParts['ear'];
-export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail'> & CatPupilOverrides & LocalCatMarkings & {
+export type CatConfig = Omit<CatParts, 'nose' | 'mouth' | 'tail' | 'clothing'> & CatPupilOverrides & LocalCatMarkings & {
   version: 1; name: string; frame: 'CAT'; furPatches?: FurPatch[];
   photoCoatParts?: CatPhotoPartId[];
   photoEarColors?: CatPhotoEarColors;
   leftEar?: CatEar; rightEar?: CatEar;
   accessorySide?: CatAccessorySide; eyeAccessorySide?: CatAccessorySide;
+  clothing?: CatClothing;
   eyeRim?: 'none'; mouthContrast?: 'light';
   calicoCrown?: 'orange-left' | 'orange-right';
   calicoCrownLayout?: typeof calicoCrownLayouts[number];
@@ -402,6 +404,7 @@ export function readPetConfig(input: unknown, {
     ...data,
     accessory,
     eyeAccessory: data.eyeAccessory ?? legacyEyeAccessory,
+    clothing: data.clothing ?? 'A00',
     headphoneColor: data.headphoneColor ?? 'natural',
     earColor: data.earColor ?? 'natural',
     tail: data.tail ?? (preserveLegacyTail ? 'CT01' : 'CT05'),
@@ -493,7 +496,8 @@ export function readPetConfig(input: unknown, {
       ? { coloredTail: data.coloredTail } : {}),
     ...(data.eyeRim === 'none' ? { eyeRim: 'none' } : {}),
     ...(data.mouthContrast === 'light' ? { mouthContrast: 'light' } : {}),
-    ...Object.fromEntries(Object.keys(catalog).map(field => [field, choices[field]])),
+    ...Object.fromEntries(Object.keys(catalog).filter(field => field !== 'clothing').map(field => [field, choices[field]])),
+    ...(choices.clothing && choices.clothing !== 'A00' ? { clothing: choices.clothing } : {}),
     ...markings,
     ...pupilOverrides,
     ...earOverrides,

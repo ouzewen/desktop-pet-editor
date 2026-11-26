@@ -9,7 +9,7 @@ struct QuickBar: View {
 
     @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { workbenchTheme.palette }
+    private var palette: PixelPalette { workbenchTheme.windowPalette }
 
     var body: some View {
         PixelPanel(palette: palette, padding: 5) {
@@ -24,8 +24,7 @@ struct QuickBar: View {
                     .accessibilityIdentifier("quick-bar-focus")
             }
         }
-        .environment(\.workbenchChrome, true)
-        .environment(\.workbenchTheme, workbenchTheme)
+        .workbenchCompanionStyle(workbenchTheme)
         .fixedSize()
     }
 
@@ -38,6 +37,6 @@ struct QuickBar: View {
                     .foregroundStyle(palette.ink)
             }
         }
-        .workbenchButton(palette: palette)
+        .workbenchButton(palette: palette, quiet: true)
     }
 }

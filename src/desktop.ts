@@ -1,7 +1,7 @@
 import { checkPhotoFurEditing, checkPhotoSplitEars } from './desktop-photo-fur-check';
 import { checkDragArtwork, checkPixel80Review } from './desktop-pixel80-check';
 import { catPhotoEarPigments } from './cat-photo-request';
-import { catAccessoryOriginalSide, catHeadAccessories, catPhotoEarSides, catPhotoParts } from './pet-assets';
+import { vanGoghHat, vanGoghJacket, catAccessoryOriginalSide, catHeadAccessories, catPhotoEarSides, catPhotoParts } from './pet-assets';
 import { appearanceFromCatPhoto, appearanceFromCatPhotoViews } from './cat-photo';
 import { furPatchBounds, furPatchDimensions, furPatchLimit, furPatchPresets } from './cat-fur-patches';
 import { prepareCatAssets as prepareLegacyCatAssets } from './cat-legacy-render';
@@ -12,7 +12,7 @@ import { catListeningFrameAt } from './cat-listening';
 import { Motion } from './motion';
 import { options, presets } from './model';
 import { canChooseCatFaceBase, catCoatCards, catCoatColors, catCoatSchemes, catFeatureColors, catHeadphoneColors, catIrisColors, catMarkingOptions, catOptions, catPaletteColors, catPresets, currentFurPatternColors,
-  orangeCatOptions, readPetConfig, type CatConfig, type CatIrisColor, type PetConfig } from './cat';
+  orangeCatOptions, readPetConfig, type CatCoatScheme, type CatConfig, type CatIrisColor, type PetConfig } from './cat';
 import { catEditorImage, catEditorSide, photoFurEditorData, prepareCatCustomization, prepareStructuredCatCustomization, readCatEditSource, saveCatInk, seedCatInkForEditor,
   type CatCustomization, type CatEditSource, type CatInkSource } from './cat-custom';
 import { catTypingFrameDuration, currentTypingAnimation, frenzyHeatFrameAt } from './cat-typing';
@@ -91,6 +91,31 @@ function readDesktopAppearance(input: unknown): PetConfig {
   return config;
 }
 
+// Show existing general coat schemes below the breed's authored variants without changing the render recipes.
+type AdditionalWorkbenchCoat = Exclude<CatCoatScheme, (typeof catCoatCards)[string][number]['id']>;
+const additionalWorkbenchCoats = {
+  CC01: ['honey', 'cocoa', 'ivory'],
+  CC02: ['darkTabby', 'deepSea', 'cocoa'],
+  CC03: ['cream', 'cocoa', 'rose'],
+  CC04: ['cream', 'cocoa', 'silver'],
+  CC05: ['silver', 'blue', 'deepSea'],
+  CC06: ['silver', 'darkTabby', 'cocoa'],
+  CC07: ['honey', 'darkTabby', 'cocoa'],
+  CC08: ['ivory', 'cream', 'lavender'],
+  CC09: ['ivory', 'cream', 'silver'],
+  CC10: ['cocoa', 'darkTabby', 'rose'],
+  CC11: ['honey', 'cream', 'cocoa'],
+  CC12: ['ivory', 'silver', 'lavender'],
+} as const satisfies Record<CatConfig['palette'], readonly [AdditionalWorkbenchCoat, AdditionalWorkbenchCoat, AdditionalWorkbenchCoat]>;
+
+const workbenchCoatCards = Object.fromEntries(
+  Object.entries(additionalWorkbenchCoats).map(([palette, coats]) => {
+    const authored = catCoatCards[palette] ?? [];
+    const suggestions = coats.map(id => ({ id, name: catCoatSchemes[id].name }));
+    return [palette, [...authored, ...suggestions]];
+  }),
+);
+
 const portraitCrop = [16, 2, 288, 288] as const;
 // The detail cards frame the matching part on the existing sitting sprite.
 const partCrops = {
@@ -132,10 +157,13 @@ let appearanceThumbnails: ReturnType<typeof renderAppearanceThumbnails> | undefi
 function renderAccessoryThumbnails() {
   const thumbnail = thumbnailRenderer();
   const orange = catPresets.preset_cat_orange;
-  const slots = ['accessory', 'eyeAccessory'] as const;
+  const slots = ['accessory', 'eyeAccessory', 'clothing'] as const;
   return Object.fromEntries(slots.flatMap(slot => Object.keys(orangeCatOptions[slot])
     .filter(id => id !== 'A00')
-    .map(id => [id, thumbnail(readDesktopAppearance({ ...orange, [slot]: id }), portraitCrop, undefined, true)])));
+    .map(id => {
+      const accessory = slot === 'clothing' && id === vanGoghJacket ? vanGoghHat : orange.accessory;
+      return [id, thumbnail(readDesktopAppearance({ ...orange, accessory, [slot]: id }), portraitCrop, undefined, true)];
+    })));
 }
 
 let accessoryThumbnails: ReturnType<typeof renderAccessoryThumbnails> | undefined;
@@ -224,12 +252,13 @@ Object.assign(window, {
       const draft = readDesktopAppearance(config);
       if (draft.frame !== 'CAT') return {};
       const thumbnail = thumbnailRenderer();
-      return Object.fromEntries((catCoatCards[draft.palette] ?? []).map(({ id }) => [
+      return Object.fromEntries((workbenchCoatCards[draft.palette] ?? []).map(({ id }) => [
         id, thumbnail(readDesktopAppearance({ ...draft, coat: id }), portraitCrop, custom, true),
       ]));
     },
     catalog: () => ({
       coatCards: catCoatCards,
+      workbenchCoatCards,
       photoEarMarks: Object.fromEntries(catPhotoEarSides.map(side => [side,
         Object.entries(catPhotoParts).flatMap(([id, part]) => 'side' in part && part.side === side ? [{
           id, name: (part.placement === 'crown' ? '靠头顶' : '靠外缘') + ' · '

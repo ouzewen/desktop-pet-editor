@@ -248,7 +248,7 @@ struct FocusCard: View {
     @FocusState private var timerFocus: TimerControl?
     private var showsTimerControls: Bool { timerHovered || timerFocus != nil }
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
     private var focusFinished: Bool { model.result == .focusFinished }
     private var timerStatus: String {
         if model.paused { return "已暂停" }
@@ -261,8 +261,7 @@ struct FocusCard: View {
             else { resultCard }
         }
         .fixedSize()
-        .environment(\.workbenchChrome, true)
-        .environment(\.workbenchTheme, theme)
+        .workbenchCompanionStyle(theme)
         .background {
             GeometryReader { proxy in
                 Color.clear
@@ -279,8 +278,7 @@ struct FocusCard: View {
             // Draw outside AppKit's menu label to keep the theme color and
             // the same centered layout with or without the side controls.
             Text(verbatim: model.clockText)
-                .font(PixelFont.font(24))
-                .monospacedDigit()
+                .font(WorkbenchTypography.pageTitle.monospacedDigit())
                 .foregroundStyle(palette.inkSoft)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
@@ -421,7 +419,7 @@ struct FocusMinutesCard: View {
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
     private var editing: Bool { maximumRemaining != nil }
     private var valid: Bool {
         if let maximumRemaining { return model.remainingSeconds(upTo: maximumRemaining) != nil }
@@ -462,8 +460,7 @@ struct FocusMinutesCard: View {
             }
         }
         .frame(width: FocusCard.resultWidth)
-        .environment(\.workbenchChrome, true)
-        .environment(\.workbenchTheme, theme)
+        .workbenchCompanionStyle(theme)
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }

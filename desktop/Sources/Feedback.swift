@@ -128,9 +128,13 @@ struct FeedbackSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("意见反馈")
-                .font(PixelFont.font(20))
-                .foregroundStyle(palette.ink)
+            HStack(spacing: 8) {
+                PixelGlyph(kind: .pencil, color: palette.accent, size: 15)
+                    .accessibilityHidden(true)
+                Text("意见反馈")
+                    .font(WorkbenchTypography.pageTitle)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             if sent {
                 Text("已收到，谢谢你的反馈。")
@@ -147,19 +151,13 @@ struct FeedbackSheet: View {
                 Text(FeedbackType(rawValue: draft.feedbackType)?.prompt ?? "选择反馈类型后，描述你想反馈的内容。")
                     .foregroundStyle(palette.inkSoft)
                 TextEditor(text: $draft.message)
-                    .font(.system(size: 14))
+                    .font(WorkbenchTypography.body())
                     .scrollContentBackground(.hidden)
                     .padding(5)
                     .frame(height: 150)
                     .focused($editingMessage)
                     .foregroundStyle(palette.ink)
-                    .background(PixelBox(corner: 2).fill(palette.panelDeep))
-                    .overlay {
-                        let focused = editingMessage
-                        PixelBox(corner: 2, inset: 0.5)
-                            .stroke(focused ? palette.accentDeep : palette.borderSoft, lineWidth: focused ? 2 : 1)
-                            .allowsHitTesting(false)
-                    }
+                    .workbenchCardField(palette: palette, focused: editingMessage)
                     .accessibilityLabel("修改意见")
                     .accessibilityIdentifier("feedback-message")
                     .disabled(!editable)
@@ -169,7 +167,7 @@ struct FeedbackSheet: View {
                     Text("\(length) / \(FeedbackClient.messageLimit)")
                         .foregroundStyle(length > FeedbackClient.messageLimit ? Color.red : palette.inkSoft)
                 }
-                .font(PixelFont.font(12))
+                .font(WorkbenchTypography.supporting())
                 .foregroundStyle(palette.inkSoft)
 
                 if let status = error ?? (FeedbackClient.endpoint == nil ? "反馈服务尚未配置。" : nil) {
@@ -192,15 +190,11 @@ struct FeedbackSheet: View {
                 }
             }
         }
-        .font(PixelFont.font(13))
+        .font(WorkbenchTypography.body())
         .foregroundStyle(palette.ink)
         .padding(20)
         .frame(width: 460)
-        .background {
-            WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 9, framed: true)
-                .padding(4)
-                .background(palette.background)
-        }
+        .background(palette.panel)
         .interactiveDismissDisabled(sending)
     }
 

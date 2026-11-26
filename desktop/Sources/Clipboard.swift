@@ -120,7 +120,7 @@ struct ClipboardCard: View {
     @State private var copiedID: UUID?
 
     static let width: CGFloat = 300
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         PixelPanel(palette: palette, padding: 12) {
@@ -161,8 +161,7 @@ struct ClipboardCard: View {
             }
         }
         .frame(width: Self.width)
-        .environment(\.workbenchChrome, true)
-        .environment(\.workbenchTheme, theme)
+        .workbenchCompanionStyle(theme)
     }
 
     private var rows: some View {
@@ -202,7 +201,7 @@ struct ClipboardCard: View {
                 }
                 .padding(.horizontal, 7)
                 .padding(.vertical, 6)
-                .background(PixelBox(corner: 3).fill(palette.panelAlt))
+                .background(RoundedRectangle(cornerRadius: 8).fill(palette.panelAlt))
             }
         }
     }

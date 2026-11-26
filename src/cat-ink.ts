@@ -1,9 +1,10 @@
 import { CAT_SIZE } from './pet-assets';
 
 export const catInkParts = [
-  'laptop', 'leftEar', 'rightEar', 'head', 'leftPaw', 'rightPaw', 'tail', 'torso', 'canvas',
+  'laptop', 'leftEar', 'rightEar', 'head', 'leftPaw', 'rightPaw', 'clothing', 'tail', 'torso', 'canvas',
 ] as const;
 export type CatInkPart = typeof catInkParts[number];
+export const catFurInkParts = catInkParts.filter(part => part !== 'canvas' && part !== 'laptop' && part !== 'clothing');
 export type CatInkBounds = { x: number; y: number; width: number; height: number };
 export type CatInkSurface = { bounds: CatInkBounds; mask?: Uint8Array };
 export type CatInkGeometry = Partial<Record<CatInkPart, CatInkSurface>>;
@@ -41,7 +42,7 @@ export function readCatInk(value: unknown): CatInkDocument {
       || !Array.isArray(layer.paint) || !Array.isArray(layer.erase)) {
       throw Error('像素笔迹图层无效');
     }
-    if (doc.scope === 'photo-fur' && (part === 'canvas' || part === 'laptop' || layer.erase.length
+    if (doc.scope === 'photo-fur' && (!catFurInkParts.some(key => key === part) || layer.erase.length
       || layer.bounds.width !== size || layer.bounds.height !== size)) {
       throw Error('照片毛色笔迹只能覆盖毛发颜色');
     }
@@ -180,8 +181,7 @@ export function capturePhotoFurInk(
       throw Error('照片毛色画笔只接受不透明颜色或恢复指令');
     }
     const x = index % size, y = Math.floor(index / size) - offsetY;
-    const part = catInkParts.find(key => key !== 'canvas' && key !== 'laptop' &&
-      geometry[key]?.mask && contains(geometry[key]!, x, y));
+    const part = catFurInkParts.find(key => geometry[key]?.mask && contains(geometry[key]!, x, y));
     if (!part) continue;
     let touches = updates.get(part);
     if (!touches) updates.set(part, touches = new Map());
@@ -266,7 +266,7 @@ export function applyCatInk(
 ) {
   for (const part of parts) {
     const furOnly = ink.scope === 'photo-fur';
-    if (furOnly && (part === 'canvas' || part === 'laptop' || !geometry[part]?.mask)) continue;
+    if (furOnly && (!catFurInkParts.some(key => key === part) || !geometry[part]?.mask)) continue;
     const layer = ink.parts[part];
     const surface = part === 'canvas' ? geometry.canvas ?? freeCanvas : geometry[part];
     if (!layer || !surface) continue;

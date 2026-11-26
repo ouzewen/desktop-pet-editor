@@ -28,7 +28,7 @@ const faceGroups = new Set(['cat.face-parts', 'cat.noses', 'cat.centered-noses',
 const blinkEyes = /\/eye_Y02$/;
 const previousKeys = new Set(previousFiles.map(file => file.key));
 const additions = assetGroups.flatMap(group => group.files.filter(file => !previousKeys.has(file.key) &&
-  (file.key === calicoBodyOutlinePath || file.key === orangeForelegBodyPath || file.key === orangePawsBodyPath || file.key === orangeBodyOutlinePath || file.key === orangeSquareGlints || group.id.startsWith('cat.ear-retouch.') || group.id.startsWith('cat.body-outline.') || (group.id.startsWith('cat.resting-30.') || group.id.startsWith('cat.component-recipes')) || group.id === 'cat.li-hua-coat' || group.id.startsWith('cat.li-hua-coat.') || group.id === 'cat.pet-love' || group.id === 'cat.calico-crown.continuity' || faceGroups.has(group.id) || group.id.startsWith('cat.face-edges.') || (group.usage === 'compatibility' && blinkEyes.test(file.key)))));
+  (file.key === calicoBodyOutlinePath || file.key === orangeForelegBodyPath || file.key === orangePawsBodyPath || file.key === orangeBodyOutlinePath || file.key === orangeSquareGlints || group.id.startsWith('cat.ear-retouch.') || group.id.startsWith('cat.body-outline.') || (group.id.startsWith('cat.resting-30.') || group.id.startsWith('cat.component-recipes')) || group.id === 'cat.li-hua-coat' || group.id.startsWith('cat.li-hua-coat.') || group.id.startsWith('cat.clothing.') || group.id === 'cat.pet-love' || group.id === 'cat.calico-crown.continuity' || faceGroups.has(group.id) || group.id.startsWith('cat.face-edges.') || (group.usage === 'compatibility' && blinkEyes.test(file.key)))));
 const heat = frontTypingEffectsPath + 'heat';
 
 export function pixel80DesktopAssets(preview: boolean): Plugin {

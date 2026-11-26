@@ -91,7 +91,7 @@ struct ReminderListCard: View {
     @State private var rowFrames: [Int: CGRect] = [:]
     @GestureState private var reorderDrag: ReorderDrag?
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     private var trimmedDraft: String {
         model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -219,7 +219,7 @@ struct ReminderListCard: View {
                         .accessibilityIdentifier("todo-undo")
                 }
                 .padding(.horizontal, 5)
-                .background(PixelBox(corner: 3).fill(palette.panelAlt))
+                .background(RoundedRectangle(cornerRadius: 8).fill(palette.panelAlt))
             }
 
             if model.isAdding {
@@ -323,7 +323,7 @@ struct ReminderListCard: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background(PixelBox(corner: 3).fill(
+        .background(RoundedRectangle(cornerRadius: 8).fill(
             reorderDrag?.source == index ? palette.panelDeep : palette.panelAlt
         ))
         .contextMenu {
@@ -440,7 +440,7 @@ struct ReminderInputCard: View {
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     private var trimmed: String {
         model.text.trimmingCharacters(in: .whitespacesAndNewlines)

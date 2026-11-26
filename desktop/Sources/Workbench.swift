@@ -88,6 +88,7 @@ struct AppearanceCatalog: Decodable {
     let presets: [AppearancePreset]
     let faceBasePalettes: Set<String>
     let coatCards: [String: [AppearanceOption]]
+    let workbenchCoatCards: [String: [AppearanceOption]]?
     let photoEarMarks: [String: [AppearanceOption]]
     let photoEarPigments: [AppearanceOption]
     let furPatchPresets: [FurPatchPreset]
@@ -155,7 +156,7 @@ final class WorkbenchState: ObservableObject {
     }
 
     func ownsAccessory(_ id: String) -> Bool {
-        accessoryOwnership.ids.contains(AccessoryShopItem.ownershipID(id))
+        AccessoryShopItem.builtIn.contains(id) || accessoryOwnership.ids.contains(AccessoryShopItem.ownershipID(id))
     }
 
     func acquireAccessory(_ id: String) {
@@ -408,7 +409,7 @@ final class WorkbenchState: ObservableObject {
     func resetUnavailablePreview() {
         if appearance["frame"] != "CAT" {
             if action == "typing-gentle" || action == "typing-fast" { action = "typing" }
-            if ["listening", "shredder", "zip", "convert"].contains(action) { action = "sit" }
+            if action == "listening" { action = "sit" }
         }
     }
 }
@@ -609,8 +610,8 @@ private struct PupilColorEditor: View {
 }
 
 private enum AppearancePage: String, CaseIterable {
-    case breeds = "品种"
-    case coat = "毛色与花纹"
+    case coat = "毛色"
+    case markings = "花纹"
     case face = "头部"
     case tail = "尾巴"
     case accessories = "配饰"
@@ -678,8 +679,8 @@ private struct PixelDivider: View {
     let palette: PixelPalette
     var body: some View {
         Rectangle()
-            .fill(palette.borderSoft.opacity(0.7))
-            .frame(height: 2)
+            .fill(palette.borderSoft)
+            .frame(height: 1)
     }
 }
 
@@ -709,7 +710,7 @@ private enum PreviewBackdrop: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .warm: Color(pixelHex: 0xECDFC3)
+        case .warm: Color(pixelHex: 0xF1E9DC)
         case .gray: Color(pixelHex: 0xC5CAD0)
         case .light: Color(pixelHex: 0xF2F1EE)
         case .dark: Color(pixelHex: 0x424853)
@@ -787,20 +788,17 @@ private struct FurPatchSelection: View {
 }
 
 enum WorkbenchLayout {
-    static let defaultSize = CGSize(width: 880, height: 660)
-    static let minimumSize = CGSize(width: 840, height: 620)
+    static let defaultSize = CGSize(width: 880, height: 608)
+    static let minimumSize = CGSize(width: 840, height: 592)
     static let outerInset: CGFloat = 16
     static let titlebarInset: CGFloat = 6
     static let panelGap: CGFloat = 12
     static let controlGap: CGFloat = 8
     static let tightGap: CGFloat = 4
-    static let previewWidth: CGFloat = 352
-    static let previewCanvasLimit: CGFloat = 288
+    static let previewWidth: CGFloat = 300
+    static let previewCanvasLimit: CGFloat = 260
     static let appearanceCardPadding: CGFloat = 4
     static let appearanceCardSpacing: CGFloat = 3
-    static let breedLabelHeight: CGFloat = 18
-    static let breedThumbnailHeight: CGFloat = 66
-    static let fittedBreedPanelLimit: CGFloat = 520
 }
 
 struct WorkbenchView: View {
@@ -808,11 +806,13 @@ struct WorkbenchView: View {
     let preview: WKWebView
     let typingActivity: TypingActivity
     let meetingPage: ((PixelPalette) -> AnyView)?
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage("workbenchTheme") private var workbenchTheme = WorkbenchTheme.sand
     @AppStorage(PetUserAddress.defaultsKey) private var savedUserAddress = ""
     @State private var userAddressDraft = ""
     @State private var isEditingUserAddress = false
-    @State private var appearancePage = AppearancePage.breeds
+    @State private var appearancePage = AppearancePage.coat
+    @State private var showingBreedPicker = false
     @State private var facePart = FacePart.ears
     @State private var earScope: EarEditScope?
     @State private var eyeScope: EyeEditScope?
@@ -825,13 +825,18 @@ struct WorkbenchView: View {
     @State private var inspectingTransparency = false
     @State private var showingBackdropChoices = false
     @State private var showingTypingActions = false
-    @State private var showingFileActions = false
     @State private var showingProfile = false
     @State private var showingDesktopSettings = false
     @State private var showingTypingSummary = false
     @State private var showingWorkbenchThemes = false
 
-    private var palette: PixelPalette { workbenchTheme.palette }
+    private var palette: PixelPalette { workbenchTheme.windowPalette }
+
+    private var appearanceFields: [String: [AppearanceOption]] {
+        let frame = state.appearance["frame", default: "CAT"]
+        let group = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
+        return state.catalog?.fieldsByFrame[group] ?? [:]
+    }
 
     private var systemColorScheme: ColorScheme {
         NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
@@ -857,7 +862,6 @@ struct WorkbenchView: View {
     }
 
     private let typingActions = [("typing-gentle", "慢速"), ("typing-fast", "快速"), ("typing", "极速")]
-    private let fileActions = [("shredder", "碎纸机"), ("zip", "压缩"), ("convert", "格式转换")]
 
     private var typingIsSelected: Bool { typingActions.contains { $0.0 == state.action } }
 
@@ -880,14 +884,12 @@ struct WorkbenchView: View {
     var body: some View {
         ZStack {
             palette.background.ignoresSafeArea()
-            WorkbenchPixelSurface(palette: palette, fill: palette.background, corner: 9)
-                .padding(8)
-                .ignoresSafeArea()
             VStack(spacing: WorkbenchLayout.controlGap) {
-                topBar
+                topBar.padding(.bottom, 3)
+                Divider()
                 ZStack {
                     VStack(spacing: WorkbenchLayout.panelGap) {
-                        HStack(alignment: .top, spacing: WorkbenchLayout.panelGap) {
+                        HStack(alignment: .top, spacing: 20) {
                             previewPanel
                             detailPane
                         }
@@ -912,16 +914,22 @@ struct WorkbenchView: View {
         }
         .font(WorkbenchTypography.body())
         .environment(\.workbenchChrome, true)
-        .environment(\.usesWorkbenchWindowTypography, true)
+        .environment(\.usesWorkbenchWindowStyle, true)
         .sheet(isPresented: $showingGuide) {
             WorkbenchGuideSheet(palette: palette, recordingAvailable: meetingPage != nil,
                                 opensOnRecording: showsMeetingPage)
+                .workbenchCompanionStyle(workbenchTheme)
+        }
+        .sheet(isPresented: $showingBreedPicker) {
+            breedPickerSheet
+                .workbenchCompanionStyle(workbenchTheme)
         }
         .sheet(isPresented: $showingAccessoryShop) {
             AccessoryShopSheet(state: state, theme: workbenchTheme)
         }
         .sheet(isPresented: $showingFeedback) {
             FeedbackSheet(draft: $feedbackDraft, palette: palette)
+                .workbenchCompanionStyle(workbenchTheme)
         }
         .environment(\.workbenchTheme, workbenchTheme)
         .preferredColorScheme(.light)
@@ -930,11 +938,6 @@ struct WorkbenchView: View {
     private var topBar: some View {
         HStack(spacing: WorkbenchLayout.controlGap) {
             helpMenu
-            Button("商店") { showingAccessoryShop = true }
-                .workbenchButton(palette: palette)
-                .disabled(state.catalog == nil)
-                .help("打开配饰商店")
-                .accessibilityIdentifier("workbench-accessory-shop")
             if meetingPage != nil {
                 pageNavigation.fixedSize()
             }
@@ -1022,10 +1025,9 @@ struct WorkbenchView: View {
     }
 
     private func themeSwatch(_ theme: WorkbenchTheme) -> some View {
-        let colors = theme.palette
+        let colors = theme.windowPalette
         return RoundedRectangle(cornerRadius: 2)
-            .fill(colors.background)
-            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(colors.border, lineWidth: 1))
+            .fill(colors.panelDeep)
             .frame(width: 11, height: 11)
             .accessibilityHidden(true)
     }
@@ -1051,7 +1053,7 @@ struct WorkbenchView: View {
                     state.checkUpdate?()
                 }
             }
-            .workbenchButton(palette: palette, prominent: hasUpdate)
+            .workbenchButton(palette: palette, prominent: hasUpdate, quiet: !hasUpdate)
             .disabled(!hasUpdate && (state.checkUpdate == nil || state.updateSessionInProgress))
             .accessibilityIdentifier(hasUpdate ? "workbench-install-update" : "workbench-check-update")
 
@@ -1084,63 +1086,69 @@ struct WorkbenchView: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .workbenchButton(palette: palette)
+        .workbenchButton(palette: palette, quiet: true)
         .fixedSize()
         .accessibilityIdentifier("workbench-help")
     }
 
     private var previewPanel: some View {
         let canvasInk = previewBackdrop == .dark && !inspectingTransparency ? Color.white :
-            inspectingTransparency ? checkerPalette.ink : Color(pixelHex: 0x302A24)
+            inspectingTransparency ? checkerPalette.ink : palette.ink
         return VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
             HStack {
                 Text("预览").font(WorkbenchTypography.sectionTitle)
-                Spacer()
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 6)
                 exportPNGButton(id: "preview-export-png")
                 previewBackdropControls
             }
-            previewStage
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
-                    .font(WorkbenchTypography.sectionTitle)
-                    .lineLimit(1)
-                if let breed = state.catalog?.presets.first(where: { $0.id == state.preset })?.name,
-                   breed != state.appearance["name"] {
-                    Text(breed).font(WorkbenchTypography.supporting()).lineLimit(1).opacity(0.8)
-                }
-                Spacer()
-                Button("档案") { showingProfile.toggle() }
-                    .workbenchButton(palette: palette)
-                    .accessibilityIdentifier("workbench-profile")
-                    .popover(isPresented: $showingProfile, arrowEdge: .bottom) {
-                        namePanel.frame(width: 340).padding(10)
+            VStack(spacing: WorkbenchLayout.tightGap) {
+                HStack(spacing: WorkbenchLayout.controlGap) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(state.appearance["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名")
+                            .font(WorkbenchTypography.pageTitle)
+                            .lineLimit(1)
+                        if let breed = state.catalog?.presets.first(where: { $0.id == state.preset })?.name,
+                           breed != state.appearance["name"] {
+                            Text(breed).font(WorkbenchTypography.body()).lineLimit(1).opacity(0.8)
+                        }
                     }
-            }
-            .foregroundStyle(canvasInk)
+                    Spacer(minLength: 4)
+                    Button("档案") { showingProfile.toggle() }
+                        .workbenchButton(palette: palette)
+                        .accessibilityIdentifier("workbench-profile")
+                        .popover(isPresented: $showingProfile, arrowEdge: .bottom) {
+                            namePanel.frame(width: 340).padding(10)
+                        }
+                }
+                .foregroundStyle(canvasInk)
+                .padding(.horizontal, 6)
 
-            previewActionControls
-                .disabled(state.pixelEditor?.isFurOnly == true || (state.hasPhotoResult && state.editingCustom))
-                .disabled(state.pixelEditor != nil || state.editingCustom || state.applying || state.loadingCustom)
-        }
-        .foregroundStyle(canvasInk)
-        .padding(WorkbenchLayout.panelGap)
-        .background {
-            if inspectingTransparency {
-                PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 12)
-            } else {
-                previewBackdrop.color
+                previewStage
+
+                previewActionControls
+                    .disabled(state.pixelEditor != nil || state.editingCustom || state.applying || state.loadingCustom)
             }
+            .padding(10)
+            .background {
+                if inspectingTransparency {
+                    PixelChecker(even: checkerPalette.panelAlt, odd: checkerPalette.panelDeep, cell: 12)
+                } else {
+                    previewBackdrop.color
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .clipShape(PixelBox(corner: 6))
-        .overlay(PixelBox(corner: 6, inset: 0.5).stroke(palette.border, lineWidth: 1).allowsHitTesting(false))
+        .foregroundStyle(palette.ink)
         .frame(width: WorkbenchLayout.previewWidth)
     }
 
     private var previewStage: some View {
         let editing = state.pixelEditor != nil || state.customMode == .patches
+        let limit: CGFloat = editing ? 288 : WorkbenchLayout.previewCanvasLimit
         return GeometryReader { geometry in
-            let side = max(1, min(WorkbenchLayout.previewCanvasLimit, geometry.size.width, geometry.size.height))
+            let side = max(1, min(limit, geometry.size.width, geometry.size.height))
             SpritePreview(web: preview)
                 .frame(width: side, height: side)
                 .accessibilityLabel("桌宠动作预览")
@@ -1233,47 +1241,82 @@ struct WorkbenchView: View {
     }
 
     private var previewActionControls: some View {
-        let cat = state.appearance["frame"] == "CAT"
-        let fileActionTitle = fileActions.first(where: { $0.0 == state.action })?.1
-        return HStack(spacing: WorkbenchLayout.tightGap) {
-            previewActionButton("待机", action: "sit")
-            if cat {
-                previewActionMenu(typingActionTitle, id: "preview-action-typing-mode", selected: typingIsSelected,
-                                  choices: typingActions, showing: $showingTypingActions)
-                previewActionButton("听音乐", action: "listening")
-                Spacer(minLength: 0)
-                previewActionMenu(fileActionTitle ?? "文件动作", id: "preview-more-actions", selected: fileActionTitle != nil,
-                                  choices: fileActions, showing: $showingFileActions)
+        HStack(spacing: WorkbenchLayout.controlGap) {
+            previewActionButton("待机", action: "sit", inToolbar: true)
+            if state.appearance["frame"] == "CAT" {
+                typingPreviewMenu
+                listeningPreviewControls
             } else {
-                previewActionButton("打字", action: "typing", id: "typing-mode")
-                Spacer(minLength: 0)
+                previewActionButton("打字", action: "typing", id: "typing-mode", inToolbar: true)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(WorkbenchLayout.tightGap)
-        .background(WorkbenchPixelSurface(palette: palette, fill: palette.panel, corner: 3))
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 16)
+            if reduceTransparency {
+                shape.fill(palette.panel)
+            } else {
+                shape.fill(.regularMaterial)
+                    .overlay {
+                        shape.fill(LinearGradient(colors: [.white.opacity(0.86), .white.opacity(0.5),
+                                                          .white.opacity(0.72)],
+                                                  startPoint: .top, endPoint: .bottom))
+                    }
+                    .overlay(shape.strokeBorder(.white.opacity(0.92), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.075), radius: 2, y: 2)
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("预览动作")
     }
 
-    private func previewActionMenu(_ title: String, id: String, selected: Bool,
-                                   choices: [(String, String)], showing: Binding<Bool>) -> some View {
+    private var listeningPreviewControls: some View {
+        HStack(spacing: 0) {
+            previewActionButton("听音乐", action: "listening", inToolbar: true)
+            if let colors = appearanceFields["headphoneColor"], !colors.isEmpty {
+                Menu {
+                    Picker("耳机颜色", selection: appearanceBinding("headphoneColor")) {
+                        ForEach(colors, id: \.id) { color in
+                            Text(color.name).tag(color.id)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .frame(width: 21, height: 27)
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .workbenchButton(palette: palette, card: true, quiet: true)
+                .accessibilityLabel("耳机颜色")
+                .accessibilityValue(colors.first {
+                    $0.id == state.appearance["headphoneColor", default: "natural"]
+                }?.name ?? "")
+                .accessibilityIdentifier("headphone-color-picker")
+                .help("设置听音乐动作的耳机颜色")
+            }
+        }
+        .fixedSize()
+    }
+
+    private var typingPreviewMenu: some View {
         Button {
-            showing.wrappedValue.toggle()
+            showingTypingActions.toggle()
         } label: {
-            HStack(spacing: 5) {
-                actionSelectionMark(selected)
-                Text(title)
+            HStack(spacing: 4) {
+                Text(typingActionTitle).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
             }
-            .fixedSize()
         }
-        .workbenchButton(palette: palette, selected: selected)
-        .accessibilityIdentifier(id)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .popover(isPresented: showing, arrowEdge: .top) {
+        .workbenchButton(palette: palette, selected: typingIsSelected, quiet: true)
+        .accessibilityIdentifier("preview-action-typing-mode")
+        .accessibilityAddTraits(typingIsSelected ? .isSelected : [])
+        .popover(isPresented: $showingTypingActions, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(choices, id: \.0) { action, title in
-                    previewActionButton(title, action: action) { showing.wrappedValue = false }
+                ForEach(typingActions, id: \.0) { action, title in
+                    previewActionButton(title, action: action) { showingTypingActions = false }
                 }
             }
             .padding(9)
@@ -1281,19 +1324,19 @@ struct WorkbenchView: View {
     }
 
     private func previewActionButton(_ title: String, action: String, id: String? = nil,
-                                     completion: (() -> Void)? = nil) -> some View {
+                                     inToolbar: Bool = false, completion: (() -> Void)? = nil) -> some View {
         let selected = state.action == action
         return Button {
             selectPreviewAction(action)
             completion?()
         } label: {
             HStack(spacing: 5) {
-                actionSelectionMark(selected)
+                if !inToolbar { actionSelectionMark(selected) }
                 Text(title)
             }
             .fixedSize()
         }
-        .workbenchButton(palette: palette, selected: selected)
+        .workbenchButton(palette: palette, selected: selected, quiet: inToolbar)
         .accessibilityIdentifier("preview-action-\(id ?? action)")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -1309,43 +1352,38 @@ struct WorkbenchView: View {
     }
 
     private enum DetailAnchor {
-        case customActions, pixelEditor
-    }
-
-    private var fitsBreedPanel: Bool {
-        appearancePage == .breeds && !customExpanded && state.pixelEditor == nil
-            && state.appearance["frame", default: "CAT"] == "CAT" && visiblePresets.count == 12
+        case appearance, customActions, pixelEditor
     }
 
     @ViewBuilder
     private var detailPane: some View {
         if state.catalog != nil {
-            GeometryReader { viewport in
-                let fittedHeight = fitsBreedPanel ? min(viewport.size.height, WorkbenchLayout.fittedBreedPanelLimit) : nil
-                ScrollViewReader { scroll in
-                    ScrollView(.vertical) {
-                        Group {
-                            if state.pixelEditor != nil {
-                                PixelPanel(palette: palette) {
-                                    pixelEditorControls.frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .id(DetailAnchor.pixelEditor)
-                            } else {
-                                appearancePanel(fittedHeight: fittedHeight)
+            ScrollViewReader { scroll in
+                ScrollView(.vertical) {
+                    Group {
+                        if state.pixelEditor != nil {
+                            PixelPanel(palette: palette) {
+                                pixelEditorControls.frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .id(DetailAnchor.pixelEditor)
+                        } else {
+                            appearancePanel.id(DetailAnchor.appearance)
                         }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(.bottom, fittedHeight == nil ? 6 : 0)
                     }
-                    .onChange(of: customExpanded) { expanded in
-                        if expanded { scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom) }
-                    }
-                    .onChange(of: state.pixelEditor != nil) { editing in
-                        if editing {
-                            scroll.scrollTo(DetailAnchor.pixelEditor, anchor: .top)
-                        } else if customExpanded {
-                            scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom)
-                        }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.bottom, 6)
+                }
+                .onChange(of: appearancePage) { _ in
+                    scroll.scrollTo(DetailAnchor.appearance, anchor: .top)
+                }
+                .onChange(of: customExpanded) { expanded in
+                    if expanded { scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom) }
+                }
+                .onChange(of: state.pixelEditor != nil) { editing in
+                    if editing {
+                        scroll.scrollTo(DetailAnchor.pixelEditor, anchor: .top)
+                    } else if customExpanded {
+                        scroll.scrollTo(DetailAnchor.customActions, anchor: .bottom)
                     }
                 }
             }
@@ -1364,7 +1402,7 @@ struct WorkbenchView: View {
 
     private func sectionTab(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .workbenchButton(palette: palette, selected: selected)
+            .workbenchButton(palette: palette, selected: selected, quiet: true)
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -1721,7 +1759,7 @@ struct WorkbenchView: View {
                     .font(WorkbenchTypography.sectionTitle)
                     .foregroundStyle(palette.ink)
                 HStack(spacing: 8) {
-                    Button("调整花纹与颜色") { appearancePage = .coat }
+                    Button("调整毛色") { appearancePage = .coat }
                         .workbenchButton(palette: palette)
                         .accessibilityIdentifier("photo-result-appearance")
                     Button("毛色画笔") { state.changeCustomMode(.brush) }
@@ -1957,20 +1995,19 @@ struct WorkbenchView: View {
 
 
     @ViewBuilder
-    private func appearancePanel(fittedHeight: CGFloat?) -> some View {
+    private var appearancePanel: some View {
         if let catalog = state.catalog {
             let frame = state.appearance["frame", default: "CAT"]
-            let optionGroup = frame == "CAT" && state.appearance["palette"] == "CC01" ? "CAT_ORANGE" : frame
-            let fields = catalog.fieldsByFrame[optionGroup] ?? [:]
+            let fields = appearanceFields
             let markings = catalog.fieldsByFrame["CAT_MARKINGS"] ?? [:]
             let canChooseFaceBase = catalog.faceBasePalettes.contains(state.appearance["palette", default: "CC01"])
 
-            PixelPanel(palette: palette, padding: 12) {
-                VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
-                    Group {
-                        if frame == "CAT" {
-                            VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
-                                HStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+                Group {
+                    if frame == "CAT" {
+                        VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+                            HStack(spacing: WorkbenchLayout.controlGap) {
+                                HStack(spacing: 6) {
                                     PixelGlyph(kind: .workbenchCat, color: palette.accentDeep, size: 12)
                                     Text("外观")
                                         .font(WorkbenchTypography.sectionTitle)
@@ -1979,48 +2016,44 @@ struct WorkbenchView: View {
                                 .accessibilityElement(children: .combine)
                                 .accessibilityAddTraits(.isHeader)
                                 .accessibilityIdentifier("workbench-appearance-heading")
-                                appearanceNavigation
-                                Divider()
-                                if appearancePage == .face { faceNavigation }
-                                appearanceContent(fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase,
-                                                  fitsBreedGrid: fittedHeight != nil)
-                                    .disabled(state.choosingBreed && appearancePage != .breeds)
-                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                                Spacer(minLength: 8)
+                                breedPickerButton
                             }
-                            .onChange(of: state.preset) { _ in
-                                earScope = nil
-                                eyeScope = nil
-                            }
-                            .onChange(of: state.customSelected) { _ in earScope = nil }
-                        } else {
-                            VStack(alignment: .leading, spacing: 8) {
-                                LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
-                                    ForEach(dogFields, id: \.0) { key, title in
-                                        if let options = fields[key] {
-                                            fieldPicker(title: title, key: key, options: options)
-                                        }
+                            appearanceNavigation
+                            Divider()
+                            if appearancePage == .face { faceNavigation }
+                            appearanceContent(fields: fields, markings: markings, canChooseFaceBase: canChooseFaceBase)
+                                .disabled(state.choosingBreed)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .onChange(of: state.preset) { _ in
+                            earScope = nil
+                            eyeScope = nil
+                        }
+                        .onChange(of: state.customSelected) { _ in earScope = nil }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            LazyVGrid(columns: fieldColumns, alignment: .leading, spacing: 8) {
+                                ForEach(dogFields, id: \.0) { key, title in
+                                    if let options = fields[key] {
+                                        fieldPicker(title: title, key: key, options: options)
                                     }
                                 }
-                                paletteRow(options: fields["palette"] ?? [])
                             }
+                            paletteRow(options: fields["palette"] ?? [])
                         }
                     }
-                    .disabled(state.editingCustom || state.loadingCustom)
-                    PixelDivider(palette: palette)
-                    customAppearanceSection
                 }
+                .disabled(state.editingCustom || state.loadingCustom)
+                PixelDivider(palette: palette)
+                customAppearanceSection
             }
-            .frame(height: fittedHeight)
         }
     }
 
     private var appearanceNavigation: some View {
         HStack(spacing: 4) {
             ForEach(AppearancePage.allCases.filter { $0 != .photo }, id: \.self) { page in
-                if page == .coat {
-                    Rectangle().fill(palette.borderSoft).frame(width: 1, height: 18)
-                        .padding(.horizontal, 2)
-                }
                 sectionTab(page.rawValue, selected: appearancePage == page) {
                     if appearancePage != page {
                         earScope = nil
@@ -2050,59 +2083,86 @@ struct WorkbenchView: View {
         }
     }
 
-    @ViewBuilder
-    private func breedGrid(fillsPanel: Bool) -> some View {
-        let presets = visiblePresets
-        let preferredRows = [
-            ["preset_cat_black", "preset_cat_CC09", "preset_cat_orange", "preset_cat_british_blue"],
-            ["preset_cat_american_shorthair", "preset_cat_CC11", "preset_cat_siamese", "preset_cat_ragdoll"],
-            ["preset_cat_li_hua", "preset_cat_CC10", "preset_cat_calico", "preset_cat_CC12"],
-        ]
-        let arrangedIDs = Set(preferredRows.joined())
-        let rows = (preferredRows.map { row in
-            row.compactMap { id in presets.first { $0.id == id } }
-        } + [presets.filter { !arrangedIDs.contains($0.id) }]).filter { !$0.isEmpty }
-
-        if fillsPanel {
-            GeometryReader { grid in
-                let rowCount = CGFloat(rows.count)
-                let rowSpacing = WorkbenchLayout.controlGap * (rowCount - 1)
-                let cardChrome = WorkbenchLayout.breedLabelHeight + WorkbenchLayout.appearanceCardSpacing
-                    + WorkbenchLayout.appearanceCardPadding * 2
-                let imageHeight = (grid.size.height - rowSpacing) / rowCount - cardChrome
-                breedRows(rows, imageHeight: max(WorkbenchLayout.breedThumbnailHeight, imageHeight))
-            }
-        } else {
-            breedRows(rows, imageHeight: WorkbenchLayout.breedThumbnailHeight)
-        }
-    }
-
-    private func breedRows(_ rows: [[AppearancePreset]], imageHeight: CGFloat) -> some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: WorkbenchLayout.controlGap), count: 4)
-        return VStack(spacing: WorkbenchLayout.controlGap) {
-            ForEach(rows.indices, id: \.self) { index in
-                LazyVGrid(columns: columns, spacing: WorkbenchLayout.controlGap) {
-                    ForEach(rows[index], id: \.id) { preset in
-                        appearanceCard(preset.name, image: state.thumbnails?.breeds[preset.id],
-                                       selected: state.preset == preset.id, imageHeight: imageHeight,
-                                       labelHeight: WorkbenchLayout.breedLabelHeight) {
-                            state.choosePreset(preset.id)
-                        }
-                        .accessibilityIdentifier("breed-\(preset.id)")
-                    }
+    private var breedPickerButton: some View {
+        let currentBreed = visiblePresets.first { $0.id == state.preset } ?? nativeCatPreset
+        return Button {
+            showingBreedPicker = true
+        } label: {
+            HStack(spacing: 6) {
+                Text("品种")
+                    .foregroundStyle(palette.inkSoft)
+                if let currentBreed {
+                    Text(currentBreed.name)
+                        .font(WorkbenchTypography.body(.semibold))
                 }
             }
+            .fixedSize()
         }
+        .workbenchButton(palette: palette, accented: true)
+        .disabled(visiblePresets.isEmpty || state.choosingBreed || state.applying)
+        .accessibilityLabel("选择品种")
+        .accessibilityValue(currentBreed?.name ?? "")
+        .accessibilityIdentifier("workbench-breed-picker")
+    }
+
+    private var breedPickerSheet: some View {
+        let order = [
+            "preset_cat_black", "preset_cat_CC09", "preset_cat_orange", "preset_cat_british_blue",
+            "preset_cat_american_shorthair", "preset_cat_CC11", "preset_cat_siamese", "preset_cat_ragdoll",
+            "preset_cat_li_hua", "preset_cat_CC10", "preset_cat_calico", "preset_cat_CC12",
+        ]
+        let presets = visiblePresets
+        let arranged = order.compactMap { id in presets.first { $0.id == id } }
+        let breeds = arranged + presets.filter { !order.contains($0.id) }
+        let columns = Array(repeating: GridItem(.flexible(), spacing: WorkbenchLayout.controlGap), count: 4)
+        let thumbnailHeight: CGFloat = 76
+        let rowHeight = thumbnailHeight + 20 + WorkbenchLayout.appearanceCardSpacing
+            + 2 * WorkbenchLayout.appearanceCardPadding
+        let shownRows = min(3, (breeds.count + columns.count - 1) / columns.count)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("选择品种")
+                    .font(WorkbenchTypography.pageTitle)
+                    .foregroundStyle(palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button("关闭") { showingBreedPicker = false }
+                    .workbenchButton(palette: palette)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("breed-picker-close")
+            }
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: WorkbenchLayout.controlGap) {
+                    ForEach(breeds, id: \.id) { breed in
+                        appearanceCard(breed.name, image: state.thumbnails?.breeds[breed.id],
+                                       selected: state.preset == breed.id, imageHeight: thumbnailHeight) {
+                            if state.preset != breed.id { state.choosePreset(breed.id) }
+                            showingBreedPicker = false
+                        }
+                        .accessibilityIdentifier("breed-\(breed.id)")
+                    }
+                }
+                .padding(2)
+            }
+            .frame(height: CGFloat(shownRows) * rowHeight + CGFloat(max(0, shownRows - 1)) * WorkbenchLayout.controlGap + 4)
+
+            Text("选择后在左侧预览。满意后点击「应用到桌宠」。")
+                .font(WorkbenchTypography.body())
+                .foregroundStyle(palette.inkSoft)
+        }
+        .padding(18)
+        .frame(width: 580)
+        .background(palette.panel)
     }
 
     @ViewBuilder
     private func appearanceContent(
         fields: [String: [AppearanceOption]], markings: [String: [AppearanceOption]],
-        canChooseFaceBase: Bool, fitsBreedGrid: Bool
+        canChooseFaceBase: Bool
     ) -> some View {
         switch appearancePage {
-        case .breeds:
-            breedGrid(fillsPanel: fitsBreedGrid)
         case .face:
             switch facePart {
             case .ears:
@@ -2128,44 +2188,70 @@ struct WorkbenchView: View {
             VStack(alignment: .leading, spacing: 11) {
                 coatCards
                 if let options = fields["coat"] { extraCoatPicker(options: options, palettes: fields["palette"] ?? []) }
-                DisclosureGroup("细调花纹") {
-                    markingsControls(fields, markings, canChooseFaceBase: canChooseFaceBase)
-                        .padding(.top, 8)
-                }
-                .font(WorkbenchTypography.body())
-                .foregroundStyle(palette.ink)
             }
+        case .markings:
+            markingsControls(fields, markings, canChooseFaceBase: canChooseFaceBase)
         case .tail:
             if let options = fields["tail"] { partChoices("尾形", key: "tail", options: options, imageHeight: 88) }
         case .accessories:
-            VStack(alignment: .leading, spacing: 11) {
-                if let headAccessories = fields["accessory"] {
-                    HStack(alignment: .top, spacing: 10) {
-                        headAccessoryPicker(title: "帽子", category: "hat", options: headAccessories)
-                        headAccessoryPicker(title: "发饰", category: "hair", options: headAccessories)
-                    }
-                    Text("帽子和发饰共用一个佩戴位置，只能选一件。")
-                        .font(WorkbenchTypography.body())
-                        .foregroundStyle(palette.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let eyeAccessories = fields["eyeAccessory"] {
-                    HStack(alignment: .top, spacing: 10) {
-                        accessoryPicker(title: "眼部配饰", key: "eyeAccessory", options: eyeAccessories)
-                        accessorySidePicker(key: "eyeAccessory", title: "眼罩位置", part: "眼", options: eyeAccessories)
-                    }
-                }
-                if let colors = fields["headphoneColor"] {
-                    fieldPicker(title: "听歌耳机颜色", key: "headphoneColor", options: colors, defaultSwatch: [])
-                }
-            }
+            accessoryPanel(fields)
         case .photo:
             photoGenerator
         }
     }
 
+    private func accessoryPanel(_ fields: [String: [AppearanceOption]]) -> some View {
+        let headwear = fields["accessory"] ?? []
+        let hats = headwear.filter { $0.id == "A00" || $0.accessoryCategory == "hat" }
+        let hair = headwear.filter { $0.id == "A00" || $0.accessoryCategory == "hair" }
+        let eyewear = fields["eyeAccessory"] ?? []
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: WorkbenchLayout.controlGap) {
+                Text("我的配饰")
+                    .font(WorkbenchTypography.body(.semibold))
+                    .foregroundStyle(palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                Button {
+                    showingAccessoryShop = true
+                } label: {
+                    Label {
+                        Text("配饰商店")
+                    } icon: {
+                        PixelGlyph(kind: .shoppingBag, color: palette.accentDeep, size: 12)
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 3)
+                    .frame(minHeight: 20)
+                }
+                .workbenchButton(palette: palette, accented: true)
+                .help("浏览并获取配饰")
+                .accessibilityIdentifier("workbench-accessory-shop")
+            }
+            LazyVGrid(columns: fieldColumns, spacing: 8) {
+                if !hats.isEmpty { accessoryPicker(.hat, key: "accessory", options: hats, controlID: "hat-accessory-picker") }
+                if !hair.isEmpty { accessoryPicker(.hair, key: "accessory", options: hair, controlID: "hair-accessory-picker") }
+                if let clothing = fields["clothing"] { accessoryPicker(.clothing, key: "clothing", options: clothing) }
+                if !eyewear.isEmpty { accessoryPicker(.eye, key: "eyeAccessory", options: eyewear) }
+            }
+            if !headwear.isEmpty {
+                Text("帽子和发饰共用一个佩戴位置，只能选一件。")
+                    .font(WorkbenchTypography.supporting())
+                    .foregroundStyle(palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+                accessorySidePicker(key: "accessory", title: "帽子位置", part: "耳", options: hats)
+                accessorySidePicker(key: "accessory", title: "发饰位置", part: "耳", options: hair)
+                accessorySidePicker(key: "eyeAccessory", title: "眼罩位置", part: "眼", options: eyewear)
+            }
+        }
+        .task { await state.loadAccessoryThumbnails() }
+    }
+
     private var currentCoatCards: [AppearanceOption] {
-        state.catalog?.coatCards[state.appearance["palette", default: "CC01"]] ?? []
+        let paletteID = state.appearance["palette", default: "CC01"]
+        return state.catalog?.workbenchCoatCards?[paletteID] ?? state.catalog?.coatCards[paletteID] ?? []
     }
 
     private var ownPaletteCoat: String {
@@ -2183,11 +2269,11 @@ struct WorkbenchView: View {
                                    patches: state.furPatches, overlayRevision: state.coatOverlayRevision)
         let images = coatThumbnails?.key == key ? coatThumbnails?.images : nil
         return VStack(alignment: .leading, spacing: 6) {
-            if let breed = nativeCatPreset { profileLabel("\(breed.name)的花色") }
+            if let breed = nativeCatPreset { profileLabel("\(breed.name)的毛色") }
             LazyVGrid(columns: presetColumns, spacing: 8) {
                 ForEach(currentCoatCards, id: \.id) { coat in
                     appearanceCard(coat.name, image: images?[coat.id], selected: selectedCoat == coat.id,
-                                   imageHeight: 104) {
+                                   imageHeight: 86) {
                         appearanceBinding("coat").wrappedValue = coat.id
                     }
                     .accessibilityIdentifier("coat-\(coat.id)")
@@ -2204,20 +2290,32 @@ struct WorkbenchView: View {
     private func markingsControls(
         _ fields: [String: [AppearanceOption]], _ markings: [String: [AppearanceOption]], canChooseFaceBase: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 7) {
-                if let options = fields["pattern"] { fieldPicker(title: "额头花纹", key: "pattern", options: options) }
-                if canChooseFaceBase, let options = markings["faceBase"] {
-                    fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
-                } else {
-                    staticField(title: "脸部底纹", value: "均匀底色")
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("脸部")
+                    .font(WorkbenchTypography.body(.semibold))
+                    .foregroundStyle(palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .top, spacing: 7) {
+                    if let options = fields["pattern"] { fieldPicker(title: "额头花纹", key: "pattern", options: options) }
+                    if canChooseFaceBase, let options = markings["faceBase"] {
+                        fieldPicker(title: "脸部底纹", key: "faceBase", options: options)
+                    } else {
+                        staticField(title: "脸部底纹", value: "均匀底色")
+                    }
+                    if let options = markings["cheekPattern"] { fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options) }
                 }
-                if let options = markings["cheekPattern"] { fieldPicker(title: "脸颊花纹", key: "cheekPattern", options: options) }
             }
-            HStack(alignment: .top, spacing: 7) {
-                if let options = markings["bodyBase"] { fieldPicker(title: "身体底色", key: "bodyBase", options: options) }
-                if let options = fields["bodyPattern"] { fieldPicker(title: "身体花纹", key: "bodyPattern", options: options) }
-                if let options = markings["tailPattern"] { fieldPicker(title: "尾纹", key: "tailPattern", options: options) }
+            VStack(alignment: .leading, spacing: 7) {
+                Text("身体与尾巴")
+                    .font(WorkbenchTypography.body(.semibold))
+                    .foregroundStyle(palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .top, spacing: 7) {
+                    if let options = markings["bodyBase"] { fieldPicker(title: "身体底色", key: "bodyBase", options: options) }
+                    if let options = fields["bodyPattern"] { fieldPicker(title: "身体花纹", key: "bodyPattern", options: options) }
+                    if let options = markings["tailPattern"] { fieldPicker(title: "尾纹", key: "tailPattern", options: options) }
+                }
             }
         }
     }
@@ -2241,7 +2339,7 @@ struct WorkbenchView: View {
                 .clipped()
                 .accessibilityHidden(true)
                 Text(title)
-                    .font(WorkbenchTypography.supporting(selected ? .semibold : .regular))
+                    .font(WorkbenchTypography.body(selected ? .semibold : .regular))
                     .foregroundStyle(palette.ink)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -2251,8 +2349,11 @@ struct WorkbenchView: View {
             .frame(maxWidth: .infinity)
             .overlay(alignment: .topTrailing) {
                 if selected {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
-                        .foregroundStyle(palette.accentDeep).padding(7).accessibilityHidden(true)
+                    PixelGlyph(kind: .check, color: .white, size: 9)
+                        .frame(width: 17, height: 17)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(palette.accent))
+                        .padding(7)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -2410,17 +2511,8 @@ struct WorkbenchView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func headAccessoryPicker(title: String, category: String, options: [AppearanceOption]) -> some View {
-        let categoryOptions = options.filter { $0.id == "A00" || $0.accessoryCategory == category }
-        return VStack(alignment: .leading, spacing: 8) {
-            accessoryPicker(title: title, key: "accessory", options: categoryOptions,
-                            controlID: "\(category)-accessory-picker")
-            accessorySidePicker(key: "accessory", title: "\(title)位置", part: "耳", options: categoryOptions)
-        }
-    }
-
     private func accessoryPicker(
-        title: String, key: String, options: [AppearanceOption], controlID: String? = nil
+        _ category: AccessoryCategory, key: String, options: [AppearanceOption], controlID: String? = nil
     ) -> some View {
         let choices = options.filter { $0.id == "A00" || state.ownsAccessory($0.id) }
         let selection = Binding(
@@ -2435,11 +2527,69 @@ struct WorkbenchView: View {
                 var appearance = state.appearance
                 appearance[key] = value
                 appearance.removeValue(forKey: "\(key)Side")
+                if key == "clothing" {
+                    if value == AccessoryShopItem.vanGoghOutfit {
+                        appearance["accessory"] = AccessoryShopItem.vanGoghHat
+                        appearance.removeValue(forKey: "accessorySide")
+                    } else if worn == AccessoryShopItem.vanGoghOutfit,
+                              appearance["accessory"] == AccessoryShopItem.vanGoghHat {
+                        appearance["accessory"] = "A00"
+                    }
+                }
                 state.appearance = appearance
                 state.refresh()
             }
         )
-        return fieldPicker(title: title, key: key, options: choices, selection: selection, controlID: controlID)
+        let id = selection.wrappedValue
+        let name = id == "A00" ? "未佩戴" : choices.first { $0.id == id }?.name ?? "未佩戴"
+        let thumbnail = state.accessoryThumbnails[AccessoryShopItem.ownershipID(id)]
+        return Menu {
+            Picker(category.title, selection: selection) {
+                ForEach(choices, id: \.id) { choice in
+                    Text(choice.id == "A00" ? "不佩戴" : choice.name).tag(choice.id)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 9) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(category.sampleBackground)
+                    if let thumbnail {
+                        Image(nsImage: thumbnail)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: category.placeholderSymbol)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(palette.inkSoft)
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(category.title)
+                        .font(WorkbenchTypography.body(.semibold))
+                        .foregroundStyle(palette.ink)
+                    Text(name)
+                        .font(WorkbenchTypography.body())
+                        .foregroundStyle(id == "A00" ? palette.inkSoft : palette.accentDeep)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(palette.inkSoft)
+            }
+            .padding(.horizontal, 9)
+            .frame(maxWidth: .infinity, minHeight: 54)
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .workbenchButton(palette: palette, card: true)
+        .accessibilityLabel(category.title)
+        .accessibilityValue(name)
+        .accessibilityIdentifier(controlID ?? "\(key)-picker")
     }
 
     @ViewBuilder
@@ -2454,23 +2604,29 @@ struct WorkbenchView: View {
                     state.refresh()
                 }
             )
-            fieldPicker(title: title, key: sideKey, options: [
-                AppearanceOption(id: "left", name: "画面左\(part)", colors: nil),
-                AppearanceOption(id: "right", name: "画面右\(part)", colors: nil),
-            ], selection: selection)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).foregroundStyle(palette.inkSoft)
+                Picker(title, selection: selection) {
+                    Text("画面左\(part)").tag("left")
+                    Text("画面右\(part)").tag("right")
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("\(sideKey)-picker")
+            }
         }
     }
 
     private func fieldPicker(
         title: String, key: String, options: [AppearanceOption], defaultSwatch: [Color]? = nil,
-        selection: Binding<String>? = nil, controlID: String? = nil
+        selection: Binding<String>? = nil
     ) -> some View {
         let binding = selection ?? appearanceBinding(key)
         let accessibilityID = switch key {
         case "eyeColor": "eye-color-picker"
         case "earColor": "ear-color-picker"
         case "noseColor": "nose-color-picker"
-        case "headphoneColor": "headphone-color-picker"
         default: "\(key)-picker"
         }
         return VStack(alignment: .leading, spacing: 3) {
@@ -2487,7 +2643,7 @@ struct WorkbenchView: View {
                         .accessibilityLabel(title)
                 }
             }
-            .accessibilityIdentifier(controlID ?? accessibilityID)
+            .accessibilityIdentifier(accessibilityID)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -2559,9 +2715,9 @@ struct WorkbenchView: View {
 
     private func extraCoatPicker(options: [AppearanceOption], palettes: [AppearanceOption]) -> some View {
         let curatedIDs = Set(state.catalog?.coatCards.values.flatMap { $0.dropFirst().map(\.id) } ?? [])
-        let original = currentCoatCards.first?.id
+        let displayedIDs = Set(currentCoatCards.map(\.id))
         let nativeColors = palettes.first { $0.id == state.appearance["palette"] }?.colors
-        let extras = options.filter { $0.id != original && $0.id != ownPaletteCoat && !curatedIDs.contains($0.id) }.map { option in
+        let extras = options.filter { $0.id != ownPaletteCoat && !displayedIDs.contains($0.id) && !curatedIDs.contains($0.id) }.map { option in
             option.id == "native" ? AppearanceOption(id: option.id, name: "底稿色", colors: nativeColors) : option
         }
         let ordered = extras.filter { !$0.id.hasPrefix("breed:") } + extras.filter { $0.id.hasPrefix("breed:") }
@@ -2618,14 +2774,15 @@ struct WorkbenchView: View {
 
 
     private var footer: some View {
-        PixelPanel(palette: palette, padding: WorkbenchLayout.controlGap) {
+        VStack(spacing: 6) {
+            PixelDivider(palette: palette)
             HStack(spacing: WorkbenchLayout.controlGap) {
                 Button {
                     showingDesktopSettings.toggle()
                 } label: {
                     entryLabel("桌面设置", glyph: .workbenchSettings)
                 }
-                    .workbenchButton(palette: palette)
+                    .workbenchButton(palette: palette, quiet: true)
                     .accessibilityIdentifier("workbench-desktop-settings")
                     .popover(isPresented: $showingDesktopSettings, arrowEdge: .top) {
                         desktopSettings.padding(WorkbenchLayout.panelGap).frame(width: 290)
@@ -2637,14 +2794,14 @@ struct WorkbenchView: View {
                             discardUserAddressEdit()
                         }
                     }
-                Text("桌宠大小").font(WorkbenchTypography.supporting()).foregroundStyle(palette.inkSoft)
+                Text("桌宠大小").font(WorkbenchTypography.body()).foregroundStyle(palette.inkSoft)
                 Slider(value: $state.petSize, in: DesktopPetSize.range)
                     .frame(width: 115)
                     .tint(palette.accentDeep)
                     .accessibilityLabel("桌宠大小")
                     .onChange(of: state.petSize) { state.setSize($0) }
                 Text("\(Int(state.petSize)) px")
-                    .font(WorkbenchTypography.supporting()).monospacedDigit()
+                    .font(WorkbenchTypography.body()).monospacedDigit()
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize()
                 Spacer(minLength: 8)
@@ -2660,8 +2817,11 @@ struct WorkbenchView: View {
 
     private var desktopSettings: some View {
         VStack(alignment: .leading, spacing: WorkbenchLayout.controlGap) {
+            WorkbenchCardHeading(title: "桌面设置", glyph: .workbenchSettings, palette: palette) {}
             userAddressField
-            Divider()
+                .padding(9)
+                .background(RoundedRectangle(cornerRadius: 8).fill(palette.panelAlt))
+            PixelDivider(palette: palette)
             Toggle("显示桌宠", isOn: Binding(get: { state.petIsVisible }, set: state.setVisibility))
             Toggle("眼神跟随", isOn: $state.eyeFollow)
                 .accessibilityIdentifier("eye-follow-toggle")
@@ -2803,7 +2963,7 @@ struct WorkbenchView: View {
                         .accessibilityHidden(true)
                 }
                 Text(message)
-                    .font(WorkbenchTypography.supporting(applied || failed ? .semibold : .regular))
+                    .font(WorkbenchTypography.body(applied || failed ? .semibold : .regular))
                     .foregroundStyle(applied || failed ? palette.ink : palette.inkSoft)
                     .lineLimit(1)
                     .help(message)
@@ -2839,6 +2999,17 @@ struct WorkbenchView: View {
             if key == "headphoneColor" { state.action = "listening" }
             state.refresh()
         })
+    }
+}
+
+private extension AccessoryCategory {
+    var placeholderSymbol: String {
+        switch self {
+        case .hat: "hat.widebrim"
+        case .hair: "sparkle"
+        case .clothing: "tshirt"
+        case .eye: "eyeglasses"
+        }
     }
 }
 

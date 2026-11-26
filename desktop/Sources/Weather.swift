@@ -448,7 +448,7 @@ struct WeatherCard: View {
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     private var advice: [String] {
         guard let snapshot else { return [] }
@@ -523,7 +523,7 @@ struct WeatherCityCard: View {
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
     @FocusState private var focused: Bool
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     private var trimmed: String {
         model.text.trimmingCharacters(in: .whitespacesAndNewlines)

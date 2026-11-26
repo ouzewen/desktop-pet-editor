@@ -203,7 +203,7 @@ struct DropActionBar: View {
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -223,7 +223,7 @@ struct DropActionBar: View {
             }
         }
         .padding(10)
-        .frame(width: onCancel == nil ? 236 : 190)
+        .frame(width: onCancel == nil ? 250 : 198)
         .workbenchCardSurface(theme)
     }
 
@@ -249,7 +249,7 @@ struct DropFormatBar: View {
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {

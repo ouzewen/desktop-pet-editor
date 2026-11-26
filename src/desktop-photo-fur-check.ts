@@ -1,6 +1,6 @@
 import { catCoatCards, catPresets, currentFurPatternColors, type CatConfig } from './cat';
 import { catEditorSide, photoFurEditorData, prepareStructuredCatCustomization, saveCatInk, type CatInkSource } from './cat-custom';
-import { catInkParts, readCatInk, type CatInkChange } from './cat-ink';
+import { catFurInkParts, readCatInk, type CatInkChange } from './cat-ink';
 import { appearanceFromCatPhoto } from './cat-photo';
 import { catPetLoveFrameAt } from './cat-pet-love';
 import { currentTypingAnimation } from './cat-typing';
@@ -103,9 +103,10 @@ export async function checkPhotoFurEditing() {
     const input: CatInkChange[] = Array.from({ length: size * size }, (_, i) => [i, colors.first]);
     const saved = saveCatInk(initial, input);
     const coveredParts = Object.keys(saved.pixelEdits.parts);
-    check(catInkParts.slice(1, -1).every(part => coveredParts.includes(part)),
+    check(catFurInkParts.every(part => coveredParts.includes(part)),
       `整张画布落笔后毛发部位不完整 · ${config.palette}/${coveredParts}`);
-    check(!saved.pixelEdits.parts.canvas && !saved.pixelEdits.parts.laptop, '写入了画布或电脑笔迹');
+    check(!saved.pixelEdits.parts.canvas && !saved.pixelEdits.parts.laptop && !saved.pixelEdits.parts.clothing,
+      '写入了画布、电脑或服装笔迹');
     const { after, mask } = verifyFrame(saved);
     for (let i = 0; i < untouched.length; i++) {
       if (mask.charCodeAt(i)) check(after[i] !== untouched[i], '当前动作下保存的毛色偏离笔迹');

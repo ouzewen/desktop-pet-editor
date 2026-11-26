@@ -19,7 +19,7 @@ struct WorkbenchGuideSheet: View {
                 ]
             case .appearance:
                 return [
-                    ("换个外观", "在右侧「外观」面板先选品种，再调整毛色与花纹、头部、尾巴和配饰。配饰先到顶栏「商店」获取，再回「配饰」佩戴。左侧会即时预览，满意后点击「应用到桌宠」。"),
+                    ("换个外观", "点击「外观」右上方的品种按钮，在弹窗中选品种。回到工作台后可分别打开「毛色」「花纹」「头部」「尾巴」和「配饰」。在「配饰」页右上角打开「配饰商店」获取配饰，关闭商店后即可佩戴。左侧会即时预览，满意后点击「应用到桌宠」。"),
                     ("预览动作", "用小猫下方的按钮切换待机、不同速度的敲键盘和听音乐。桌面小猫跟随真实按键时，需要开启「打字动画」。点击预览旁的「导出 PNG」可保存当前一帧，背景保持透明。"),
                     ("保存自己的形象", "展开「自定义外观」，可用像素画笔微调。完成后可「存为形象」方便下次使用，也可以「导出 PNG」。"),
                 ]
@@ -65,19 +65,19 @@ struct WorkbenchGuideSheet: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("使用说明")
-                        .font(PixelFont.font(20))
+                        .font(WorkbenchTypography.pageTitle)
                         .foregroundStyle(palette.ink)
                         .accessibilityAddTraits(.isHeader)
                     if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
                         Text("\(PetBrand.name) v\(version)")
-                            .font(PixelFont.font(12))
+                            .font(WorkbenchTypography.supporting())
                             .foregroundStyle(palette.inkSoft)
                             .accessibilityIdentifier("workbench-guide-version")
                     }
                 }
                 Spacer()
                 Button("关闭") { dismiss() }
-                    .buttonStyle(PixelButtonStyle(palette: palette))
+                    .workbenchButton(palette: palette)
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("workbench-guide-close")
             }
@@ -92,7 +92,7 @@ struct WorkbenchGuideSheet: View {
                 .padding(8)
                 .frame(width: 132)
                 .frame(maxHeight: .infinity, alignment: .top)
-                .background(palette.panelDeep)
+                .background(palette.panelAlt)
 
                 Rectangle()
                     .fill(palette.borderSoft)
@@ -102,16 +102,16 @@ struct WorkbenchGuideSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 15) {
                         Text(topic.rawValue)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(WorkbenchTypography.sectionTitle)
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("workbench-guide-topic")
                         ForEach(topic.instructions, id: \.title) { section in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(section.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(WorkbenchTypography.body(.semibold))
                                     .accessibilityAddTraits(.isHeader)
                                 Text(section.body)
-                                    .font(.system(size: 13))
+                                    .font(WorkbenchTypography.body())
                                     .lineSpacing(4)
                                     .textSelection(.enabled)
                             }
@@ -123,9 +123,9 @@ struct WorkbenchGuideSheet: View {
                 }
                 .id(topic)
             }
-            .background(palette.panelAlt)
-            .clipShape(PixelBox(corner: 3))
-            .overlay(PixelBox(corner: 3).stroke(palette.borderSoft, lineWidth: 1).allowsHitTesting(false))
+            .background(palette.panel)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(palette.borderSoft, lineWidth: 1).allowsHitTesting(false))
         }
         .padding(18)
         .frame(width: 660, height: 460)
@@ -139,19 +139,8 @@ struct WorkbenchGuideSheet: View {
                 Spacer(minLength: 0)
                 if topic == item { PixelGlyph(kind: .arrowRight, color: palette.inkSoft, size: 12) }
             }
-            .font(PixelFont.font(12))
-            .foregroundStyle(palette.ink)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 8)
-            .background {
-                if topic == item {
-                    PixelBox(corner: 2).fill(palette.panel)
-                        .overlay(PixelBox(corner: 2).stroke(palette.accentDeep, lineWidth: 1))
-                }
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .workbenchButton(palette: palette, selected: topic == item, quiet: true)
         .accessibilityAddTraits(topic == item ? .isSelected : [])
     }
 }

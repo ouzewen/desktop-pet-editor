@@ -207,16 +207,34 @@ export const faceTiles = { left: 128, top: 119, width: 48, height: 44 } as const
 const faceExportArgs = { ...faceTiles, columns: Object.keys(atlasNoseTips).length };
 
 const catPixelAccessoryParts = ['A10', 'A11', 'A13', 'A14', 'A15', 'A16'] as const;
+const vermeerWrap = 'A21';
+const vermeerWrapSource = 'art/cat-pixel80/accessories/portrait-masterpieces/vermeer-pearl-wrap.aseprite';
+export const vanGoghHat = 'A20';
+export const vanGoghJacket = 'O02';
+const vanGoghSource = 'art/cat-pixel80/accessories/artist-portraits/van-gogh-felt-hat.aseprite';
+export const vanGoghHatParts = ['crown', 'band', 'brim'] as const;
+const winterHatSources = { A17: 'shearling-aviator', A18: 'aurora-ski', A19: 'berry-knit-bonnet' } as const;
+export function isForegroundCatHat(id: string) {
+  return id === vanGoghHat || id === vermeerWrap || Object.hasOwn(winterHatSources, id);
+}
+
 export function isPixelCatAccessory(id: string) {
-  return catPixelAccessoryParts.some(part => part === id);
+  return isForegroundCatHat(id) || catPixelAccessoryParts.some(part => part === id);
 }
 export const catPixelAccessoryPath = 'cat/accessories/';
-export const strawHatEarStowPath = catPixelAccessoryPath + 'A10-ear-stow';
+export function catHatEarStowPath(id: string) {
+  return id === 'A10' || isForegroundCatHat(id) ? catPixelAccessoryPath + id + '-ear-stow' : undefined;
+}
 
 const sharedCatAccessories = {
   A00: ['无', null],
   A10: ['草帽', 'hat'],
   A13: ['燕麦针织帽', 'hat'],
+  A17: ['栗棕羊羔绒护耳帽', 'hat'],
+  A18: ['极光滑雪帽', 'hat'],
+  A19: ['莓红系带针织帽', 'hat'],
+  [vanGoghHat]: ['梵高灰毡帽', 'hat'],
+  [vermeerWrap]: ['珍珠少女头巾', 'hat'],
   A02: ['蓝色小鱼帽', 'hat'],
   A01: ['红蝴蝶结', 'hair'],
   A03: ['黄色星星发卡', 'hair'],
@@ -229,6 +247,17 @@ export const orangeAccessoryOptions = labels({ ...sharedCatAccessories, A06: blu
 export const catEyeAccessoryOptions = {
   A00: '无', A11: '海盗眼罩', A14: '细圆框眼镜', A15: '琥珀墨镜',
 } as const;
+
+export const mistBlueHoodie = 'O01';
+export const catClothingOptions = { A00: '无', [mistBlueHoodie]: '雾蓝卫衣', [vanGoghJacket]: '梵高套装' } as const;
+export type CatClothing = Exclude<keyof typeof catClothingOptions, 'A00'>;
+export const catHoodiePath = 'cat/outfits/mist-blue-hoodie/';
+export const catHoodieLayers = ['body', 'hood', 'pocket', 'left-sleeve', 'right-sleeve', 'drawstrings'] as const;
+const catHoodieSourceLayers = ['独立衣身与下摆', '收窄落肩兜帽与 V 领', '中央袋与口袋弧边',
+  '画面左前袖与罗纹', '画面右前袖与罗纹', '两根垂直抽绳'] as const;
+
+export const vanGoghJacketPath = 'cat/outfits/van-gogh/';
+export const vanGoghJacketLayers = ['body', 'left-sleeve', 'right-sleeve', 'collar'] as const;
 
 export type CatAccessorySide = 'left' | 'right';
 const catAccessoryOriginalSides: Readonly<Partial<Record<string, CatAccessorySide>>> = {
@@ -627,8 +656,33 @@ export const assetGroups: readonly AssetGroup[] = [
   ...catPixelAccessoryParts.map(id => scriptGroup('cat.accessory.' + id, 'current',
     `art/cat-pixel80/accessories/${id}.aseprite`, 'export-cat-resting-30', catPixelAccessoryPath,
     pngs([catPixelAccessoryPath + id], 80), { id })),
+  group('cat.clothing.mist-blue-hoodie', 'current', pngs(withPrefix(catHoodiePath, catHoodieLayers), 80),
+    catHoodieLayers.map((part, index) => ({
+      source: 'art/cat-pixel80/outfits/everyday/04-mist-blue-hoodie.aseprite',
+      layer: catHoodieSourceLayers[index]!, output: catHoodiePath + part,
+    })), cat),
+  group('cat.clothing.van-gogh', 'current', pngs(withPrefix(vanGoghJacketPath, vanGoghJacketLayers), 80),
+    ['连续衣身及后腿侧摆', '左前袖 · 独立袖缝与袖口', '右前袖 · 独立袖缝与袖口', '双翻领与前襟']
+      .map((layer, index) => ({ source: vanGoghSource, layer, output: vanGoghJacketPath + vanGoghJacketLayers[index] })), cat),
+  group('cat.accessory.van-gogh', 'current', pngs(withPrefix(catPixelAccessoryPath + vanGoghHat + '-', vanGoghHatParts), 80),
+    ['灰毡帽冠 · LibTV 逐行取形', '深蓝弧形帽带', '内弧短檐与下缘阴影']
+      .map((layer, index) => ({ source: vanGoghSource, layer, output: catPixelAccessoryPath + vanGoghHat + '-' + vanGoghHatParts[index] })), cat),
+  layerGroup('cat.accessory.van-gogh-ear-stow', 'current', vanGoghSource,
+    '耳型遮罩（隐藏）', catHatEarStowPath(vanGoghHat)!, cat, 80),
+  scriptGroup('cat.accessory.vermeer', 'current', vermeerWrapSource, 'export-cat-resting-30', catPixelAccessoryPath,
+    pngs([catPixelAccessoryPath + vermeerWrap], 80), { id: vermeerWrap }),
+  layerGroup('cat.accessory.vermeer-ear-stow', 'current', vermeerWrapSource,
+    '双耳收纳遮罩（隐藏）', catHatEarStowPath(vermeerWrap)!, cat, 80),
   layerGroup('cat.accessory.straw-ear-stow', 'current', 'art/cat-pixel80/accessories/A10.aseprite',
-    '耳尖遮挡（隐藏）', strawHatEarStowPath, cat, 80),
+    '耳尖遮挡（隐藏）', catHatEarStowPath('A10')!, cat, 80),
+  ...Object.entries(winterHatSources).flatMap(([id, slug]) => {
+    const source = `art/cat-pixel80/accessories/winter-hats/${slug}.aseprite`;
+    return [
+      scriptGroup('cat.accessory.' + id, 'current', source, 'export-cat-resting-30', catPixelAccessoryPath,
+        pngs([catPixelAccessoryPath + id], 80), { id }),
+      layerGroup('cat.accessory.' + id + '-ear-stow', 'current', source, '立耳遮罩（隐藏）', catHatEarStowPath(id)!, cat, 80),
+    ];
+  }),
   ...frontFaceMarkings.map(name => layerGroup('cat.orange.' + name, 'compatibility',
     'art/orange-cat/face/' + name.slice(5) + '.aseprite', 'face', orangePath + name)),
   ...oldModes.map(mode => scriptGroup('cat.orange.typing.' + mode, 'compatibility',

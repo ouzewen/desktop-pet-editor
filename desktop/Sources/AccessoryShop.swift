@@ -2,13 +2,23 @@ import AppKit
 import SwiftUI
 
 enum AccessoryCategory: String, CaseIterable {
-    case hat, hair, eye
+    case hat, hair, eye, clothing
 
     var title: String {
         switch self {
         case .hat: "帽子"
         case .hair: "发饰"
         case .eye: "眼部配饰"
+        case .clothing: "服装"
+        }
+    }
+
+    var sampleBackground: Color {
+        switch self {
+        case .hat: Color(pixelHex: 0xF1E9DC)
+        case .hair: Color(pixelHex: 0xF5EDE8)
+        case .eye: Color(pixelHex: 0xEDF2F5)
+        case .clothing: Color(pixelHex: 0xEDF1E8)
         }
     }
 }
@@ -19,6 +29,10 @@ struct AccessoryShopItem: Identifiable {
     let category: AccessoryCategory
 
     static func ownershipID(_ id: String) -> String { id == "A06" ? "A07" : id }
+
+    static let vanGoghHat = "A20"
+    static let vanGoghOutfit = "O02"
+    static let builtIn: Set<String> = [vanGoghHat, vanGoghOutfit]
 
     static func directory(from catalog: AppearanceCatalog) -> [Self] {
         guard let fields = catalog.fieldsByFrame["CAT_ORANGE"] else { return [] }
@@ -31,8 +45,9 @@ struct AccessoryShopItem: Identifiable {
         let eyewear = (fields["eyeAccessory"] ?? []).map {
             Self(id: ownershipID($0.id), name: $0.name, category: .eye)
         }
+        let clothing = (fields["clothing"] ?? []).map { Self(id: $0.id, name: $0.name, category: .clothing) }
         var seen = Set<String>()
-        return (headwear + eyewear).filter { !excluded.contains($0.id) && seen.insert($0.id).inserted }
+        return (headwear + eyewear + clothing).filter { !excluded.contains($0.id) && !builtIn.contains($0.id) && seen.insert($0.id).inserted }
     }
 
     static func legacyOwnership(in config: [String: Any]) -> Set<String> {
@@ -47,6 +62,7 @@ struct AccessoryShopItem: Identifiable {
             }
         }
         if config["eyeAccessory"] as? String == "A11" { ids.insert("A11") }
+        if let clothing = config["clothing"] as? String { ids.insert(clothing) }
         return ids
     }
 }
@@ -78,7 +94,7 @@ struct AccessoryShopSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var category: AccessoryCategory?
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -99,7 +115,7 @@ struct AccessoryShopSheet: View {
                 }
             }
             Text("获取后可在「外观 → 配饰」中佩戴。")
-                .font(WorkbenchTypography.supporting())
+                .font(WorkbenchTypography.body())
                 .foregroundStyle(palette.inkSoft)
             ScrollView {
                 let visible = state.accessoryDirectory.filter { category == nil || $0.category == category }
@@ -122,8 +138,10 @@ struct AccessoryShopSheet: View {
         .frame(width: 640, height: 444)
         .foregroundStyle(palette.ink)
         .font(WorkbenchTypography.body())
-        .environment(\.usesWorkbenchWindowTypography, true)
-        .workbenchCardSurface(theme)
+        .background(palette.panel)
+        .environment(\.workbenchChrome, true)
+        .environment(\.workbenchTheme, theme)
+        .environment(\.usesWorkbenchWindowStyle, true)
         .task { await state.loadAccessoryThumbnails() }
     }
 
@@ -150,7 +168,7 @@ struct AccessoryShopSheet: View {
             }
             .frame(height: 112)
             .frame(maxWidth: .infinity)
-            .background(PixelBox(corner: 3).fill(palette.panelDeep))
+            .background(RoundedRectangle(cornerRadius: 12).fill(item.category.sampleBackground))
             .accessibilityHidden(true)
             Text(item.name)
                 .font(WorkbenchTypography.body(.medium))

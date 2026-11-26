@@ -33,7 +33,8 @@ import { irisColors, palettes, type Config } from './model';
 import {
   calicoBodyIndex, approvedRestingCatIds, approvedRestingCatPath, standingEarPath, siameseCleanBodyPath, catComponentRecipePath, catChestWhitePath, catForeheadLockPath, assetFiles, assetsFor, atlasNoseTips, catPhotoEarSides, catPhotoPartPath, catPhotoParts, CAT_SIZE, PET_SIZE, dogArt as art, furSlots, irisPath, maskPath, runBodies,
   sharedTabbyCheekPath, orangeForeheadPatch, liHuaCrownTone, goldenFlankTone, goldenChinTone,
-  bodyPatternPath, calicoBodyOutlinePath, calicoCrownPath, calicoCrownContinuityPath, calicoFaceFinishPath, catEarRetouchPath, breedArt, breedBodyOutlinePath, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catBreedDetailsPath, catBreedDetailPresets, catFaceEdgesPath, catHeadCleanupPath, catPixelAccessoryPath, isPixelCatAccessory, strawHatEarStowPath, catFileActions, catFrontEars, catListening, catPetLove, honeyGoldPath, liHuaCoatPath, liHuaLibTVCoatPath, liHuaReferenceCheekAsset, liHuaSampledPath, liHuaFrenzyFurAsset, restingSmilePath, reviewedRestingSmilePath, frontPawSoleGuide, frontPawSolesPath, combinedRestingCatPath, updatedRestingCatPath, orangeStripeRestingAsset, frontGloveGuide, chinShadeMask, diluteEarMarkPatch, diluteEarMarkStock, sharedRestingOutlinePath,
+  catHoodieLayers, catHoodiePath, vanGoghHat, vanGoghHatParts, vanGoghJacket, vanGoghJacketLayers, vanGoghJacketPath,
+  bodyPatternPath, calicoBodyOutlinePath, calicoCrownPath, calicoCrownContinuityPath, calicoFaceFinishPath, catEarRetouchPath, breedArt, breedBodyOutlinePath, breedEyeGlints, breedLaptop, breedPath, catCalicoLayers, catBreedDetailsPath, catBreedDetailPresets, catFaceEdgesPath, catHeadCleanupPath, catPixelAccessoryPath, isPixelCatAccessory, isForegroundCatHat, catHatEarStowPath, catFileActions, catFrontEars, catListening, catPetLove, honeyGoldPath, liHuaCoatPath, liHuaLibTVCoatPath, liHuaReferenceCheekAsset, liHuaSampledPath, liHuaFrenzyFurAsset, restingSmilePath, reviewedRestingSmilePath, frontPawSoleGuide, frontPawSolesPath, combinedRestingCatPath, updatedRestingCatPath, orangeStripeRestingAsset, frontGloveGuide, chinShadeMask, diluteEarMarkPatch, diluteEarMarkStock, sharedRestingOutlinePath,
   catFurSlots, catMarkings, catMouthPath, historicalConvexMouthPath, historicalConvexLiHuaBacking, catNosePath, centeredNosePath, centeredNoseTips, catWalkBodies, catWalkFrames, earMaskPath, facePartsPath, faceTiles,
   foreheadParts, frontTyping, frontTypingEffects, frontTypingEffectsPath, headPatternPath, legacyMouthIds, legacyNoseOutlinePath, mouthSkinColumns, mouthSkinPath, mouthStems,
   orangeBodyOutlinePath, orangeForelegBodyPath, orangePath, orangePawsBodyPath, orangeSquareGlints, sharedMouthStyles, sharedNoseStyles,
@@ -909,6 +910,89 @@ function frontTypingPaws(frame: number, frenzy: boolean) {
   return frontPawFrames[index] = canvas;
 }
 
+const clothingFrames = new Map<string, HTMLCanvasElement>();
+const clothingPawLifts = new WeakMap<HTMLCanvasElement, readonly [number, number]>();
+
+function typingSleeveLifts(paws: HTMLCanvasElement | undefined): readonly [number, number] {
+  if (!paws) return [0, 0];
+  const cached = clothingPawLifts.get(paws);
+  if (cached) return cached;
+  const alpha = catLayerAlpha(paws);
+  const center = 38 * 4;
+  const lift = (left: number, right: number) => {
+    // Only fingers rising above the laptop's standing paw line tug a cuff.
+    for (let row = frontTyping.region.y; row < 44 * 4; row += 4) {
+      for (let x = left; x < right; x += 4) {
+        if (alpha[(row + 2) * CAT_SIZE + x + 2]) return Math.min(2, 44 - row / 4);
+      }
+    }
+    return 0;
+  };
+  const result = [lift(0, center), lift(center, CAT_SIZE)] as const;
+  clothingPawLifts.set(paws, result);
+  return result;
+}
+
+function clothingFrame(clothing: NonNullable<CatConfig['clothing']>, paws?: HTMLCanvasElement) {
+  const jacket = clothing === vanGoghJacket;
+  const parts = jacket ? vanGoghJacketLayers : catHoodieLayers;
+  const path = jacket ? vanGoghJacketPath : catHoodiePath;
+  const [left, right] = typingSleeveLifts(paws);
+  const key = clothing + '/' + left + '/' + right;
+  const cached = clothingFrames.get(key);
+  if (cached) return cached;
+  const { canvas, ctx } = makeLayer(CAT_SIZE);
+  for (const part of parts) {
+    const image = imageFor(path + part);
+    const lift = part === 'left-sleeve' ? left : part === 'right-sleeve' ? right : 0;
+    if (lift === 0) {
+      ctx.drawImage(image, 0, 0, CAT_SIZE, CAT_SIZE);
+      continue;
+    }
+    // Anchor each garment at its authored shoulder. Re-sample single rows so
+    // compression towards the lifted paw stays on the authored pixel grid.
+    const shoulder = jacket ? 44 : 47;
+    const span = 63 - shoulder;
+    for (let row = 0; row < span - lift; row++) {
+      const source = shoulder + Math.round(row * (span - 1) / (span - lift - 1));
+      ctx.drawImage(image, 0, source, 80, 1, 0, (shoulder + row) * 4, CAT_SIZE, 4);
+    }
+  }
+  clothingFrames.set(key, canvas);
+  return canvas;
+}
+
+function drawCatClothing(ctx: CanvasRenderingContext2D, clothing: CatConfig['clothing'], pose: CatPose, paws?: HTMLCanvasElement) {
+  if (!clothing) return;
+  const frame = clothingFrame(clothing, paws);
+  const ink = pose.custom?.ink;
+  if (ink?.parts.clothing) {
+    const { canvas, ctx: edited } = makeLayer(CAT_SIZE);
+    edited.drawImage(frame, 0, 0);
+    applyCatInk(edited, ink, { clothing: clothingInkSurface(frame) }, ['clothing']);
+    ctx.drawImage(canvas, 0, 0);
+  } else {
+    ctx.drawImage(frame, 0, 0);
+  }
+}
+
+const clothingInkSurfaces = new WeakMap<CatLayer, CatInkSurface>();
+function clothingInkSurface(frame: HTMLCanvasElement): CatInkSurface {
+  let surface = clothingInkSurfaces.get(frame);
+  if (!surface) {
+    surface = { bounds: inkBounds, mask: catLayerAlpha(frame) };
+    clothingInkSurfaces.set(frame, surface);
+  }
+  return surface;
+}
+
+function withoutCatClothing<T extends Pick<CatConfig, 'clothing'>>(appearance: T): T {
+  if (appearance.clothing === undefined) return appearance;
+  const bare = { ...appearance };
+  delete bare.clothing;
+  return bare;
+}
+
 const frontPawColors = new WeakMap<CatLayer, Map<OutlineVersion, WeakMap<HTMLCanvasElement, HTMLCanvasElement>>>();
 function coloredFrontPaws(source: HTMLCanvasElement, body: CatLayer, config: CatRenderConfig, outlineVersion: OutlineVersion, liHua: LiHuaStyle = false) {
   const ink = liHua ? liHuaPigments(liHua).ink : pixel80SharedInk(config, outlineVersion);
@@ -1162,8 +1246,8 @@ function withUprightEars<T extends CatConfig | CatRenderConfig>(config: T): T {
 
 type CatAccessories = Pick<CatConfig, 'accessory' | 'accessorySide' | 'eyeAccessory' | 'eyeAccessorySide'>;
 
-function isCatHood(look: CatAccessories) {
-  return look.accessory === 'A10';
+function wearsEarStowingHat(look: CatAccessories) {
+  return catHatEarStowPath(look.accessory) !== undefined;
 }
 
 function coveredEye(look: CatAccessories): CatAccessorySide | undefined {
@@ -1193,8 +1277,8 @@ function catAccessoryLayer(look: CatAccessories) {
   const eyeWear = eyeAccessory !== 'A00';
   const originalHeadSide = catAccessoryOriginalSide(accessory);
   const mirrorHead = Boolean(originalHeadSide && accessorySide && accessorySide !== originalHeadSide);
-  const hat = pixelHeadwear ? imageFor(catPixelAccessoryPath + accessory)
-    : accessory !== 'A00' ? imageFor(`${orangePath}accessory_${accessory === 'A07' ? 'A06' : accessory}`) : undefined;
+  const hat = pixelHeadwear && accessory !== vanGoghHat ? imageFor(catPixelAccessoryPath + accessory)
+    : !pixelHeadwear && accessory !== 'A00' ? imageFor(`${orangePath}accessory_${accessory === 'A07' ? 'A06' : accessory}`) : undefined;
   if (!pixelHeadwear && !eyeWear && !mirrorHead) return hat;
 
   const key = catAccessoryKey(look);
@@ -1206,7 +1290,9 @@ function catAccessoryLayer(look: CatAccessories) {
     drawAccessorySide(ctx, imageFor(catPixelAccessoryPath + eyeAccessory),
       Boolean(originalEyeSide && eyeAccessorySide && eyeAccessorySide !== originalEyeSide));
   }
-  if (hat) drawAccessorySide(ctx, hat, mirrorHead);
+  if (accessory === vanGoghHat) {
+    for (const part of vanGoghHatParts) drawAccessorySide(ctx, imageFor(catPixelAccessoryPath + vanGoghHat + '-' + part), false);
+  } else if (hat) drawAccessorySide(ctx, hat, mirrorHead);
   composedCatAccessories.set(key, canvas);
   return canvas;
 }
@@ -1216,21 +1302,43 @@ function glassesLayer(look: CatAccessories) {
   return catAccessoryLayer({ accessory: 'A00', eyeAccessory: look.eyeAccessory });
 }
 
-let strawEarStow: HTMLCanvasElement | undefined;
-function strawHatEarStow() {
-  if (!strawEarStow) {
+const earStowMasks = new Map<string, HTMLCanvasElement>();
+
+function hatEarStow(look: CatAccessories) {
+  const path = catHatEarStowPath(look.accessory);
+  if (!path) return;
+  let mask = earStowMasks.get(path);
+  if (!mask) {
     const { canvas, ctx } = makeLayer(CAT_SIZE);
-    ctx.drawImage(imageFor(strawHatEarStowPath), 0, 0, CAT_SIZE, CAT_SIZE);
-    strawEarStow = canvas;
+    ctx.drawImage(imageFor(path), 0, 0, CAT_SIZE, CAT_SIZE);
+    earStowMasks.set(path, mask = canvas);
   }
-  return strawEarStow;
+  return mask;
 }
 
-function stowEarsUnderStrawHat(ctx: CanvasRenderingContext2D) {
+function stowEarsUnderHat(ctx: CanvasRenderingContext2D, look: CatAccessories) {
+  const mask = hatEarStow(look);
+  if (!mask) return;
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.drawImage(strawHatEarStow(), 0, 0);
+  ctx.drawImage(mask, 0, 0);
   ctx.restore();
+}
+
+// The hat stays in front of action overlays, such as closed eyes and eyewear.
+function foregroundHatLayer(look: CatAccessories) {
+  return isForegroundCatHat(look.accessory)
+    ? catAccessoryLayer({ accessory: look.accessory, eyeAccessory: 'A00' }) : undefined;
+}
+
+function drawBehindForegroundHat(ctx: CanvasRenderingContext2D, hat: CatLayer | undefined,
+  draw: (target: CanvasRenderingContext2D) => void) {
+  if (!hat) return draw(ctx);
+  const { canvas, ctx: foreground } = makeLayer(CAT_SIZE);
+  draw(foreground);
+  foreground.globalCompositeOperation = 'destination-out';
+  foreground.drawImage(hat, 0, 0);
+  ctx.drawImage(canvas, 0, 0);
 }
 
 function earEditsFor(config: Pick<CatConfig, 'ear' | 'leftEar' | 'rightEar'>) {
@@ -2798,7 +2906,7 @@ export function drawCatHead(
   const sharedTypingMouth = referenceEffects && effectsAnimation === 'reference-v2' && typingPose.typingMouthVersion !== 'legacy';
   const look = catRenderConfig(appearance);
   const selected = {
-    ...(isCatHood(look) ? withUprightEars(look) : look),
+    ...(wearsEarStowingHat(look) ? withUprightEars(look) : look),
     revisedEars: hasRevisedEarsAndPaws(artVersion),
   };
   const config = sharedTypingMouth ? { ...selected, mouth: transitionalFace ? typingMouths.gentle : typingMouths[mode] } : selected;
@@ -3011,7 +3119,7 @@ export function drawCatHead(
     drawEyePair(ctx, coloredCatIris(eyes, darkFur?.[0] ? '#AEA2B0' : ink),
       coloredCatIris(eyes, darkFur?.[1] ? '#AEA2B0' : ink));
   }
-  if (isCatHood(config)) stowEarsUnderStrawHat(ctx);
+  stowEarsUnderHat(ctx, config);
   // New sweat belongs on the forehead, beneath hats and hair clips. Preserve
   // the old shared order when reconstructing older pixel-editor saves.
   if (typing && frenzyEffects) {
@@ -3449,7 +3557,7 @@ function placedHeadMask(mask: Uint8Array, placement: ReturnType<typeof catHeadPl
 
 function catHeadInkGeometry(appearance: CatRenderConfig, typing: boolean, pose: CatPose): CatInkGeometry {
   const config = {
-    ...(isCatHood(appearance) ? withUprightEars(appearance) : appearance),
+    ...(wearsEarStowingHat(appearance) ? withUprightEars(appearance) : appearance),
     revisedEars: hasRevisedEarsAndPaws(pose.artVersion),
   };
   const layout = typing ? pose.typingLayout : undefined;
@@ -3462,7 +3570,8 @@ function catHeadInkGeometry(appearance: CatRenderConfig, typing: boolean, pose: 
   const rightRegion = earOwnership(catEarOnSide(config, 'right'));
   const accessory = catAccessoryLayer(config);
   const worn = accessory && catLayerAlpha(accessory);
-  const stowed = isCatHood(config) ? catLayerAlpha(strawHatEarStow()) : undefined;
+  const mask = hatEarStow(config);
+  const stowed = mask && catLayerAlpha(mask);
   const leftEar = new Uint8Array(inkArea), rightEar = new Uint8Array(inkArea), head = new Uint8Array(inkArea);
   for (let index = 0; index < inkArea; index++) {
     const offset = index * 4;
@@ -3615,15 +3724,23 @@ export function catInkGeometry(appearance: CatConfig, typing: boolean, frame: nu
   const index = ((frame % count) + count) % count;
   const layers = frontCatLayers(config, typing, index, { ...pose, staticPaws: !typing });
   const head = catHeadInkGeometry(config, typing, pose);
+  const clothing: CatInkGeometry = {};
+  if (config.clothing) {
+    const surface = clothingInkSurface(clothingFrame(config.clothing, layers.frontPaws));
+    const laptop = layers.laptop && catLayerAlpha(layers.laptop);
+    const paws = layers.frontPaws && catLayerAlpha(layers.frontPaws);
+    clothing.clothing = laptop || paws ? { bounds: surface.bounds,
+      mask: surface.mask!.map((pixel, i) => laptop?.[i] || paws?.[i] ? 0 : pixel) } : surface;
+  }
   if (layers.frontPaws && head.head?.mask) {
     const paws = catLayerAlpha(layers.frontPaws);
     const mask = head.head.mask.map((pixel, index) => paws[index] ? 0 : pixel);
     return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers),
-      ...head, head: { ...head.head, mask } };
+      ...head, ...clothing, head: { ...head.head, mask } };
   }
   // The idle bob moves all authored surfaces together. The pixel editor
   // accounts for that translation in its cursor coordinates.
-  return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers), ...head };
+  return { ...canvasInkGeometry, ...catBodyInkGeometry(config, typing, index, pose, layers), ...head, ...clothing };
 }
 
 // A surface owns opaque fur only. Its outline evidence comes from the
@@ -3794,10 +3911,11 @@ export function visiblePhotoFur(
     }
   }
   const upperCover = catLayerAlpha(upper.canvas);
+  const clothing = config.clothing ? catLayerAlpha(clothingFrame(config.clothing, layers.frontPaws)) : undefined;
   const hidden = {
     head: upperCover.map((pixel, i) => pixel || pawCover?.[i] || mouthCover?.[i] ? 1 : 0),
-    body: upperCover.map((pixel, i) => pixel || pawCover?.[i] || headCover[i] ? 1 : 0),
-    paws: pawCover ? upperCover : upperCover.map((pixel, i) => pixel || headCover[i] ? 1 : 0),
+    body: upperCover.map((pixel, i) => pixel || pawCover?.[i] || headCover[i] || clothing?.[i] ? 1 : 0),
+    paws: pawCover ? upperCover : upperCover.map((pixel, i) => pixel || headCover[i] || clothing?.[i] ? 1 : 0),
   };
   const all = new Uint8Array(inkArea).fill(1);
   return {
@@ -3851,7 +3969,8 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
     ? photoMovingPawFur(catBodyInkGeometry(config, typing, frame, pose, layers), layers.frontPaws!, config) : undefined;
   let furBody = movingInk;
   if (restingAppearance) {
-    drawTypingRestingCat(ctx, restingAppearance, config, gaze, pose);
+    drawTypingRestingCat(ctx, withoutCatClothing(restingAppearance), withoutCatClothing(config), gaze, pose);
+    drawCatClothing(ctx, config.clothing, pose, frontPaws);
   } else {
     const authoredTorsoPart = !layers.historicalBody && config.bodyBase === 'native'
       ? catPhotoPartFor(config.photoCoatParts, 'torso', config.palette, config.coat) : undefined;
@@ -3909,6 +4028,7 @@ function drawCatFront(ctx: CanvasRenderingContext2D, config: CatRenderConfig, ty
       applyCatInk(ctx, ink, furBody ?? catBodyInkGeometry(config, typing, frame, pose, layers), parts);
     }
 
+    drawCatClothing(ctx, config.clothing, pose, frontPaws);
     ctx.save();
     if (legacyCustom && headEdits) {
       const { canvas, ctx: layer } = clearCustomLayer(legacyCustom);
@@ -4076,7 +4196,7 @@ function drawDraggingCat(ctx: CanvasRenderingContext2D, appearance: CatConfig, c
 }
 
 function petLoveClosedEyes(open: Uint32Array, closedFace: Uint32Array,
-  roles?: Uint8ClampedArray, openFace?: Uint32Array, unpainted?: Uint32Array,
+  roles?: Uint8ClampedArray, openFace?: Uint32Array, unpainted?: Uint32Array, hat?: Uint8Array,
 ) {
   const size = petLoveGrid;
   const closed = open.slice();
@@ -4088,7 +4208,9 @@ function petLoveClosedEyes(open: Uint32Array, closedFace: Uint32Array,
       if (x > 34 && x < 42) continue;
       const i = y * size + x;
       const role = roles?.[i * 4 + 1];
-      const lid = lids[(y * step + step / 2) * CAT_SIZE + x * step + step / 2];
+      const sample = (y * step + step / 2) * CAT_SIZE + x * step + step / 2;
+      if (hat?.[sample]) continue;
+      const lid = lids[sample];
       if (lid || role === coatPart.leftEye || role === coatPart.rightEye || (openFace && openFace[i] !== closedFace[i])) eyes[i] = 1;
     }
   }
@@ -4202,7 +4324,8 @@ function drawPetLoveCat(ctx: CanvasRenderingContext2D, appearance: CatConfig, co
       unpainted = capture(face.canvas);
       face.ctx.resetTransform();
     }
-    const closed = petLoveClosedEyes(open, closedFace, roles, openFace, unpainted);
+    const hat = foregroundHatLayer(config);
+    const closed = petLoveClosedEyes(open, closedFace, roles, openFace, unpainted, hat && catLayerAlpha(hat));
     const layers = frontCatLayers(config, false, 0, pose);
     const tailCells = new Uint8Array(size * size);
     const tailInk = pose.custom?.ink?.parts.tail;
@@ -4542,6 +4665,8 @@ function seatedListeningPixels(appearance: CatConfig, config: CatRenderConfig, p
   const covered = coveredEye(config);
   const uncovered = withoutPixelAccessory(appearance);
   const faceConfig = withoutPixelAccessory(config);
+  const hat = foregroundHatLayer(config);
+  const hatCover = hat && catLayerAlpha(hat);
   const variant = coatRecipeFor(uncovered, pose);
   const stock = approvedStockIdle(uncovered, pose);
   const preset = approvedIdleByPalette.get(appearance.palette);
@@ -4588,7 +4713,7 @@ function seatedListeningPixels(appearance: CatConfig, config: CatRenderConfig, p
       const side = x < 35 * 4 ? 'left' : x >= 41 * 4 ? 'right' : undefined;
       if (!side || side === covered) continue;
       const i = y * CAT_SIZE + x;
-      if (!seated[i] || (unpainted && seated[i] !== unpainted[i])) continue;
+      if (!seated[i] || hatCover?.[i] || (unpainted && seated[i] !== unpainted[i])) continue;
       const authored = backing?.[i] ?? 0;
       if (face && closed) {
         if (face[i] !== closed[i] && closed[i]) seated[i] = authored || closed[i]!;
@@ -4673,9 +4798,12 @@ function drawCatListening(ctx: CanvasRenderingContext2D, appearance: CatConfig, 
   drawListeningLayer(ctx, 'notes', frame, config);
   drawListeningLayer(ctx, 'headband', frame, config);
   ctx.drawImage(painted.canvas, 0, 0);
-  if (pixel80) drawPixel80ListeningEyes(ctx, frame, painted.fur, coveredEye(config));
-  else drawListeningLayer(ctx, 'closed_eyes', frame, config);
-  if (glasses) ctx.drawImage(listeningGlassesFrame(glasses, frame), 0, 0);
+  const hat = pixel80 && foregroundHatLayer(config);
+  drawBehindForegroundHat(ctx, hat ? listeningGlassesFrame(hat, frame) : undefined, target => {
+    if (pixel80) drawPixel80ListeningEyes(target, frame, painted.fur, coveredEye(config));
+    else drawListeningLayer(target, 'closed_eyes', frame, config);
+    if (glasses) target.drawImage(listeningGlassesFrame(glasses, frame), 0, 0);
+  });
   drawListeningLayer(ctx, 'earcups', frame, config);
   ctx.restore();
 }
@@ -4807,9 +4935,11 @@ function drawCatFileAction(ctx: CanvasRenderingContext2D, config: CatRenderConfi
   ctx.save();
   ctx.resetTransform();
   if (closed) {
-    if (coarseProps) drawPixel80ListeningEyes(ctx, 0, ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data, coveredEye(config));
-    else drawListeningLayer(ctx, 'closed_eyes', 0, config);
-    if (glasses) ctx.drawImage(glasses, 0, 0);
+    drawBehindForegroundHat(ctx, foregroundHatLayer(config), target => {
+      if (coarseProps) drawPixel80ListeningEyes(target, 0, ctx.getImageData(0, 0, CAT_SIZE, CAT_SIZE).data, coveredEye(config));
+      else drawListeningLayer(target, 'closed_eyes', 0, config);
+      if (glasses) target.drawImage(glasses, 0, 0);
+    });
   }
   ctx.drawImage(geometry && hasPawPatches ? furPatchedFileActionArms(arms, rawArms, config, geometry, pose, raised) : arms, 0, 0);
   drawAtlasRegion(ctx, props, asset.regions.props, frame, asset.columns);
@@ -4845,7 +4975,8 @@ const approvedIdleByPalette = new Map(approvedRestingCatIds.map(id => {
   return [config.palette, { config, id }] as const;
 }));
 
-function approvedStockIdle(config: CatConfig, pose: CatPose) {
+function approvedStockIdle(appearance: CatConfig, pose: CatPose) {
+  const config = withoutCatClothing(appearance);
   if (!pose.approvedStockIdle || pose.custom || !hasSharedRestingOutline(pose.artVersion)) return;
   const preset = approvedIdleByPalette.get(config.palette);
   if (!preset) return;
@@ -5062,7 +5193,8 @@ function nearestEarSwatch(r: number, g: number, b: number, swatches: readonly nu
   return result;
 }
 
-function coatRecipeFor(config: CatConfig, pose: CatPose): CoatedRecipe | undefined {
+function coatRecipeFor(appearance: CatConfig, pose: CatPose): CoatedRecipe | undefined {
+  const config = withoutCatClothing(appearance);
   if (!hasCuratedCoatRecipes(pose.artVersion) || !componentRecipeArt(pose.artVersion)
     || (pose.custom && (!pose.custom.ink || pose.custom.ink.scope === 'photo-fur'))) return;
   const preset = approvedIdleByPalette.get(config.palette);
@@ -5202,7 +5334,7 @@ function withoutPixelAccessory<T extends CatConfig | CatRenderConfig>(look: T): 
   const bare = { ...look, accessory, eyeAccessory: 'A00' as const };
   if (accessory === 'A00') delete bare.accessorySide;
   delete bare.eyeAccessorySide;
-  return isCatHood(look) ? withUprightEars(bare) : bare;
+  return wearsEarStowingHat(look) ? withUprightEars(bare) : bare;
 }
 
 function drawRestingCat(ctx: CanvasRenderingContext2D, appearance: CatConfig, config: CatRenderConfig,
@@ -5216,8 +5348,17 @@ function drawRestingCat(ctx: CanvasRenderingContext2D, appearance: CatConfig, co
     ctx.save();
     ctx.scale(.5, .5);
     ctx.translate(0, catHeadPlacement(false, frame).y);
-    if (isCatHood(config)) stowEarsUnderStrawHat(ctx);
+    stowEarsUnderHat(ctx, config);
     ctx.drawImage(accessory, 0, 0);
+    ctx.restore();
+    return base;
+  }
+  if (config.clothing) {
+    const base = drawRestingCat(ctx, withoutCatClothing(appearance), withoutCatClothing(config), frame, gaze, pose);
+    ctx.save();
+    ctx.scale(.5, .5);
+    ctx.translate(0, catHeadPlacement(false, frame).y);
+    drawCatClothing(ctx, config.clothing, pose);
     ctx.restore();
     return base;
   }

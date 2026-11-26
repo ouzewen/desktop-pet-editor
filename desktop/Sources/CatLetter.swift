@@ -17,7 +17,9 @@ final class CatLetterObserver {
     private var saved: CatLetterState
     var onSample: (Date) -> Void = { _ in }
 
-    var enabled: Bool { defaults.bool(forKey: Self.enabledKey) }
+    var enabled: Bool {
+        defaults.object(forKey: Self.enabledKey) == nil || defaults.bool(forKey: Self.enabledKey)
+    }
 
     init(directory: URL, defaults: UserDefaults = .standard) {
         storage = CatLetterStorage(file: directory.appendingPathComponent("cat-letter-days.json"))
@@ -168,7 +170,9 @@ struct CatLetterCard: View {
     let message: String
     let address: String
     let close: () -> Void
-    private let palette = PixelPalette.workbench(.light)
+    @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
+
+    private var palette: PixelPalette { theme.windowPalette }
     private let ruleHeight: CGFloat = 28
     private let messageSize: CGFloat = 16
 
@@ -177,32 +181,27 @@ struct CatLetterCard: View {
             HStack(spacing: 8) {
                 CatLetterGlyph().frame(width: 15, height: 11)
                 Text(verbatim: sender.title)
-                    .font(PixelFont.font(24))
+                    .font(WorkbenchTypography.pageTitle)
+                    .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(palette.ink)
                 Spacer()
-                Button(action: close) {
-                    PixelGlyph(kind: .close, color: palette.inkSoft, size: 10)
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭来信")
+                WorkbenchCardIconButton(glyph: .close, title: "关闭来信", palette: palette, action: close)
             }
             HStack(alignment: .top, spacing: 11) {
                 Rectangle()
-                    .fill(Color(pixelHex: 0xD9A99B))
+                    .fill(palette.border)
                     .frame(width: 1)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ruleHeight) {
                     Text(verbatim: (address.isEmpty ? "" : "\(address)，") + message)
-                        .font(PixelFont.font(messageSize))
+                        .font(.system(size: messageSize))
                         .foregroundStyle(palette.ink)
                         .lineSpacing(lineSpacing)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(minHeight: 3 * ruleHeight, alignment: .topLeading)
                     Text(verbatim: sender.signature)
-                        .font(PixelFont.font(messageSize))
-                        .foregroundStyle(palette.red)
+                        .font(.system(size: messageSize))
+                        .foregroundStyle(palette.accent)
                         .frame(maxWidth: .infinity, minHeight: ruleHeight, alignment: .trailing)
                 }
                 .padding(.top, 3)
@@ -221,18 +220,11 @@ struct CatLetterCard: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 22)
         .frame(width: 360)
-        .background {
-            PixelBox(corner: 4)
-                .fill(palette.panel)
-                .shadow(color: palette.shadow.opacity(0.24), radius: 0, x: 3, y: 4)
-        }
-        .overlay(PixelBox(corner: 4, inset: 1).stroke(palette.border, lineWidth: 2))
-        .padding(.trailing, 3)
-        .padding(.bottom, 4)
+        .workbenchCardSurface(theme)
     }
 
     private var lineSpacing: CGFloat {
-        let font = NSFont(name: PixelFont.postScriptName, size: messageSize) ?? .systemFont(ofSize: messageSize)
+        let font = NSFont.systemFont(ofSize: messageSize)
         return max(0, ruleHeight - NSLayoutManager().defaultLineHeight(for: font))
     }
 }

@@ -92,7 +92,7 @@ struct PetStatusToast: View {
 
     @AppStorage("workbenchTheme") private var theme = WorkbenchTheme.sand
 
-    private var palette: PixelPalette { theme.palette }
+    private var palette: PixelPalette { theme.windowPalette }
 
     private var badge: (glyph: PixelIconKind, color: Color) {
         switch tone {

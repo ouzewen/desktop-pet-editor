@@ -12,8 +12,8 @@ enum PetBrand {
 }
 
 enum DesktopPetSize {
-    static let range: ClosedRange<Double> = 80...320
-    static let defaultValue: Double = 240
+    static let range: ClosedRange<Double> = 80...200
+    static let defaultValue = range.upperBound
 
     static func clamped(_ value: Double) -> Double {
         guard value.isFinite else { return defaultValue }
@@ -374,6 +374,9 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
     private var meetingRecorderStorage: Any?
     private let meetingRecordingDot = MeetingRecordingDot(frame: .zero)
+    private var presentationSuppressesPet = false
+    private var lastPresentationSample: Bool?
+    private var presentationTimer: Timer?
     private var quickBarWindow: ReminderPanel?
     private var quickBarTimer: Timer?
     private var quickBarLeaveAt: Date?
@@ -509,6 +512,10 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         preview.setValue(false, forKey: "drawsBackground")
         preview.navigationDelegate = self
         preview.loadFileURL(resources.appendingPathComponent("pet.html"), allowingReadAccessTo: resources)
+        if !isTest {
+            startPresentationMonitor()
+            startQuickBarTimer()
+        }
         if pixel80ReviewFolder != nil {
             openWorkbench()
         } else if isTest {
@@ -519,7 +526,6 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         startWeatherTimer()
         music.start()
         clipboard.start()
-        if !isTest { startQuickBarTimer() }
         reminderClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             self?.dismissTransientReminderUI(at: NSEvent.mouseLocation)
             return event
@@ -2072,6 +2078,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showReminders() {
+        guard !presentationSuppressesPet else { return }
         updateCurrentReminderDay()
         guard !reminderHiddenByUser, reminderList.hasContent else {
             hideReminders()
@@ -2166,6 +2173,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showFocusCard() {
+        guard !presentationSuppressesPet else { return }
         let host: ReminderHostingView<FocusCard>
         if let existing = focusHost {
             host = existing
@@ -2852,6 +2860,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     // MARK: Trash
 
     private func handleFileDrop(_ urls: [URL]) {
+        guard !presentationSuppressesPet else { return }
         let selection = TrashService.selectedItems(urls)
         guard !selection.isEmpty else { return }
         dropChoiceURLs = selection
@@ -3029,6 +3038,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showTrashToast(_ text: String, tone: PetStatusToast.Tone, autoHide: TimeInterval?) {
+        guard !presentationSuppressesPet else { return }
         let host = ReminderHostingView(rootView: PetStatusToast(text: text, tone: tone))
         fitCardHost(host, fallback: NSSize(width: 220, height: 30))
         let panel = trashToastWindow ?? makeReminderPanel()
@@ -3144,6 +3154,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showTranslateButton(at point: NSPoint) {
+        guard !presentationSuppressesPet else { return }
         let host = ReminderHostingView(rootView: TranslationButtonCard { [weak self] in
             self?.beginTranslation()
         })
@@ -3194,6 +3205,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showTranslation(_ state: TranslationCardState) {
+        guard !presentationSuppressesPet else { return }
         let host = ReminderHostingView(rootView: TranslationCard(
             state: state,
             onCopy: { [weak self] in self?.copyTranslation() },
@@ -3282,6 +3294,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     // MARK: Clipboard
 
     private func showClipboard() {
+        guard !presentationSuppressesPet else { return }
         hideQuickBar()
         let host = ReminderHostingView(rootView: ClipboardCard(
             items: clipboard.items,
@@ -3447,6 +3460,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showCatLetterEnvelope(_ letter: CatLetterReceipt) {
+        guard !presentationSuppressesPet else { return }
         let host = ReminderHostingView(rootView: CatLetterEnvelope(sender: catLetterSender) { [weak self] in
             self?.showCatLetterCard(letter)
         })
@@ -3475,6 +3489,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showCatLetterCard(_ letter: CatLetterReceipt) {
+        guard !presentationSuppressesPet else { return }
         catLetterEnvelope?.orderOut(nil)
         let rawAddress = UserDefaults.standard.string(forKey: PetUserAddress.defaultsKey) ?? ""
         let host = ReminderHostingView(rootView: CatLetterCard(
@@ -3547,7 +3562,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func weatherTick() {
-        guard weather.shouldRemind() else { return }
+        guard !presentationSuppressesPet, weather.shouldRemind() else { return }
         // Keep focus time quiet; the next minute retries once the session ends.
         guard !focus.isActive, !workbenchState.temporarilyHidden else { return }
         if let weatherRetryAt, Date() < weatherRetryAt { return }
@@ -3557,7 +3572,8 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     private func fetchWeather(remind: Bool) {
         weather.refresh { [weak self] result in
             DispatchQueue.main.async {
-                guard let self, !remind || !self.workbenchState.temporarilyHidden else { return }
+                guard let self, !self.presentationSuppressesPet,
+                      !remind || !self.workbenchState.temporarilyHidden else { return }
                 switch result {
                 case .success(let snapshot):
                     self.weatherRetryAt = nil
@@ -3600,6 +3616,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showFocusMinutesInput(editingRemaining: Bool = false) {
+        guard !presentationSuppressesPet else { return }
         if editingRemaining {
             guard focus.phase == .focusing else { return }
             guard focusRemainingEdit == nil else {
@@ -3730,6 +3747,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showWeatherCityInput() {
+        guard !presentationSuppressesPet else { return }
         hideQuickBar()
         weatherCityInput.text = weather.cityOverride
         let host = ReminderHostingView(rootView: WeatherCityCard(
@@ -3806,6 +3824,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     private func showReminderInput() {
+        guard !presentationSuppressesPet else { return }
         hideQuickBar()
         let host = ReminderHostingView(rootView: ReminderInputCard(
             model: reminderInput,
@@ -4457,7 +4476,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             if !petPositionIsVisible() { resetPosition() }
         }
         refreshPetVisibility()
-        if userInitiated && wasVisible && !visible { showPetHiddenHintIfNeeded() }
+        if userInitiated && wasVisible && !visible && !presentationSuppressesPet { showPetHiddenHintIfNeeded() }
     }
 
     private func petPositionIsVisible() -> Bool {
@@ -4509,9 +4528,75 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak hint] in hint?.orderOut(nil) }
     }
 
+    private func startPresentationMonitor() {
+        updatePresentationVisibility(initial: true)
+        let timer = Timer(timeInterval: 0.35, repeats: true) { [weak self] _ in
+            self?.updatePresentationVisibility()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        presentationTimer = timer
+    }
+
+    private func updatePresentationVisibility(initial: Bool = false) {
+        guard !web.isDragging, let covered = desktopDisplayCoveredByPresentation() else {
+            lastPresentationSample = nil
+            return
+        }
+        // Require two matching samples for Space changes and animated window transitions.
+        let stable = initial || lastPresentationSample == covered
+        lastPresentationSample = covered
+        guard stable, covered != presentationSuppressesPet else { return }
+        presentationSuppressesPet = covered
+        if ready { refreshPetVisibility() }
+    }
+
+    private func desktopDisplayCoveredByPresentation() -> Bool? {
+        guard let display = desktopDisplay(in: PetDisplay.connected),
+              let screen = NSScreen.screens.first(where: { PetDisplay.identifier(for: $0) == display.id }),
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                                       kCGNullWindowID) as? [[String: Any]] else { return nil }
+        let displayBounds = CGDisplayBounds(number.uint32Value)
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let options = NSApp.currentSystemPresentationOptions
+        let foregroundPresentation = options.contains(.fullScreen) || options.contains([.hideDock, .hideMenuBar])
+        let presentingPID = foregroundPresentation ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
+        var coveringPID: pid_t?
+        let topInset = screen.safeAreaInsets.top
+
+        // Window Server orders windows front to back. Ignore system surfaces, the pet,
+        // and small tools. A window on another display cannot suppress the pet here.
+        for window in windows {
+            guard let pid = window[kCGWindowOwnerPID as String] as? Int32, pid != ownPID,
+                  let layer = window[kCGWindowLayer as String] as? Int, layer >= 0,
+                  (window[kCGWindowAlpha as String] as? Double ?? 1) > 0.05,
+                  let info = window[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: info) else { continue }
+            let covered = bounds.intersection(displayBounds)
+            guard covered.width >= displayBounds.width * 0.6, covered.height >= displayBounds.height * 0.6,
+                  NSRunningApplication(processIdentifier: pid)?.activationPolicy == .regular else { continue }
+            if let coveringPID, pid != coveringPID { return false }
+
+            // macOS can place a fullscreen Space below the camera housing. Its
+            // top edge is within one point of the inset, above an ordinary window.
+            let tolerance: CGFloat = 2
+            let topGap = bounds.minY - displayBounds.minY
+            let touchesTop = abs(topGap) <= tolerance || (topInset > 0 && abs(topGap - topInset) <= 1)
+            if touchesTop && abs(bounds.minX - displayBounds.minX) <= tolerance
+                && abs(bounds.maxX - displayBounds.maxX) <= tolerance
+                && abs(bounds.maxY - displayBounds.maxY) <= tolerance { return true }
+
+            // Keynote can put auxiliary controls above its slideshow. Check only
+            // the same presenting app behind them, never another app behind it.
+            guard pid == presentingPID else { return false }
+            coveringPID = pid
+        }
+        return false
+    }
+
     private func refreshPetVisibility() {
         status.menu = makeMenu()
-        if workbenchState.petIsVisible {
+        if workbenchState.petIsVisible && !presentationSuppressesPet {
             guard ready else { return }
             panel.orderFrontRegardless()
             catLetter.tick()
@@ -4521,16 +4606,26 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
             web.cancelPointerInteraction()
             send("cancelPetLove()")
             panel.orderOut(nil)
-            restoreDesktopActionPlacement()
+            if !presentationSuppressesPet || !workbenchState.petIsVisible {
+                restoreDesktopActionPlacement()
+                focus.unpin()
+            }
             hideReminders()
             hideReminderInput()
-            focus.unpin()
             hideFocusCard()
             hideQuickBar()
             hideDropChoice()
             hideTrashToast()
             hideWeatherCard()
             hideCatLetter()
+            if presentationSuppressesPet {
+                petHiddenHintWindow?.orderOut(nil)
+                hideFocusMinutesInput()
+                hideClipboard()
+                hideTranslation()
+                hideTranslateButton()
+                hideWeatherCityInput()
+            }
         }
     }
 
@@ -4563,6 +4658,7 @@ final class DesktopPet: NSObject, NSApplicationDelegate, WKNavigationDelegate, N
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        presentationTimer?.invalidate()
         inputRefreshTimer?.invalidate()
         typingActivity.flush()
         catLetter.stop()

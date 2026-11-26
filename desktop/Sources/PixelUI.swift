@@ -166,22 +166,31 @@ struct PixelBackdrop: View {
 }
 
 struct WorkbenchPixelSurface: View {
+    @Environment(\.usesWorkbenchWindowStyle) private var windowStyle
     let palette: PixelPalette
     let fill: Color
     var corner: CGFloat = 5
     var framed = false
 
-    var body: some View {
-        PixelBox(corner: corner)
-            .fill(fill)
-            .overlay(PixelBox(corner: corner, inset: 0.5).stroke(palette.borderSoft, lineWidth: 1))
-            .overlay {
-                if framed {
-                    PixelBox(corner: corner, inset: 4).stroke(palette.border, lineWidth: 1)
+    @ViewBuilder var body: some View {
+        if windowStyle {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(fill)
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(palette.borderSoft, lineWidth: 1))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        } else {
+            PixelBox(corner: corner)
+                .fill(fill)
+                .overlay(PixelBox(corner: corner, inset: 0.5).stroke(palette.borderSoft, lineWidth: 1))
+                .overlay {
+                    if framed {
+                        PixelBox(corner: corner, inset: 4).stroke(palette.border, lineWidth: 1)
+                    }
                 }
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -224,7 +233,7 @@ struct WorkbenchCardHeading<Actions: View>: View {
         HStack(spacing: 7) {
             PixelGlyph(kind: glyph, color: palette.accentDeep, size: 12)
             Text(title)
-                .font(PixelFont.font(15))
+                .font(WorkbenchTypography.body(.semibold))
                 .foregroundStyle(palette.ink)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 4)
@@ -251,20 +260,31 @@ struct WorkbenchCardIconButton: View {
 }
 
 extension View {
-    func workbenchCardSurface(_ theme: WorkbenchTheme) -> some View {
-        background(WorkbenchPixelSurface(palette: theme.palette, fill: theme.palette.panel))
-            .environment(\.workbenchChrome, true)
+    func workbenchCompanionStyle(_ theme: WorkbenchTheme) -> some View {
+        environment(\.workbenchChrome, true)
+            .environment(\.usesWorkbenchWindowStyle, true)
             .environment(\.workbenchTheme, theme)
             .preferredColorScheme(.light)
     }
 
+    func workbenchCardSurface(_ theme: WorkbenchTheme) -> some View {
+        let palette = theme.windowPalette
+        return background(WorkbenchPixelSurface(palette: palette, fill: palette.panel))
+            .workbenchCompanionStyle(theme)
+    }
+
     func workbenchCardField(palette: PixelPalette, focused: Bool) -> some View {
-        background(PixelBox(corner: 3).fill(palette.panelDeep))
+        background(RoundedRectangle(cornerRadius: 7).fill(palette.panelAlt))
             .overlay {
-                PixelBox(corner: 3, inset: 0.5)
-                    .stroke(focused ? palette.accentDeep : palette.borderSoft, lineWidth: focused ? 2 : 1)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                if focused {
+                    PixelBox(corner: 3, inset: 1).stroke(palette.accentDeep, lineWidth: 2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                } else {
+                    RoundedRectangle(cornerRadius: 7).strokeBorder(palette.borderSoft, lineWidth: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
     }
 }
@@ -304,7 +324,7 @@ struct PixelChecker: View {
 enum PixelIconKind {
     case bell, plus, close, check, paw, eye, keyboard, chevron, chevronUp, arrowLeft, arrowRight, pin, cloud, note, clip, microphone, timer
     case workbenchCat, workbenchRecord, workbenchBrush, workbenchApply, workbenchSettings
-    case pencil, trash, file, grip, todo, checkbox
+    case pencil, trash, file, grip, todo, checkbox, shoppingBag
 }
 
 struct PixelGlyph: View {
@@ -352,6 +372,12 @@ struct PixelGlyph: View {
             return [
                 "11111...", "1...11..", "1...111.", "1.....1.",
                 "1.111.1.", "1.....1.", "1.111.1.", "1111111.",
+            ]
+        case .shoppingBag:
+            return [
+                "....1111....", "...11..11...", "...1....1...", "..11111111..",
+                "..11....11..", "..11....11..", ".11......11.", ".11......11.",
+                ".11......11.", ".11......11.", ".1111111111.", "..11111111..",
             ]
         case .pencil:
             return [
@@ -587,40 +613,33 @@ enum WorkbenchTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    var palette: PixelPalette {
+    var windowPalette: PixelPalette {
+        let selected: UInt32
+        let accent: UInt32
         switch self {
         case .sand:
-            Self.lightPalette(background: 0xEEE4D5, panel: 0xFBF3E8, control: 0xF0E3D1,
-                              selected: 0xE6D1B4, border: 0xA68865, divider: 0xD2BDA3,
-                              accent: 0x724B30, focus: 0x825329)
+            (selected, accent) = (0xEDF1E8, 0x3C5149)
         case .pearl:
-            Self.lightPalette(background: 0xEAE6E0, panel: 0xF7F4F0, control: 0xEDE8E1,
-                              selected: 0xDDD4C9, border: 0x9B8878, divider: 0xCDC1B5,
-                              accent: 0x665449, focus: 0x785A44)
+            (selected, accent) = (0xEDF2F5, 0x435562)
         case .sage:
-            Self.lightPalette(background: 0xE5EBDD, panel: 0xF3F5EC, control: 0xE7EDDF,
-                              selected: 0xD6E1CC, border: 0x859577, divider: 0xBFCBB5,
-                              accent: 0x506246, focus: 0x5A6A47)
+            (selected, accent) = (0xE2ECD9, 0x456045)
         }
+        return PixelPalette(background: .white,
+                            backgroundAlt: Color(pixelHex: 0xF4F5F4),
+                            panel: .white,
+                            panelAlt: Color(pixelHex: 0xF4F5F4),
+                            panelDeep: Color(pixelHex: selected),
+                            border: Color(pixelHex: 0xABBAAB),
+                            borderSoft: Color(pixelHex: 0xE3E7E4),
+                            ink: Color(pixelHex: 0x292D2C),
+                            inkSoft: Color(pixelHex: 0x626A67),
+                            accent: Color(pixelHex: accent),
+                            accentDeep: Color(pixelHex: accent),
+                            green: Color(pixelHex: 0x416647),
+                            red: Color(pixelHex: 0x963D35),
+                            shadow: Color(pixelHex: 0x3C5149))
     }
 
-    private static func lightPalette(background: UInt32, panel: UInt32, control: UInt32, selected: UInt32,
-                                     border: UInt32, divider: UInt32, accent: UInt32, focus: UInt32) -> PixelPalette {
-        PixelPalette(background: Color(pixelHex: background),
-                     backgroundAlt: Color(pixelHex: control),
-                     panel: Color(pixelHex: panel),
-                     panelAlt: Color(pixelHex: control),
-                     panelDeep: Color(pixelHex: selected),
-                     border: Color(pixelHex: border),
-                     borderSoft: Color(pixelHex: divider),
-                     ink: Color(pixelHex: 0x382D25),
-                     inkSoft: Color(pixelHex: 0x665549),
-                     accent: Color(pixelHex: accent),
-                     accentDeep: Color(pixelHex: focus),
-                     green: Color(pixelHex: 0x426233),
-                     red: Color(pixelHex: 0x943D30),
-                     shadow: Color(pixelHex: 0x574332))
-    }
 }
 
 private struct WorkbenchThemeKey: EnvironmentKey {
@@ -644,8 +663,8 @@ extension EnvironmentValues {
 }
 
 enum WorkbenchTypography {
-    static let pageTitle = PixelFont.font(22)
-    static let sectionTitle = PixelFont.font(18)
+    static let pageTitle = Font.system(size: 22, weight: .semibold)
+    static let sectionTitle = Font.system(size: 18, weight: .semibold)
     static let bodySize: CGFloat = 14
 
     static func body(_ weight: Font.Weight = .regular) -> Font {
@@ -657,14 +676,14 @@ enum WorkbenchTypography {
     }
 }
 
-private struct WorkbenchWindowTypographyKey: EnvironmentKey {
+private struct WorkbenchWindowStyleKey: EnvironmentKey {
     static let defaultValue = false
 }
 
 extension EnvironmentValues {
-    var usesWorkbenchWindowTypography: Bool {
-        get { self[WorkbenchWindowTypographyKey.self] }
-        set { self[WorkbenchWindowTypographyKey.self] = newValue }
+    var usesWorkbenchWindowStyle: Bool {
+        get { self[WorkbenchWindowStyleKey.self] }
+        set { self[WorkbenchWindowStyleKey.self] = newValue }
     }
 }
 
@@ -672,6 +691,7 @@ struct WorkbenchButtonStyle: ButtonStyle {
     let palette: PixelPalette
     var selected = false
     var prominent = false
+    var accented = false
     var card = false
     var quiet = false
     var keyboardFocused = false
@@ -679,7 +699,8 @@ struct WorkbenchButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         WorkbenchButtonFace(label: configuration.label, palette: palette, selected: selected,
-                            prominent: prominent, card: card, quiet: quiet, pressed: configuration.isPressed,
+                            prominent: prominent, accented: accented, card: card, quiet: quiet,
+                            pressed: configuration.isPressed,
                             keyboardFocused: keyboardFocused, tint: tint)
     }
 }
@@ -688,14 +709,15 @@ private struct WorkbenchButtonChrome: ViewModifier {
     let palette: PixelPalette
     let selected: Bool
     let prominent: Bool
+    let accented: Bool
     let card: Bool
     let quiet: Bool
     let tint: Color?
     @FocusState private var focused: Bool
 
     private var style: WorkbenchButtonStyle {
-        WorkbenchButtonStyle(palette: palette, selected: selected, prominent: prominent, card: card, quiet: quiet,
-                            keyboardFocused: focused, tint: tint)
+        WorkbenchButtonStyle(palette: palette, selected: selected, prominent: prominent, accented: accented,
+                            card: card, quiet: quiet, keyboardFocused: focused, tint: tint)
     }
 
     func body(content: Content) -> some View {
@@ -709,9 +731,9 @@ private struct WorkbenchButtonChrome: ViewModifier {
 
 extension View {
     func workbenchButton(palette: PixelPalette, selected: Bool = false, prominent: Bool = false, card: Bool = false,
-                         quiet: Bool = false, tint: Color? = nil) -> some View {
-        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent, card: card,
-                                       quiet: quiet, tint: tint))
+                         quiet: Bool = false, tint: Color? = nil, accented: Bool = false) -> some View {
+        modifier(WorkbenchButtonChrome(palette: palette, selected: selected, prominent: prominent,
+                                       accented: accented, card: card, quiet: quiet, tint: tint))
     }
 }
 
@@ -720,12 +742,13 @@ private struct WorkbenchButtonFace<Label: View>: View {
     let palette: PixelPalette
     let selected: Bool
     let prominent: Bool
+    let accented: Bool
     let card: Bool
     let quiet: Bool
     let pressed: Bool
     let keyboardFocused: Bool
     let tint: Color?
-    @Environment(\.usesWorkbenchWindowTypography) private var useWindowTypography
+    @Environment(\.usesWorkbenchWindowStyle) private var useWindowTypography
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.workbenchTheme) private var workbenchTheme
@@ -736,6 +759,7 @@ private struct WorkbenchButtonFace<Label: View>: View {
     private var feedback: Bool { enabled && (hovered || pressed || focused || keyboardFocused) }
     private var fill: Color {
         if quiet && !selected && !feedback { return .clear }
+        if useWindowTypography && card && !selected && !feedback { return Color(pixelHex: 0xF6F7F6) }
         if !enabled { return prominent ? palette.panelDeep : palette.panelAlt }
         if let tint, prominent { return pressed ? tint.opacity(0.85) : tint }
         if prominent && workbenchTheme != nil {
@@ -743,11 +767,11 @@ private struct WorkbenchButtonFace<Label: View>: View {
         }
         if prominent && colorScheme == .dark { return pressed ? palette.accent.opacity(0.8) : palette.accent }
         if prominent { return Color(pixelHex: pressed ? 0x352619 : 0x493423) }
-        return selected || feedback ? palette.panelDeep : palette.panelAlt
+        return selected || accented || feedback ? palette.panelDeep : palette.panelAlt
     }
     private var foreground: Color {
         if !enabled { return palette.inkSoft }
-        guard prominent else { return palette.ink }
+        guard prominent else { return accented ? palette.accentDeep : palette.ink }
         if workbenchTheme != nil || tint != nil { return Color(pixelHex: 0xFFF9EC) }
         return Color(pixelHex: colorScheme == .dark ? 0x322313 : 0xFFF9EC)
     }
@@ -758,7 +782,7 @@ private struct WorkbenchButtonFace<Label: View>: View {
     }
 
     private var labelFont: Font {
-        let weight: Font.Weight = selected || prominent ? .semibold : .medium
+        let weight: Font.Weight = selected || prominent || accented ? .semibold : .medium
         return useWindowTypography ? WorkbenchTypography.body(weight) : .system(size: 12, weight: weight)
     }
 
@@ -766,15 +790,28 @@ private struct WorkbenchButtonFace<Label: View>: View {
         label
             .font(labelFont)
             .foregroundStyle(foreground)
-            .padding(.horizontal, card ? 0 : 9)
+            .padding(.horizontal, card ? 0 : useWindowTypography && quiet ? 7 : 9)
             .padding(.vertical, card ? 0 : 6)
-            .background(PixelBox(corner: card ? 5 : 3).fill(fill))
+            .background {
+                if useWindowTypography {
+                    RoundedRectangle(cornerRadius: card ? 12 : 8).fill(fill)
+                } else {
+                    PixelBox(corner: card ? 5 : 3).fill(fill)
+                }
+            }
             .overlay {
                 if feedback || (enabled && selected) {
-                    PixelBox(corner: card ? 5 : 3, inset: 1)
-                        .stroke(feedback ? edge : palette.border, lineWidth: focused || keyboardFocused || pressed ? 2 : 1)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                    if useWindowTypography && !(focused || keyboardFocused || pressed) {
+                        RoundedRectangle(cornerRadius: card ? 12 : 8)
+                            .strokeBorder(feedback ? edge : palette.border, lineWidth: 1)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    } else {
+                        PixelBox(corner: card ? 5 : 3, inset: 1)
+                            .stroke(feedback ? edge : palette.border, lineWidth: focused || keyboardFocused || pressed ? 2 : 1)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -971,6 +1008,7 @@ struct WindowDragArea: NSViewRepresentable {
 // MARK: - Select
 
 struct PixelSelect: View {
+    @Environment(\.usesWorkbenchWindowStyle) private var windowStyle
     let options: [(id: String, name: String)]
     @Binding var selection: String
     let palette: PixelPalette
@@ -988,7 +1026,7 @@ struct PixelSelect: View {
         } label: {
             HStack(spacing: 4) {
                 Text(currentName)
-                    .font(PixelFont.font(12))
+                    .font(windowStyle ? WorkbenchTypography.body(.medium) : PixelFont.font(12))
                     .foregroundStyle(palette.ink)
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -1009,7 +1047,7 @@ struct PixelSelect: View {
 
 struct PixelTextField: View {
     @Environment(\.workbenchChrome) private var workbenchChrome
-    @Environment(\.usesWorkbenchWindowTypography) private var useWindowTypography
+    @Environment(\.usesWorkbenchWindowStyle) private var useWindowTypography
     @Environment(\.isFocused) private var focused
     @Binding var text: String
     let placeholder: String
@@ -1022,13 +1060,18 @@ struct PixelTextField: View {
             .foregroundStyle(palette.ink)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(PixelBox(corner: 2).fill(palette.panelAlt))
-            .overlay {
-                let stepped = workbenchChrome
-                PixelBox(corner: 2, inset: stepped ? 0.5 : 0)
-                    .stroke(stepped && focused ? palette.accentDeep : palette.border,
-                            lineWidth: stepped && !focused ? 1 : 2)
-                    .allowsHitTesting(false)
+            .background {
+                if useWindowTypography {
+                    Color.clear.workbenchCardField(palette: palette, focused: focused)
+                } else {
+                    PixelBox(corner: 2).fill(palette.panelAlt)
+                        .overlay {
+                            PixelBox(corner: 2, inset: workbenchChrome ? 0.5 : 0)
+                                .stroke(workbenchChrome && focused ? palette.accentDeep : palette.border,
+                                        lineWidth: workbenchChrome && !focused ? 1 : 2)
+                        }
+                        .allowsHitTesting(false)
+                }
             }
     }
 }
